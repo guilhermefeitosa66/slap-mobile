@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
+import '../domain/valores.dart';
 import 'schema.dart';
 
 /// Abertura e configuração do banco local.
@@ -75,6 +76,17 @@ class Banco {
     // uma leitura no meio do levantamento.
     db.execute('PRAGMA busy_timeout = 10000');
     db.execute('PRAGMA temp_store = MEMORY');
+
+    // A comparação de texto do domínio (caixa, acento e espaço ignorados),
+    // disponível no SQL. É o que permite separar OK de divergente numa
+    // consulta — e, com isso, paginar e contar sem trazer as linhas todas
+    // para o Dart.
+    db.createFunction(
+      functionName: 'forma_comparavel',
+      argumentCount: const AllowedArgumentCount(1),
+      deterministic: true,
+      function: (argumentos) => formaComparavel(argumentos[0]?.toString()),
+    );
   }
 
   static void _migrar(Database db) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../app/componentes.dart';
 import '../../app/providers.dart';
 import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../domain/divergencia.dart';
 import '../../domain/patrimonio.dart';
 
@@ -20,27 +23,110 @@ class TelaItens extends ConsumerStatefulWidget {
 }
 
 class _TelaItensState extends ConsumerState<TelaItens> {
+  /// Itens por página. Uma tela de celular mostra uns dez; cem dão folga para
+  /// rolar rápido sem esperar a próxima página.
+  static const _tamanhoPagina = 100;
+
+  /// Espera depois da última tecla antes de buscar: digitar "cadeira" faz uma
+  /// consulta, não sete.
+  static const _esperaBusca = Duration(milliseconds: 250);
+
   late Classificacao? _filtro = widget.classificacao;
   final _busca = TextEditingController();
+  final _rolagem = ScrollController();
+  Timer? _atraso;
+
+  final _itens = <Patrimonio>[];
+  int _total = 0;
+  bool _fim = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _rolagem.addListener(_aoRolar);
+    _carregar(manterQuantidade: false);
+  }
 
   @override
   void dispose() {
+    _atraso?.cancel();
+    _rolagem.dispose();
     _busca.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    ref.watch(revisaoProvider);
+  /// Volta à primeira página, com o filtro e a busca atuais.
+  ///
+  /// [manterQuantidade] recarrega o que já estava na tela — é o caso de uma
+  /// alteração chegando, em que a lista não deve pular de volta ao topo.
+  void _recarregar({bool manterQuantidade = false}) =>
+      setState(() => _carregar(manterQuantidade: manterQuantidade));
 
-    final itens = ref
+  void _carregar({required bool manterQuantidade}) {
+    final quantidade = manterQuantidade && _itens.length > _tamanhoPagina
+        ? _itens.length
+        : _tamanhoPagina;
+    final repo = ref.read(patrimoniosProvider);
+    final pagina = repo.listar(
+      inventarioId: widget.inventarioId,
+      classificacao: _filtro,
+      busca: _busca.text,
+      limite: quantidade,
+    );
+    final total = repo.contar(
+      inventarioId: widget.inventarioId,
+      classificacao: _filtro,
+      busca: _busca.text,
+    );
+    _itens
+      ..clear()
+      ..addAll(pagina);
+    _total = total;
+    _fim = pagina.length >= total;
+  }
+
+  void _proximaPagina() {
+    if (_fim) return;
+    final pagina = ref
         .read(patrimoniosProvider)
         .listar(
           inventarioId: widget.inventarioId,
           classificacao: _filtro,
           busca: _busca.text,
-          limite: 500,
+          limite: _tamanhoPagina,
+          deslocamento: _itens.length,
         );
+    setState(() {
+      _itens.addAll(pagina);
+      _fim = pagina.length < _tamanhoPagina || _itens.length >= _total;
+    });
+  }
+
+  void _aoRolar() {
+    // A próxima página vem antes do fim, para a rolagem não bater no chão.
+    final posicao = _rolagem.position;
+    if (posicao.pixels > posicao.maxScrollExtent - 800) _proximaPagina();
+  }
+
+  void _aoDigitar(String _) {
+    _atraso?.cancel();
+    _atraso = Timer(_esperaBusca, () {
+      if (mounted) _recarregar();
+    });
+    setState(() {}); // o botão de limpar aparece e some
+  }
+
+  void _filtrar(Classificacao? c) {
+    _filtro = c;
+    _recarregar();
+    if (_rolagem.hasClients) _rolagem.jumpTo(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Operação nova — local ou vinda de outro aparelho — recarrega o que
+    // está na tela, sem perder a posição.
+    ref.listen(revisaoProvider, (_, _) => _recarregar(manterQuantidade: true));
 
     return Scaffold(
       appBar: AppBar(title: Text(_filtro?.rotulo ?? 'Patrimônios')),
@@ -56,11 +142,15 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                 suffixIcon: _busca.text.isEmpty
                     ? null
                     : IconButton(
+                        tooltip: 'Limpar a busca',
                         icon: const Icon(Icons.clear),
-                        onPressed: () => setState(_busca.clear),
+                        onPressed: () {
+                          _busca.clear();
+                          _recarregar();
+                        },
                       ),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: _aoDigitar,
             ),
           ),
           SizedBox(
@@ -72,21 +162,36 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                 _Filtro(
                   rotulo: 'Todos',
                   ativo: _filtro == null,
-                  aoTocar: () => setState(() => _filtro = null),
+                  aoTocar: () => _filtrar(null),
                 ),
                 for (final c in Classificacao.values)
                   _Filtro(
                     rotulo: c.rotulo,
                     ativo: _filtro == c,
                     cor: CoresResultado.of(context).de(c).texto,
-                    aoTocar: () => setState(() => _filtro = c),
+                    aoTocar: () => _filtrar(c),
                   ),
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _total == 1
+                      ? '1 patrimônio'
+                      : '${formatarInteiro(_total)} patrimônios',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+            ),
+          ),
           const Divider(height: 1),
           Expanded(
-            child: itens.isEmpty
+            child: _itens.isEmpty
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(32),
@@ -94,13 +199,34 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                     ),
                   )
                 : ListView.separated(
-                    itemCount: itens.length,
+                    controller: _rolagem,
+                    itemCount: _itens.length + (_fim ? 0 : 1),
                     separatorBuilder: (_, _) =>
                         const Divider(height: 1, indent: 50),
-                    itemBuilder: (_, i) => _LinhaPatrimonio(
-                      patrimonio: itens[i],
-                      aoTocar: () => _abrirDetalhe(itens[i]),
-                    ),
+                    itemBuilder: (_, i) {
+                      if (i >= _itens.length) {
+                        // Chegou ao fim do que foi carregado sem o ouvinte de
+                        // rolagem disparar (lista curta que não rola).
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => mounted ? _proximaPagina() : null,
+                        );
+                        return const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: SizedBox.square(
+                              dimension: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      return _LinhaPatrimonio(
+                        patrimonio: _itens[i],
+                        aoTocar: () => _abrirDetalhe(_itens[i]),
+                      );
+                    },
                   ),
           ),
         ],
