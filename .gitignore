@@ -1,49 +1,132 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# ============================================================================
+# Segredos e chaves de assinatura
+#
+# Nada aqui pode entrar no repositório, que é público. Uma chave de assinatura
+# vazada permite publicar atualizações falsas do aplicativo em nome do projeto,
+# e uma chave de release do Android **não pode ser trocada**: o Google Play
+# recusa qualquer versão futura assinada com outra chave.
+# ============================================================================
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
+# Chaves de assinatura Android (debug e release)
+*.jks
+*.keystore
+*.p12
+*.pfx
+key.properties
+keystore.properties
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+android/app/debug.keystore
+android/app/upload-keystore.jks
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# Certificados e perfis de provisionamento Apple
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.certSigningRequest
+*.p8
+ios/Runner/ExportOptions.plist
+ios/private_keys/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
+# Chaves e certificados em geral
+*.pem
+*.key
+*.crt
+*.der
+!**/android/**/res/**/*.key
+
+# Credenciais de serviços
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+service-account*.json
+*-service-account.json
+
+# Variáveis de ambiente e segredos locais
+.env
+.env.*
+!.env.example
+secrets.dart
+*.secrets
+credentials.json
+
+# ============================================================================
+# Saída de build
+# ============================================================================
+
 /build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/.gradle/
+/android/local.properties
+/ios/Flutter/Flutter.framework
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/flutter_export_environment.sh
+/ios/Pods/
+/ios/.symlinks/
+/ios/Runner.xcworkspace/xcuserdata/
+/ios/Runner.xcodeproj/xcuserdata/
+/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+*.ipa
+*.apk
+*.aab
+*.app
 
-# Saída de build local
-/build/
+# Símbolos de depuração e mapas de ofuscação.
+# O mapa é o que traduz um stack trace ofuscado de volta ao código: guardar
+# fora do repositório, mas guardar — sem ele não se depura um crash de release.
+app.*.symbols
+app.*.map.json
+/symbols/
+
+# ============================================================================
+# Ferramentas e ambiente local
+# ============================================================================
+
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+/coverage/
 flutter_*.log
+migrate_working_dir/
+
+# Editores
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*~
+.history/
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.class
+*.log
+*.pyc
+__pycache__/
+
+# ============================================================================
+# Dados locais de teste
+#
+# Banco do aplicativo e planilhas reais do SUAP nunca entram no repositório:
+# contêm nome e matrícula de servidores.
+# ============================================================================
+
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+/planilhas/
+/dados-reais/
+*.xlsx
+*.xls
+!docs/**/*.xlsx
