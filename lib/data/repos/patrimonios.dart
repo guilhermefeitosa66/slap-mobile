@@ -559,7 +559,7 @@ class RepositorioPatrimonios {
       'SELECT DISTINCT sala FROM ('
       '  SELECT sala_original AS sala FROM patrimonios WHERE inventario_id = ?1'
       '  UNION SELECT sala_atual FROM patrimonios WHERE inventario_id = ?1'
-      ') WHERE sala IS NOT NULL AND TRIM(sala) <> "" ORDER BY sala',
+      ") WHERE sala IS NOT NULL AND TRIM(sala) <> '' ORDER BY sala",
       [inventarioId],
     );
     return [for (final l in linhas) l['sala'] as String];
@@ -574,7 +574,7 @@ class RepositorioPatrimonios {
       'SELECT DISTINCT r FROM ('
       '  SELECT responsavel_original AS r FROM patrimonios WHERE inventario_id = ?1'
       '  UNION SELECT responsavel_atual FROM patrimonios WHERE inventario_id = ?1'
-      ') WHERE r IS NOT NULL AND TRIM(r) <> "" ORDER BY r',
+      ") WHERE r IS NOT NULL AND TRIM(r) <> '' ORDER BY r",
       [inventarioId],
     );
     return [for (final l in linhas) l['r'] as String];
@@ -587,7 +587,7 @@ class RepositorioPatrimonios {
   /// planilha do SUAP.
   Map<String, int> contagemPorEd(String inventarioId) {
     final linhas = _db.select(
-      'SELECT COALESCE(ed, "") AS ed, COUNT(*) AS n FROM patrimonios '
+      "SELECT COALESCE(ed, '') AS ed, COUNT(*) AS n FROM patrimonios "
       'WHERE inventario_id = ? GROUP BY ed ORDER BY n DESC',
       [inventarioId],
     );

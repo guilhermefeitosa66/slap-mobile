@@ -193,6 +193,31 @@ void main() {
     });
   });
 
+  group('consultas de apoio', () {
+    // Aspas duplas em SQL são identificador, não texto: a build do SQLite que
+    // o app embarca recusa "" e a folha de configuração quebrava ao abrir.
+    test('salas, responsáveis e EDs, sem vazios', () {
+      repo.inserirLote(inventario.id, const [
+        PatrimonioImportado(
+          tombo: '1',
+          sala: 'Biblioteca',
+          responsavel: 'Ana',
+          ed: '42',
+        ),
+        PatrimonioImportado(tombo: '2', sala: '  ', responsavel: '', ed: null),
+        PatrimonioImportado(
+          tombo: '3',
+          sala: 'Auditório',
+          responsavel: 'Bruno',
+          ed: '42',
+        ),
+      ]);
+      expect(repo.salas(inventario.id), ['Auditório', 'Biblioteca']);
+      expect(repo.responsaveis(inventario.id), ['Ana', 'Bruno']);
+      expect(repo.contagemPorEd(inventario.id), {'42': 2, '': 1});
+    });
+  });
+
   group('tela', () {
     testWidgets('mostra o total e carrega além de 500 conforme rola', (
       tester,
