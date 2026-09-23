@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'app/providers.dart';
+import 'core/backup_do_sistema.dart';
 import 'data/banco.dart';
 
 Future<void> main() async {
@@ -21,6 +24,7 @@ Future<void> main() async {
   // O banco abre antes da primeira tela: todas as consultas são síncronas, e
   // nenhuma tela precisa tratar estado de carregamento por causa disso.
   final banco = await Banco.abrir();
+  unawaited(manterForaDoBackup(banco.caminho!));
 
   runApp(
     ProviderScope(

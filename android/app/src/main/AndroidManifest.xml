@@ -28,10 +28,17 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+    <!-- Sem backup do sistema: ele restauraria a identidade do aparelho num
+         celular novo (ver res/xml/regras_de_backup.xml). allowBackup e
+         fullBackupContent valem até o Android 11; dataExtractionRules, do 12
+         em diante. -->
     <application
         android:label="SLAP Inventário"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/regras_de_backup">
         <activity
             android:name=".MainActivity"
             android:exported="true"

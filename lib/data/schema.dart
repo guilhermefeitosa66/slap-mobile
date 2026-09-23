@@ -270,6 +270,10 @@ class Config {
   static String configuracaoLevantamento(String inventarioId) =>
       'levantamento.$inventarioId';
 
+  /// Maior número de operação deste aparelho num inventário cuja réplica foi
+  /// apagada. A numeração continua daí se o inventário voltar.
+  static String seqMinimo(String inventarioId) => 'seq_minimo.$inventarioId';
+
   /// Inventário cujo levantamento estava aberto. O aplicativo reabre nele.
   static const levantamentoAberto = 'levantamento_aberto';
 

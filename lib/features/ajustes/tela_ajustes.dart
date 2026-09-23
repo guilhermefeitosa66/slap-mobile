@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/componentes.dart';
 import '../../app/preferencias.dart';
 import '../../app/providers.dart';
+import 'copia_seguranca_ui.dart';
 
 /// Quem usa este aparelho e como ele se comporta no levantamento.
 ///
@@ -79,6 +80,45 @@ class TelaAjustes extends ConsumerWidget {
               ),
             ],
           ),
+          secao('Cópia de segurança'),
+          CartaoAgrupado(
+            linhas: [
+              ListTile(
+                leading: const Icon(Icons.save_alt),
+                title: const Text('Exportar cópia'),
+                subtitle: const Text(
+                  'Todos os inventários deste aparelho, num arquivo que você '
+                  'guarda onde quiser.',
+                ),
+                trailing: const SetaNavegacao(),
+                onTap: () => exportarCopia(context, ref),
+              ),
+              ListTile(
+                leading: const Icon(Icons.restore),
+                title: const Text('Restaurar de uma cópia'),
+                subtitle: const Text(
+                  'Traz o que a cópia tem para este aparelho, sem apagar nada.',
+                ),
+                trailing: const SetaNavegacao(),
+                onTap: () => restaurarCopia(context, ref),
+              ),
+            ],
+          ),
+          secao('Identidade do aparelho'),
+          CartaoAgrupado(
+            linhas: [
+              ListTile(
+                leading: const Icon(Icons.fingerprint),
+                title: const Text('Gerar nova identidade'),
+                subtitle: const Text(
+                  'Só quando a sincronização disser que outro aparelho está '
+                  'usando a identidade deste.',
+                ),
+                trailing: const SetaNavegacao(),
+                onTap: () => _renovarIdentidade(context, ref),
+              ),
+            ],
+          ),
           secao('Sobre'),
           CartaoAgrupado(
             linhas: [
@@ -99,4 +139,47 @@ class TelaAjustes extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _renovarIdentidade(BuildContext context, WidgetRef ref) async {
+  final esquema = Theme.of(context).colorScheme;
+  final confirmou = await showDialog<bool>(
+    context: context,
+    builder: (contexto) => AlertDialog(
+      title: const Text('Gerar nova identidade?'),
+      content: const Text(
+        'Use só quando a sincronização avisar que outro aparelho está usando '
+        'a identidade deste — o que acontece quando os dados do aplicativo são '
+        'copiados de um celular para outro.\n\n'
+        'Todos os inventários deste aparelho serão apagados. Depois, entre de '
+        'novo em cada um pelo QR code: o que os outros aparelhos têm volta. O '
+        'que foi feito aqui e ainda não chegou a nenhum outro se perde.\n\n'
+        'Seu nome, matrícula e ajustes ficam.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(contexto, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(contexto, true),
+          style: FilledButton.styleFrom(
+            backgroundColor: esquema.error,
+            foregroundColor: esquema.onError,
+            minimumSize: const Size(0, 48),
+          ),
+          child: const Text('Gerar e apagar'),
+        ),
+      ],
+    ),
+  );
+  if (confirmou != true || !context.mounted) return;
+
+  ref.read(inventariosProvider).renovarIdentidade();
+  ref.read(revisaoProvider.notifier).mudou();
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Identidade nova. Entre nos inventários pelo QR code.'),
+    ),
+  );
 }

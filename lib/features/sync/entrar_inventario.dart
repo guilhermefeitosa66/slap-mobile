@@ -122,6 +122,21 @@ class _TelaEntrarState extends ConsumerState<_TelaEntrar> {
           ref
               .read(operacoesProvider)
               .reaplicarEdsExcluidos(pacote.inventario.id);
+
+          // O pacote traz só os dados do SUAP. O levantamento feito até aqui
+          // vem pelo log, e já com o par à mão: quem começa a ler precisa ver
+          // o que os outros já leram — e, se este aparelho já participou
+          // antes, recuperar o próprio trabalho antes de continuar.
+          if (mounted) setState(() => _situacao = 'Recebendo o levantamento…');
+          try {
+            await cliente.sincronizar(
+              par: par,
+              inventarioId: pacote.inventario.id,
+              chaveSync: convite.chaveSync,
+            );
+          } on FalhaSync {
+            // O inventário já está aqui; a tela de sincronização resolve.
+          }
           ref.read(revisaoProvider.notifier).mudou();
 
           if (!mounted) return;

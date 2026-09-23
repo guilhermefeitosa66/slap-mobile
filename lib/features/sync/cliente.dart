@@ -202,7 +202,10 @@ class ClienteSync {
   /// sincronização anterior: o aviso nomeia quem a escreveu, não o par.
   ResultadoAplicacao _aplicar(Par par, LoteOperacoes lote) {
     try {
+      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
       return ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+    } on IdentidadeDuplicada catch (e) {
+      throw FalhaSync('$e');
     } on RelogioForaDeSincronia catch (e) {
       final autor = e.recebido.nodeId;
       throw RelogioDivergente(
@@ -236,7 +239,8 @@ class ClienteSync {
       caminho: Rotas.pull,
       corpo: PedidoPull(
         inventarioId: inventarioId,
-        vetor: ops.vetorDe(inventarioId),
+        vetor: ops.vetorParaPedido(inventarioId),
+        cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
     );
@@ -269,6 +273,7 @@ class ClienteSync {
         ops: faltantes,
         contextos: ops.contextosDe(faltantes),
         vetor: ops.vetorDe(inventarioId),
+        cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
     );
@@ -376,13 +381,20 @@ class ClienteSync {
   /// Quando o par aponta o autor das operações do futuro, o aviso é sobre
   /// ele; senão, a diferença é entre o relógio do par e o nosso.
   FalhaSync _relogioRecusado(String texto, String rotulo) {
-    final ErroRelogio? erro;
+    final Map<String, dynamic> corpo;
     try {
-      erro = ErroRelogio.fromJson(jsonDecode(texto) as Map<String, dynamic>);
+      corpo = jsonDecode(texto) as Map<String, dynamic>;
     } catch (_) {
       return FalhaSync('Resposta inesperada (409).');
     }
-    if (erro == null) return FalhaSync('Resposta inesperada (409).');
+    final erro = ErroRelogio.fromJson(corpo);
+    if (erro == null) {
+      // Outra recusa explicada pelo par — identidade duplicada, por exemplo.
+      final motivo = corpo['erro'];
+      return FalhaSync(
+        motivo is String ? motivo : 'Resposta inesperada (409).',
+      );
+    }
 
     if (erro.dispositivo != null && erro.diferencaMs != null) {
       final ehEste = erro.dispositivo == ops.dispositivoId;

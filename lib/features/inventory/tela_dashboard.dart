@@ -11,6 +11,7 @@ import '../../app/providers.dart';
 import '../../data/repos/inventarios.dart';
 import '../../domain/divergencia.dart';
 import '../sync/compartilhar_inventario.dart';
+import '../ajustes/copia_seguranca_ui.dart';
 import 'acoes_inventario.dart';
 
 /// Visão geral de um inventário: onde ele está e o que fazer em seguida.
@@ -46,6 +47,7 @@ class TelaDashboard extends ConsumerWidget {
             onSelected: (acao) => switch (acao) {
               _Acao.editar => editarInventario(context, ref, inv),
               _Acao.duplicar => _duplicar(context, ref, inv),
+              _Acao.exportar => exportarCopia(context, ref, inventario: inv),
               _Acao.encerrar => encerrarInventario(context, ref, inv),
               _Acao.reabrir => reabrirInventario(context, ref, inv),
               _Acao.apagar => _apagar(context, ref, inv),
@@ -63,6 +65,13 @@ class TelaDashboard extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.copy_all_outlined),
                   title: Text('Duplicar para outro ano'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: _Acao.exportar,
+                child: ListTile(
+                  leading: Icon(Icons.save_alt),
+                  title: Text('Exportar cópia deste inventário'),
                 ),
               ),
               if (inv.encerrado)
@@ -371,7 +380,7 @@ class _Acoes extends StatelessWidget {
   }
 }
 
-enum _Acao { editar, duplicar, encerrar, reabrir, apagar }
+enum _Acao { editar, duplicar, exportar, encerrar, reabrir, apagar }
 
 Future<void> _duplicar(
   BuildContext context,

@@ -171,6 +171,11 @@ class ServidorSync {
     final pedido = PedidoPull.fromJson(
       jsonDecode(corpo) as Map<String, dynamic>,
     );
+    try {
+      ops.conferirCabecas(pedido.inventarioId, pedido.cabecas);
+    } on IdentidadeDuplicada catch (e) {
+      return _erro(req, HttpStatus.conflict, '$e');
+    }
     final faltantes = ops.opsFaltantes(pedido.inventarioId, pedido.vetor);
 
     // O que o par declara ter de nós é o que está comprovadamente com ele.
@@ -189,6 +194,7 @@ class ServidorSync {
         // A nossa vector vai junto: com ela o solicitante já sabe o que nos
         // enviar em seguida, sem precisar de outra viagem para perguntar.
         vetor: ops.vetorDe(pedido.inventarioId),
+        cabecas: ops.cabecas(pedido.inventarioId),
       ).toJson(),
     );
   }
@@ -204,7 +210,11 @@ class ServidorSync {
 
     final ResultadoAplicacao resultado;
     try {
+      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
       resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+    } on IdentidadeDuplicada catch (e) {
+      // Nada do lote entrou. O outro lado recebe a explicação.
+      return _erro(req, HttpStatus.conflict, '$e');
     } on RelogioForaDeSincronia catch (e) {
       // Operações com horário no futuro. A transação já foi desfeita: nada
       // do lote entrou. Aceitar arrastaria o relógio deste aparelho, e depois

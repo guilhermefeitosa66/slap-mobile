@@ -42,6 +42,11 @@ class Banco {
       await Directory(File(arquivo).parent.path).create(recursive: true);
     }
 
+    return abrirSincrono(arquivo);
+  }
+
+  /// Abre o banco num arquivo conhecido, sem esperar nada da plataforma.
+  static Banco abrirSincrono(String arquivo) {
     final db = sqlite3.open(arquivo);
     _configurar(db);
     _migrar(db);
@@ -144,7 +149,27 @@ class Banco {
   /// Sem isto, uma falha no meio da importação deixaria o inventário pela
   /// metade — exatamente o que acontece no SLAP, que insere linha a linha sem
   /// transação depois de já ter apagado as anteriores.
+  ///
+  /// Dentro de outra transação vira um savepoint: a restauração de uma cópia
+  /// aplica vários lotes, cada um transacional, e o conjunto também precisa
+  /// entrar inteiro ou não entrar.
   T transacao<T>(T Function() acao) {
+    if (!db.autocommit) {
+      final ponto = 'ponto_${_savepoints++}';
+      db.execute('SAVEPOINT $ponto');
+      try {
+        final resultado = acao();
+        db.execute('RELEASE $ponto');
+        return resultado;
+      } catch (_) {
+        db.execute('ROLLBACK TO $ponto');
+        db.execute('RELEASE $ponto');
+        rethrow;
+      } finally {
+        _savepoints--;
+      }
+    }
+
     db.execute('BEGIN');
     try {
       final resultado = acao();
@@ -155,6 +180,8 @@ class Banco {
       rethrow;
     }
   }
+
+  int _savepoints = 0;
 
   void fechar() {
     db.close();

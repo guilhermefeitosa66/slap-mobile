@@ -190,6 +190,22 @@ class RepositorioInventarios {
   /// diz quanto, e a tela pergunta antes.
   void removerLocalmente(String inventarioId) {
     banco.transacao(() {
+      // A numeração deste aparelho continua de onde parou, se o inventário
+      // voltar: os outros aparelhos ainda têm as operações antigas.
+      final ultimo =
+          _db.select(
+                'SELECT COALESCE(MAX(seq), 0) AS s FROM ops '
+                'WHERE inventario_id = ? AND dispositivo = ?',
+                [inventarioId, banco.dispositivoId],
+              ).first['s']
+              as int;
+      final piso =
+          int.tryParse(banco.lerConfig(Config.seqMinimo(inventarioId)) ?? '') ??
+          0;
+      if (ultimo > piso) {
+        banco.gravarConfig(Config.seqMinimo(inventarioId), '$ultimo');
+      }
+
       banco.apagarConfig(Config.configuracaoLevantamento(inventarioId));
       if (banco.lerConfig(Config.levantamentoAberto) == inventarioId) {
         banco.apagarConfig(Config.levantamentoAberto);
@@ -213,6 +229,29 @@ class RepositorioInventarios {
         'DELETE FROM campos_patrimonio WHERE patrimonio_id NOT IN '
         '(SELECT id FROM patrimonios)',
       );
+    });
+  }
+
+  /// Recomeça este aparelho com identidade nova.
+  ///
+  /// É a saída para quando dois aparelhos estão escrevendo com a mesma
+  /// identidade — os dados do aplicativo foram copiados por fora dele. Os
+  /// inventários daqui são apagados, porque a história que eles guardam sob a
+  /// identidade antiga é justamente a que está em disputa; voltam pelo QR code,
+  /// com o que os outros aparelhos têm. Nome, matrícula e preferências ficam.
+  ///
+  /// O que foi feito aqui e não chegou a nenhum outro aparelho se perde.
+  void renovarIdentidade() {
+    banco.transacao(() {
+      for (final inv in listar()) {
+        removerLocalmente(inv.id);
+      }
+      // A numeração recomeça do zero com a identidade nova: os pisos da
+      // antiga não valem mais.
+      _db.execute("DELETE FROM config WHERE chave LIKE 'seq_minimo.%'");
+      _db.execute('DELETE FROM contextos');
+      banco.gravarConfig(Config.dispositivoId, _uuid.v4());
+      banco.apagarConfig(Config.hlcLocal);
     });
   }
 

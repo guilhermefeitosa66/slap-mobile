@@ -256,21 +256,52 @@ class Apresentacao {
   );
 }
 
+/// Última operação conhecida de cada aparelho: `{aparelho: (seq, op_id)}`.
+///
+/// Permite ao outro lado conferir que a mesma posição tem a mesma operação —
+/// é como se percebe dois aparelhos escrevendo com a mesma identidade.
+typedef Cabecas = Map<String, ({int seq, String opId})>;
+
+Map<String, dynamic> _cabecasParaJson(Cabecas cabecas) => {
+  for (final e in cabecas.entries) e.key: '${e.value.seq}:${e.value.opId}',
+};
+
+Cabecas _cabecasDeJson(Object? j) {
+  if (j is! Map) return const {};
+  final cabecas = <String, ({int seq, String opId})>{};
+  for (final e in j.entries) {
+    final texto = e.value;
+    if (texto is! String) continue;
+    final corte = texto.indexOf(':');
+    final seq = corte < 0 ? null : int.tryParse(texto.substring(0, corte));
+    if (seq == null) continue;
+    cabecas[e.key as String] = (seq: seq, opId: texto.substring(corte + 1));
+  }
+  return cabecas;
+}
+
 /// Pedido de operações que faltam.
 class PedidoPull {
   final String inventarioId;
   final VersionVector vetor;
+  final Cabecas cabecas;
 
-  const PedidoPull({required this.inventarioId, required this.vetor});
+  const PedidoPull({
+    required this.inventarioId,
+    required this.vetor,
+    this.cabecas = const {},
+  });
 
   Map<String, dynamic> toJson() => {
     'inventario': inventarioId,
     'vetor': vetor.codificar(),
+    'cabecas': _cabecasParaJson(cabecas),
   };
 
   factory PedidoPull.fromJson(Map<String, dynamic> j) => PedidoPull(
     inventarioId: j['inventario'] as String,
     vetor: VersionVector.decodificar(j['vetor'] as String?),
+    cabecas: _cabecasDeJson(j['cabecas']),
   );
 }
 
@@ -291,11 +322,15 @@ class LoteOperacoes {
   /// outro lado já tem, podendo enviar só a diferença em seguida.
   final VersionVector vetor;
 
+  /// Última operação que quem envia tem de cada aparelho (ver [Cabecas]).
+  final Cabecas cabecas;
+
   const LoteOperacoes({
     required this.inventarioId,
     required this.ops,
     this.contextos = const {},
     this.vetor = VersionVector.vazia,
+    this.cabecas = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -305,6 +340,7 @@ class LoteOperacoes {
       for (final e in contextos.entries) e.key: e.value.codificar(),
     },
     'vetor': vetor.codificar(),
+    'cabecas': _cabecasParaJson(cabecas),
   };
 
   factory LoteOperacoes.fromJson(Map<String, dynamic> j) => LoteOperacoes(
@@ -318,6 +354,7 @@ class LoteOperacoes {
         e.key as String: VersionVector.decodificar(e.value as String),
     },
     vetor: VersionVector.decodificar(j['vetor'] as String?),
+    cabecas: _cabecasDeJson(j['cabecas']),
   );
 }
 

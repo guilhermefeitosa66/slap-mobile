@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
@@ -76,6 +78,58 @@ void main() {
       final perda = a.ops.trabalhoNaoEntregue(inventario.id);
       expect(perda.jaSincronizou, isTrue);
       expect(perda.verificacoes, 1);
+    },
+  );
+
+  test(
+    'clone de um aparelho é recusado pela rede, sem misturar nada',
+    () async {
+      final servidorA = ServidorSync(
+        banco: a.banco,
+        ops: a.ops,
+        inventarios: a.inventarios,
+        patrimonios: a.patrimonios,
+      );
+      addTearDown(servidorA.dispose);
+      final paraA = Par(
+        dispositivoId: a.dispositivoId,
+        host: '127.0.0.1',
+        porta: await servidorA.iniciar(),
+      );
+      Future<void> sincronizar(Aparelho x) => ClienteSync(x.ops).sincronizar(
+        par: paraA,
+        inventarioId: inventario.id,
+        chaveSync: inventario.chaveSync,
+      );
+
+      verificar(b, 'item-1');
+      await sincronizar(b);
+
+      // Os dados do Bruno copiados para outro celular, identidade junto.
+      final pasta = await Directory.systemTemp.createTemp('slap_clone_');
+      addTearDown(() => pasta.delete(recursive: true));
+      b.banco.db.execute('VACUUM INTO ?', ['${pasta.path}/clone.db']);
+      final clone = Aparelho.deArquivo(
+        'Bruno (clone)',
+        '${pasta.path}/clone.db',
+      );
+      addTearDown(clone.fechar);
+
+      verificar(b, 'item-2');
+      verificar(clone, 'item-3');
+      await sincronizar(b);
+
+      await expectLater(
+        sincronizar(clone),
+        throwsA(
+          isA<FalhaSync>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            contains('mesma identidade'),
+          ),
+        ),
+      );
+      expect(a.patrimonios.porId('item-3')!.verificado, isFalse);
     },
   );
 }
