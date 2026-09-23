@@ -44,17 +44,25 @@ class RedeSimulada {
     required Aparelho para,
     required String inventarioId,
   }) {
-    final faltantes = de.ops.opsFaltantes(inventarioId, para.ops.vetorDe(inventarioId));
+    final faltantes = de.ops.opsFaltantes(
+      inventarioId,
+      para.ops.vetorDe(inventarioId),
+    );
     if (faltantes.isEmpty) return 0;
 
-    para.ops.aplicarRemotas(faltantes, contextos: de.ops.contextosDe(faltantes));
+    para.ops.aplicarRemotas(
+      faltantes,
+      contextos: de.ops.contextosDe(faltantes),
+    );
     return faltantes.length;
   }
 
   /// Quantas operações seriam transferidas, sem transferir nada. Usado para
   /// verificar que a sincronização é mesmo incremental.
   static int pendentesEntre(Aparelho de, Aparelho para, String inventarioId) {
-    return de.ops.opsFaltantes(inventarioId, para.ops.vetorDe(inventarioId)).length;
+    return de.ops
+        .opsFaltantes(inventarioId, para.ops.vetorDe(inventarioId))
+        .length;
   }
 
   /// Distribui o inventário e os patrimônios do criador para os demais,
@@ -64,7 +72,10 @@ class RedeSimulada {
     List<Aparelho> destinos,
     Inventario inventario,
   ) {
-    final itens = origem.patrimonios.todos(inventario.id, incluirIgnorados: true);
+    final itens = origem.patrimonios.todos(
+      inventario.id,
+      incluirIgnorados: true,
+    );
     for (final destino in destinos) {
       destino.inventarios.registrarRecebido(inventario);
       destino.patrimonios.inserirRecebidos(itens);

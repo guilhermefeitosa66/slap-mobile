@@ -28,8 +28,8 @@ class Banco {
   }
 
   static Future<Banco> abrir({String? caminho}) async {
-    final arquivo = caminho ??
-        '${(await getApplicationDocumentsDirectory()).path}/slap.db';
+    final arquivo =
+        caminho ?? '${(await getApplicationDocumentsDirectory()).path}/slap.db';
 
     if (caminho == null) {
       await Directory(File(arquivo).parent.path).create(recursive: true);

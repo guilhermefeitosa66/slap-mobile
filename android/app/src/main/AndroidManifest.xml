@@ -1,6 +1,33 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- As duas únicas permissões do projeto: câmera e rede local.
+
+         Sem localização, sem armazenamento, sem contas. Importar e exportar
+         arquivo usa o seletor do sistema, que não exige permissão. -->
+
+    <!-- Leitura de código de barras e do QR de pareamento. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Exigida pelo Android para abrir qualquer socket, inclusive os que
+         nunca saem da rede local. Não dá acesso à internet por si só: o
+         aplicativo não fala com nenhum servidor externo. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Saber se há Wi-Fi antes de tentar descobrir os outros aparelhos. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- MulticastLock. Sem ele o Android descarta os pacotes multicast e nem o
+         mDNS nem o beacon de descoberta funcionam. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- A câmera é o caminho preferido, mas não o único: o levantamento
+         funciona por digitação e por leitor externo. Declarar como não
+         obrigatória mantém o aplicativo instalável em aparelhos sem câmera. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
-        android:label="slap_mobile"
+        android:label="SLAP Inventário"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

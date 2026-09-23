@@ -45,5 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>A câmera é usada para ler os códigos de barras dos patrimônios e o QR code que dá entrada em um inventário. Nenhuma imagem é gravada ou enviada.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>A rede local é usada para encontrar os outros celulares que participam do mesmo inventário e sincronizar os dados diretamente entre eles, sem servidor e sem internet.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_slap-sync._tcp</string>
+	</array>
+	<key>CFBundleDisplayName</key>
+	<string>SLAP Inventário</string>
 </dict>
 </plist>

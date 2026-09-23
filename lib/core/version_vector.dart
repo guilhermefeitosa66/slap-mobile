@@ -22,7 +22,8 @@ class VersionVector {
 
   const VersionVector._(this._seqs);
 
-  VersionVector(Map<String, int> seqs) : _seqs = Map.unmodifiable({...seqs}..removeWhere((_, s) => s <= 0));
+  VersionVector(Map<String, int> seqs)
+    : _seqs = Map.unmodifiable({...seqs}..removeWhere((_, s) => s <= 0));
 
   static const VersionVector vazia = VersionVector._({});
 

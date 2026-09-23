@@ -28,22 +28,39 @@ void main() {
     b = Aparelho('Bruno');
 
     servidorA = ServidorSync(
-      banco: a.banco, ops: a.ops, inventarios: a.inventarios, patrimonios: a.patrimonios,
+      banco: a.banco,
+      ops: a.ops,
+      inventarios: a.inventarios,
+      patrimonios: a.patrimonios,
     );
     servidorB = ServidorSync(
-      banco: b.banco, ops: b.ops, inventarios: b.inventarios, patrimonios: b.patrimonios,
+      banco: b.banco,
+      ops: b.ops,
+      inventarios: b.inventarios,
+      patrimonios: b.patrimonios,
     );
 
     final portaA = await servidorA.iniciar();
     final portaB = await servidorB.iniciar();
 
-    paraA = Par(dispositivoId: a.dispositivoId, host: '127.0.0.1', porta: portaA);
-    paraB = Par(dispositivoId: b.dispositivoId, host: '127.0.0.1', porta: portaB);
+    paraA = Par(
+      dispositivoId: a.dispositivoId,
+      host: '127.0.0.1',
+      porta: portaA,
+    );
+    paraB = Par(
+      dispositivoId: b.dispositivoId,
+      host: '127.0.0.1',
+      porta: portaB,
+    );
 
     clienteA = ClienteSync(a.ops);
     clienteB = ClienteSync(b.ops);
 
-    inventario = a.inventarios.criar(nome: 'Campus Picos — Biblioteca', ano: 2026);
+    inventario = a.inventarios.criar(
+      nome: 'Campus Picos — Biblioteca',
+      ano: 2026,
+    );
     a.patrimonios.inserirRecebidos([
       patrimonioDeTeste(
         id: 'item-1',
@@ -103,8 +120,11 @@ void main() {
     final itens = b.patrimonios.todos(inventario.id);
     expect(itens.length, 2);
     expect(itens.first.salaOriginal, 'Coordenação de TI');
-    expect(itens.first.verificado, isFalse,
-        reason: 'o levantamento chega pelo log de operações, não pelo pacote');
+    expect(
+      itens.first.verificado,
+      isFalse,
+      reason: 'o levantamento chega pelo log de operações, não pelo pacote',
+    );
   });
 
   test('sem a chave correta o aparelho recusa a conexão', () async {
@@ -112,9 +132,10 @@ void main() {
       () => clienteB.baixarPacote(
         par: paraA,
         inventarioId: inventario.id,
-        chaveSync: RepositorioInventarios(b.banco, b.ops)
-            .criar(nome: 'Outro', ano: 2026)
-            .chaveSync,
+        chaveSync: RepositorioInventarios(
+          b.banco,
+          b.ops,
+        ).criar(nome: 'Outro', ano: 2026).chaveSync,
       ),
       throwsA(isA<FalhaSync>()),
     );
@@ -172,14 +193,21 @@ void main() {
     );
 
     await clienteB.sincronizar(
-      par: paraA, inventarioId: inventario.id, chaveSync: inventario.chaveSync,
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
     );
     final segunda = await clienteB.sincronizar(
-      par: paraA, inventarioId: inventario.id, chaveSync: inventario.chaveSync,
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
     );
 
-    expect(segunda.houveTroca, isFalse,
-        reason: 'o inventário inteiro não é retransmitido a cada encontro');
+    expect(
+      segunda.houveTroca,
+      isFalse,
+      reason: 'o inventário inteiro não é retransmitido a cada encontro',
+    );
   });
 
   test('o conflito é detectado através da rede', () async {
@@ -197,14 +225,18 @@ void main() {
     );
 
     final resultado = await clienteB.sincronizar(
-      par: paraA, inventarioId: inventario.id, chaveSync: inventario.chaveSync,
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
     );
 
     expect(resultado.conflitos, greaterThan(0));
     // As duas réplicas acabam com o mesmo valor, ainda que haja conflito
     // pendente de conferência.
     await clienteA.sincronizar(
-      par: paraB, inventarioId: inventario.id, chaveSync: inventario.chaveSync,
+      par: paraB,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
     );
     expect(impressaoDe(b, 'item-1'), impressaoDe(a, 'item-1'));
   });
@@ -277,7 +309,13 @@ void main() {
     });
 
     test('recusa cabeçalho malformado sem explodir', () {
-      for (final lixo in ['', 'Bearer abc', 'SLAP', 'SLAP a:b', 'SLAP a:xyz:c']) {
+      for (final lixo in [
+        '',
+        'Bearer abc',
+        'SLAP',
+        'SLAP a:b',
+        'SLAP a:xyz:c',
+      ]) {
         expect(
           Assinatura.verificar(
             cabecalho: lixo,

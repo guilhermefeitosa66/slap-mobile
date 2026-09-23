@@ -129,7 +129,8 @@ class Patrimonio {
       situacao: situacao ?? this.situacao,
       verificadoEm: verificadoEm ?? this.verificadoEm,
       verificadoPor: verificadoPor ?? this.verificadoPor,
-      verificadoPorMatricula: verificadoPorMatricula ?? this.verificadoPorMatricula,
+      verificadoPorMatricula:
+          verificadoPorMatricula ?? this.verificadoPorMatricula,
       verificadoPorDispositivo:
           verificadoPorDispositivo ?? this.verificadoPorDispositivo,
     );

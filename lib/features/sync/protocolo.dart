@@ -130,16 +130,16 @@ class Apresentacao {
   });
 
   Map<String, dynamic> toJson() => {
-        'dispositivo': dispositivoId,
-        'usuario': usuarioNome,
-        'versao': versao,
-      };
+    'dispositivo': dispositivoId,
+    'usuario': usuarioNome,
+    'versao': versao,
+  };
 
   factory Apresentacao.fromJson(Map<String, dynamic> j) => Apresentacao(
-        dispositivoId: j['dispositivo'] as String,
-        usuarioNome: j['usuario'] as String?,
-        versao: (j['versao'] as num?)?.toInt() ?? 0,
-      );
+    dispositivoId: j['dispositivo'] as String,
+    usuarioNome: j['usuario'] as String?,
+    versao: (j['versao'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// Pedido de operações que faltam.
@@ -150,14 +150,14 @@ class PedidoPull {
   const PedidoPull({required this.inventarioId, required this.vetor});
 
   Map<String, dynamic> toJson() => {
-        'inventario': inventarioId,
-        'vetor': vetor.codificar(),
-      };
+    'inventario': inventarioId,
+    'vetor': vetor.codificar(),
+  };
 
   factory PedidoPull.fromJson(Map<String, dynamic> j) => PedidoPull(
-        inventarioId: j['inventario'] as String,
-        vetor: VersionVector.decodificar(j['vetor'] as String?),
-      );
+    inventarioId: j['inventario'] as String,
+    vetor: VersionVector.decodificar(j['vetor'] as String?),
+  );
 }
 
 /// Lote de operações, com os contextos causais que elas referenciam.
@@ -185,26 +185,26 @@ class LoteOperacoes {
   });
 
   Map<String, dynamic> toJson() => {
-        'inventario': inventarioId,
-        'ops': [for (final o in ops) o.toJson()],
-        'contextos': {
-          for (final e in contextos.entries) e.key: e.value.codificar(),
-        },
-        'vetor': vetor.codificar(),
-      };
+    'inventario': inventarioId,
+    'ops': [for (final o in ops) o.toJson()],
+    'contextos': {
+      for (final e in contextos.entries) e.key: e.value.codificar(),
+    },
+    'vetor': vetor.codificar(),
+  };
 
   factory LoteOperacoes.fromJson(Map<String, dynamic> j) => LoteOperacoes(
-        inventarioId: j['inventario'] as String,
-        ops: [
-          for (final o in (j['ops'] as List))
-            Operacao.fromJson(o as Map<String, dynamic>),
-        ],
-        contextos: {
-          for (final e in (j['contextos'] as Map? ?? {}).entries)
-            e.key as String: VersionVector.decodificar(e.value as String),
-        },
-        vetor: VersionVector.decodificar(j['vetor'] as String?),
-      );
+    inventarioId: j['inventario'] as String,
+    ops: [
+      for (final o in (j['ops'] as List))
+        Operacao.fromJson(o as Map<String, dynamic>),
+    ],
+    contextos: {
+      for (final e in (j['contextos'] as Map? ?? {}).entries)
+        e.key as String: VersionVector.decodificar(e.value as String),
+    },
+    vetor: VersionVector.decodificar(j['vetor'] as String?),
+  );
 }
 
 /// Réplica inicial de um inventário.
@@ -219,33 +219,33 @@ class PacoteInventario {
   const PacoteInventario({required this.inventario, required this.patrimonios});
 
   Map<String, dynamic> toJson() => {
-        'inventario': {
-          'id': inventario.id,
-          'nome': inventario.nome,
-          'ano': inventario.ano,
-          'criado_em': inventario.criadoEm.millisecondsSinceEpoch,
-          'dispositivo_origem': inventario.dispositivoOrigem,
-          'chave_sync': inventario.chaveSync,
-          'eds_excluidos': inventario.edsExcluidos,
+    'inventario': {
+      'id': inventario.id,
+      'nome': inventario.nome,
+      'ano': inventario.ano,
+      'criado_em': inventario.criadoEm.millisecondsSinceEpoch,
+      'dispositivo_origem': inventario.dispositivoOrigem,
+      'chave_sync': inventario.chaveSync,
+      'eds_excluidos': inventario.edsExcluidos,
+    },
+    'patrimonios': [
+      for (final p in patrimonios)
+        {
+          'id': p.id,
+          'ordem': p.ordem,
+          'tombo': p.tombo,
+          'codigo_barras': p.codigoBarras,
+          'ed': p.ed,
+          'descricao': p.descricao,
+          'responsavel': p.responsavelOriginal,
+          'sala': p.salaOriginal,
+          'valor': p.valor,
+          'conservacao': p.conservacaoOriginal?.valor,
+          'situacao': p.situacaoOriginal?.valor,
+          'ignorado': p.ignorado,
         },
-        'patrimonios': [
-          for (final p in patrimonios)
-            {
-              'id': p.id,
-              'ordem': p.ordem,
-              'tombo': p.tombo,
-              'codigo_barras': p.codigoBarras,
-              'ed': p.ed,
-              'descricao': p.descricao,
-              'responsavel': p.responsavelOriginal,
-              'sala': p.salaOriginal,
-              'valor': p.valor,
-              'conservacao': p.conservacaoOriginal?.valor,
-              'situacao': p.situacaoOriginal?.valor,
-              'ignorado': p.ignorado,
-            },
-        ],
-      };
+    ],
+  };
 
   factory PacoteInventario.fromJson(Map<String, dynamic> j) {
     final inv = j['inventario'] as Map<String, dynamic>;
@@ -253,10 +253,14 @@ class PacoteInventario {
       id: inv['id'] as String,
       nome: inv['nome'] as String,
       ano: (inv['ano'] as num).toInt(),
-      criadoEm: DateTime.fromMillisecondsSinceEpoch((inv['criado_em'] as num).toInt()),
+      criadoEm: DateTime.fromMillisecondsSinceEpoch(
+        (inv['criado_em'] as num).toInt(),
+      ),
       dispositivoOrigem: inv['dispositivo_origem'] as String,
       chaveSync: inv['chave_sync'] as String,
-      edsExcluidos: [for (final e in (inv['eds_excluidos'] as List? ?? [])) e.toString()],
+      edsExcluidos: [
+        for (final e in (inv['eds_excluidos'] as List? ?? [])) e.toString(),
+      ],
     );
 
     return PacoteInventario(
@@ -274,7 +278,9 @@ class PacoteInventario {
             responsavelOriginal: p['responsavel'] as String?,
             salaOriginal: p['sala'] as String?,
             valor: p['valor'] as String?,
-            conservacaoOriginal: EstadoConservacao.de(p['conservacao'] as String?),
+            conservacaoOriginal: EstadoConservacao.de(
+              p['conservacao'] as String?,
+            ),
             situacaoOriginal: SituacaoUso.de(p['situacao'] as String?),
             ignorado: p['ignorado'] as bool? ?? false,
           ),
@@ -303,19 +309,19 @@ class ConviteInventario {
   });
 
   factory ConviteInventario.de(Inventario inv) => ConviteInventario(
-        inventarioId: inv.id,
-        nome: inv.nome,
-        ano: inv.ano,
-        chaveSync: inv.chaveSync,
-      );
+    inventarioId: inv.id,
+    nome: inv.nome,
+    ano: inv.ano,
+    chaveSync: inv.chaveSync,
+  );
 
   String codificar() => jsonEncode({
-        'v': versaoProtocolo,
-        'id': inventarioId,
-        'n': nome,
-        'a': ano,
-        'k': chaveSync,
-      });
+    'v': versaoProtocolo,
+    'id': inventarioId,
+    'n': nome,
+    'a': ano,
+    'k': chaveSync,
+  });
 
   /// Lê um convite. Devolve `null` quando o QR não é deste aplicativo — é o
   /// caso comum de apontar a câmera para qualquer outro código.

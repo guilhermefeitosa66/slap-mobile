@@ -90,15 +90,17 @@ class Descoberta {
 
   Future<void> _iniciarMdns() async {
     try {
-      _registro = await nsd.register(nsd.Service(
-        name: 'SLAP ${dispositivoId.substring(0, 6)}',
-        type: tipoServico,
-        port: porta,
-        txt: {
-          'disp': _bytes(dispositivoId),
-          'user': _bytes(usuarioNome() ?? ''),
-        },
-      ));
+      _registro = await nsd.register(
+        nsd.Service(
+          name: 'SLAP ${dispositivoId.substring(0, 6)}',
+          type: tipoServico,
+          port: porta,
+          txt: {
+            'disp': _bytes(dispositivoId),
+            'user': _bytes(usuarioNome() ?? ''),
+          },
+        ),
+      );
 
       final busca = await nsd.startDiscovery(tipoServico, autoResolve: true);
       busca.addServiceListener((servico, status) {
@@ -111,8 +113,10 @@ class Descoberta {
       });
       _busca = busca;
     } catch (e) {
-      avisos.add('Descoberta automática indisponível nesta rede ($e). '
-          'A busca continua pelo outro método.');
+      avisos.add(
+        'Descoberta automática indisponível nesta rede ($e). '
+        'A busca continua pelo outro método.',
+      );
     }
   }
 
@@ -120,17 +124,22 @@ class Descoberta {
     final id = _texto(servico.txt?['disp']);
     final host = servico.addresses?.firstOrNull?.address ?? servico.host;
 
-    if (id == null || id == dispositivoId || host == null || servico.port == null) {
+    if (id == null ||
+        id == dispositivoId ||
+        host == null ||
+        servico.port == null) {
       return;
     }
 
-    _adicionar(Par(
-      dispositivoId: id,
-      usuarioNome: _texto(servico.txt?['user']),
-      host: host,
-      porta: servico.port!,
-      origem: 'mdns',
-    ));
+    _adicionar(
+      Par(
+        dispositivoId: id,
+        usuarioNome: _texto(servico.txt?['user']),
+        host: host,
+        porta: servico.port!,
+        origem: 'mdns',
+      ),
+    );
   }
 
   // ---------------------------------------------------------------- beacon ---
@@ -158,8 +167,10 @@ class Descoberta {
       _anunciar();
       _pulso = Timer.periodic(const Duration(seconds: 3), (_) => _anunciar());
     } catch (e) {
-      avisos.add('Não foi possível anunciar na rede local ($e). '
-          'Verifique se o Wi-Fi está conectado.');
+      avisos.add(
+        'Não foi possível anunciar na rede local ($e). '
+        'Verifique se o Wi-Fi está conectado.',
+      );
     }
   }
 
@@ -167,12 +178,14 @@ class Descoberta {
     final socket = _socket;
     if (socket == null) return;
 
-    final anuncio = utf8.encode(jsonEncode({
-      'v': versaoProtocolo,
-      'disp': dispositivoId,
-      'user': usuarioNome(),
-      'porta': porta,
-    }));
+    final anuncio = utf8.encode(
+      jsonEncode({
+        'v': versaoProtocolo,
+        'disp': dispositivoId,
+        'user': usuarioNome(),
+        'porta': porta,
+      }),
+    );
 
     try {
       socket.send(anuncio, InternetAddress(enderecoMulticast), portaMulticast);
@@ -190,13 +203,15 @@ class Descoberta {
       if (id == null || id == dispositivoId || portaRemota == null) return;
       if (j['v'] != versaoProtocolo) return;
 
-      _adicionar(Par(
-        dispositivoId: id,
-        usuarioNome: j['user'] as String?,
-        host: pacote.address.address,
-        porta: portaRemota,
-        origem: 'beacon',
-      ));
+      _adicionar(
+        Par(
+          dispositivoId: id,
+          usuarioNome: j['user'] as String?,
+          host: pacote.address.address,
+          porta: portaRemota,
+          origem: 'beacon',
+        ),
+      );
     } catch (_) {
       // Pacote de outro aplicativo no mesmo endereço multicast.
     }
@@ -227,7 +242,8 @@ class Descoberta {
     if (!_mudancas.isClosed) _mudancas.add(pares);
   }
 
-  static Uint8List _bytes(String texto) => Uint8List.fromList(utf8.encode(texto));
+  static Uint8List _bytes(String texto) =>
+      Uint8List.fromList(utf8.encode(texto));
 
   static String? _texto(Uint8List? bytes) {
     if (bytes == null || bytes.isEmpty) return null;

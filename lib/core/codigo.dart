@@ -26,7 +26,9 @@ String chaveBusca(String? bruto) {
 
   // Células numéricas do Excel chegam como "19281.0". Remover o separador sem
   // tratar isso produziria "192810" — um código diferente e inexistente.
-  final inteiroComDecimalZerado = RegExp(r'^([+-]?\d+)[.,]0+$').firstMatch(texto);
+  final inteiroComDecimalZerado = RegExp(
+    r'^([+-]?\d+)[.,]0+$',
+  ).firstMatch(texto);
   if (inteiroComDecimalZerado != null) {
     texto = inteiroComDecimalZerado.group(1)!;
   }

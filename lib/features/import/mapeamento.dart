@@ -31,45 +31,120 @@ enum CampoImportacao {
 /// a versões diferentes da planilha.
 const Map<CampoImportacao, List<String>> sinonimos = {
   CampoImportacao.tombo: [
-    'tombo', 'notombo', 'numerodetombo', 'numerotombo', 'ntombo',
-    'patrimonio', 'npatrimonio', 'nopatrimonio', 'numerodepatrimonio',
-    'npatrimonial', 'nopatrimonial', 'numeropatrimonial',
-    'plaqueta', 'chapa', 'numerodechapa', 'bempatrimonial',
+    'tombo',
+    'notombo',
+    'numerodetombo',
+    'numerotombo',
+    'ntombo',
+    'patrimonio',
+    'npatrimonio',
+    'nopatrimonio',
+    'numerodepatrimonio',
+    'npatrimonial',
+    'nopatrimonial',
+    'numeropatrimonial',
+    'plaqueta',
+    'chapa',
+    'numerodechapa',
+    'bempatrimonial',
   ],
   CampoImportacao.codigoBarras: [
-    'codbarras', 'codbarra', 'codigodebarras', 'codigobarras', 'codigobarra',
-    'cbarra', 'cbarras', 'barras', 'barcode', 'ean', 'codigodebarra',
+    'codbarras',
+    'codbarra',
+    'codigodebarras',
+    'codigobarras',
+    'codigobarra',
+    'cbarra',
+    'cbarras',
+    'barras',
+    'barcode',
+    'ean',
+    'codigodebarra',
   ],
   CampoImportacao.descricao: [
-    'descricao', 'descricaodobem', 'descricaodomaterial', 'denominacao',
-    'especificacao', 'material', 'bem', 'produto', 'nomedobem', 'discriminacao',
+    'descricao',
+    'descricaodobem',
+    'descricaodomaterial',
+    'denominacao',
+    'especificacao',
+    'material',
+    'bem',
+    'produto',
+    'nomedobem',
+    'discriminacao',
   ],
   CampoImportacao.ed: [
-    'ed', 'elementodedespesa', 'elementodespesa', 'elemento',
-    'naturezadedespesa', 'naturezadespesa', 'nd', 'contacontabil', 'conta',
-    'subelemento', 'categoria',
+    'ed',
+    'elementodedespesa',
+    'elementodespesa',
+    'elemento',
+    'naturezadedespesa',
+    'naturezadespesa',
+    'nd',
+    'contacontabil',
+    'conta',
+    'subelemento',
+    'categoria',
   ],
   CampoImportacao.responsavel: [
-    'responsavel', 'responsavelatual', 'responsavelpelacarga', 'detentor',
-    'carga', 'cargaatual', 'responsavelpelobem', 'usuario', 'servidor',
+    'responsavel',
+    'responsavelatual',
+    'responsavelpelacarga',
+    'detentor',
+    'carga',
+    'cargaatual',
+    'responsavelpelobem',
+    'usuario',
+    'servidor',
   ],
   CampoImportacao.sala: [
-    'sala', 'localizacao', 'local', 'ambiente', 'setor', 'dependencia',
-    'salalocal', 'localizacaoatual', 'localdoitem', 'unidade', 'lotacao',
+    'sala',
+    'localizacao',
+    'local',
+    'ambiente',
+    'setor',
+    'dependencia',
+    'salalocal',
+    'localizacaoatual',
+    'localdoitem',
+    'unidade',
+    'lotacao',
   ],
   CampoImportacao.ordem: [
-    'ordem', 'ord', 'sequencia', 'seq', 'indice', 'numero', 'n',
+    'ordem',
+    'ord',
+    'sequencia',
+    'seq',
+    'indice',
+    'numero',
+    'n',
   ],
   CampoImportacao.valor: [
-    'valor', 'valoraquisicao', 'valordeaquisicao', 'valoratual',
-    'valorliquido', 'valorcontabil', 'vlr', 'preco', 'custo',
+    'valor',
+    'valoraquisicao',
+    'valordeaquisicao',
+    'valoratual',
+    'valorliquido',
+    'valorcontabil',
+    'vlr',
+    'preco',
+    'custo',
   ],
   CampoImportacao.conservacao: [
-    'estadodeconservacao', 'estadoconservacao', 'conservacao', 'estado',
-    'estadodobem', 'estadofisico',
+    'estadodeconservacao',
+    'estadoconservacao',
+    'conservacao',
+    'estado',
+    'estadodobem',
+    'estadofisico',
   ],
   CampoImportacao.situacao: [
-    'situacaodeuso', 'situacaouso', 'situacao', 'uso', 'statusdeuso', 'status',
+    'situacaodeuso',
+    'situacaouso',
+    'situacao',
+    'uso',
+    'statusdeuso',
+    'status',
   ],
 };
 
@@ -145,7 +220,10 @@ class Mapeamento {
 /// possível, o campo fica sem coluna e o usuário completa à mão — a tela de
 /// confirmação aparece sempre, mesmo quando tudo foi reconhecido, porque um
 /// mapeamento errado aceito em silêncio corrompe o inventário inteiro.
-Mapeamento detectarMapeamento(List<List<String?>> linhas, {int procurarAte = 15}) {
+Mapeamento detectarMapeamento(
+  List<List<String?>> linhas, {
+  int procurarAte = 15,
+}) {
   final limite = linhas.length < procurarAte ? linhas.length : procurarAte;
 
   var melhorLinha = 0;
@@ -219,7 +297,10 @@ int _pontuar(String chave, List<String> sinonimosDoCampo) {
   return 0;
 }
 
-List<ColunaDetectada> _colunasDe(List<List<String?>> linhas, int linhaCabecalho) {
+List<ColunaDetectada> _colunasDe(
+  List<List<String?>> linhas,
+  int linhaCabecalho,
+) {
   if (linhas.isEmpty) return const [];
 
   final cabecalho = linhas[linhaCabecalho];
@@ -231,9 +312,11 @@ List<ColunaDetectada> _colunasDe(List<List<String?>> linhas, int linhaCabecalho)
             ? 'Coluna ${i + 1}'
             : cabecalho[i]!.trim(),
         amostra: [
-          for (var l = linhaCabecalho + 1;
-              l < linhas.length && l <= linhaCabecalho + 3;
-              l++)
+          for (
+            var l = linhaCabecalho + 1;
+            l < linhas.length && l <= linhaCabecalho + 3;
+            l++
+          )
             if (i < linhas[l].length && (linhas[l][i] ?? '').trim().isNotEmpty)
               linhas[l][i]!.trim(),
         ],

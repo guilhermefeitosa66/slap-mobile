@@ -61,52 +61,52 @@ class Operacao {
   });
 
   factory Operacao.doBanco(Row r) => Operacao(
-        opId: r['op_id'] as String,
-        inventarioId: r['inventario_id'] as String,
-        entidade: r['entidade'] as String,
-        entidadeId: r['entidade_id'] as String,
-        campo: r['campo'] as String,
-        valor: r['valor'] as String?,
-        hlc: Hlc.decodificar(r['hlc'] as String),
-        dispositivo: r['dispositivo'] as String,
-        seq: r['seq'] as int,
-        ctxId: r['ctx_id'] as String?,
-        usuarioNome: r['usuario_nome'] as String?,
-        usuarioMatricula: r['usuario_matricula'] as String?,
-        criadoEm: r['criado_em'] as int,
-      );
+    opId: r['op_id'] as String,
+    inventarioId: r['inventario_id'] as String,
+    entidade: r['entidade'] as String,
+    entidadeId: r['entidade_id'] as String,
+    campo: r['campo'] as String,
+    valor: r['valor'] as String?,
+    hlc: Hlc.decodificar(r['hlc'] as String),
+    dispositivo: r['dispositivo'] as String,
+    seq: r['seq'] as int,
+    ctxId: r['ctx_id'] as String?,
+    usuarioNome: r['usuario_nome'] as String?,
+    usuarioMatricula: r['usuario_matricula'] as String?,
+    criadoEm: r['criado_em'] as int,
+  );
 
   Map<String, dynamic> toJson() => {
-        'op_id': opId,
-        'inv': inventarioId,
-        'ent': entidade,
-        'ent_id': entidadeId,
-        'campo': campo,
-        'valor': valor,
-        'hlc': hlc.codificar(),
-        'disp': dispositivo,
-        'seq': seq,
-        'ctx': ctxId,
-        'nome': usuarioNome,
-        'mat': usuarioMatricula,
-        'em': criadoEm,
-      };
+    'op_id': opId,
+    'inv': inventarioId,
+    'ent': entidade,
+    'ent_id': entidadeId,
+    'campo': campo,
+    'valor': valor,
+    'hlc': hlc.codificar(),
+    'disp': dispositivo,
+    'seq': seq,
+    'ctx': ctxId,
+    'nome': usuarioNome,
+    'mat': usuarioMatricula,
+    'em': criadoEm,
+  };
 
   factory Operacao.fromJson(Map<String, dynamic> j) => Operacao(
-        opId: j['op_id'] as String,
-        inventarioId: j['inv'] as String,
-        entidade: j['ent'] as String,
-        entidadeId: j['ent_id'] as String,
-        campo: j['campo'] as String,
-        valor: j['valor'] as String?,
-        hlc: Hlc.decodificar(j['hlc'] as String),
-        dispositivo: j['disp'] as String,
-        seq: (j['seq'] as num).toInt(),
-        ctxId: j['ctx'] as String?,
-        usuarioNome: j['nome'] as String?,
-        usuarioMatricula: j['mat'] as String?,
-        criadoEm: (j['em'] as num).toInt(),
-      );
+    opId: j['op_id'] as String,
+    inventarioId: j['inv'] as String,
+    entidade: j['ent'] as String,
+    entidadeId: j['ent_id'] as String,
+    campo: j['campo'] as String,
+    valor: j['valor'] as String?,
+    hlc: Hlc.decodificar(j['hlc'] as String),
+    dispositivo: j['disp'] as String,
+    seq: (j['seq'] as num).toInt(),
+    ctxId: j['ctx'] as String?,
+    usuarioNome: j['nome'] as String?,
+    usuarioMatricula: j['mat'] as String?,
+    criadoEm: (j['em'] as num).toInt(),
+  );
 }
 
 /// Resultado de aplicar um lote de operações recebidas de outro aparelho.
@@ -221,7 +221,10 @@ class RepositorioOperacoes {
   /// precisa ser transferido uma vez.
   String registrarContexto(VersionVector vetor) {
     final texto = vetor.codificar();
-    final ctxId = sha256.convert(utf8.encode(texto)).toString().substring(0, 16);
+    final ctxId = sha256
+        .convert(utf8.encode(texto))
+        .toString()
+        .substring(0, 16);
     _db.execute(
       'INSERT OR IGNORE INTO contextos (ctx_id, vetor) VALUES (?, ?)',
       [ctxId, texto],
@@ -231,7 +234,9 @@ class RepositorioOperacoes {
 
   VersionVector contexto(String? ctxId) {
     if (ctxId == null) return VersionVector.vazia;
-    final r = _db.select('SELECT vetor FROM contextos WHERE ctx_id = ?', [ctxId]);
+    final r = _db.select('SELECT vetor FROM contextos WHERE ctx_id = ?', [
+      ctxId,
+    ]);
     return r.isEmpty
         ? VersionVector.vazia
         : VersionVector.decodificar(r.first['vetor'] as String);
@@ -292,9 +297,19 @@ class RepositorioOperacoes {
       'campo, valor, hlc, dispositivo, seq, ctx_id, usuario_nome, '
       'usuario_matricula, criado_em) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [
-        op.opId, op.inventarioId, op.entidade, op.entidadeId, op.campo,
-        op.valor, op.hlc.codificar(), op.dispositivo, op.seq, op.ctxId,
-        op.usuarioNome, op.usuarioMatricula, op.criadoEm,
+        op.opId,
+        op.inventarioId,
+        op.entidade,
+        op.entidadeId,
+        op.campo,
+        op.valor,
+        op.hlc.codificar(),
+        op.dispositivo,
+        op.seq,
+        op.ctxId,
+        op.usuarioNome,
+        op.usuarioMatricula,
+        op.criadoEm,
       ],
     );
   }
@@ -312,7 +327,10 @@ class RepositorioOperacoes {
   }) {
     if (ops.isEmpty) {
       return const ResultadoAplicacao(
-        aplicadas: 0, ignoradas: 0, conflitos: 0, patrimoniosAfetados: {},
+        aplicadas: 0,
+        ignoradas: 0,
+        conflitos: 0,
+        patrimoniosAfetados: {},
       );
     }
 
@@ -447,8 +465,14 @@ class RepositorioOperacoes {
       'dispositivo = excluded.dispositivo, seq = excluded.seq, '
       'ctx_id = excluded.ctx_id',
       [
-        op.entidadeId, op.campo, op.valor, op.hlc.codificar(),
-        op.opId, op.dispositivo, op.seq, op.ctxId,
+        op.entidadeId,
+        op.campo,
+        op.valor,
+        op.hlc.codificar(),
+        op.opId,
+        op.dispositivo,
+        op.seq,
+        op.ctxId,
       ],
     );
   }
@@ -457,10 +481,10 @@ class RepositorioOperacoes {
     const permitidos = {'nome', 'ano', 'eds_excluidos', 'encerrado_em'};
     if (!permitidos.contains(op.campo)) return;
 
-    _db.execute(
-      'UPDATE inventarios SET ${op.campo} = ? WHERE id = ?',
-      [op.valor, op.entidadeId],
-    );
+    _db.execute('UPDATE inventarios SET ${op.campo} = ? WHERE id = ?', [
+      op.valor,
+      op.entidadeId,
+    ]);
 
     if (op.campo == 'eds_excluidos') {
       reaplicarEdsExcluidos(op.entidadeId);
@@ -476,8 +500,13 @@ class RepositorioOperacoes {
       'INSERT OR IGNORE INTO conflitos (id, inventario_id, patrimonio_id, campo, '
       'op_vencedora, op_perdedora, criado_em) VALUES (?,?,?,?,?,?,?)',
       [
-        _uuid.v4(), op.inventarioId, op.entidadeId, op.campo,
-        opVencedora, opPerdedora, DateTime.now().millisecondsSinceEpoch,
+        _uuid.v4(),
+        op.inventarioId,
+        op.entidadeId,
+        op.campo,
+        opVencedora,
+        opPerdedora,
+        DateTime.now().millisecondsSinceEpoch,
       ],
     );
   }
@@ -546,20 +575,19 @@ class RepositorioOperacoes {
 
   /// Recalcula quais itens estão fora do inventário por ED excluído.
   void reaplicarEdsExcluidos(String inventarioId) {
-    final r = _db.select(
-      'SELECT eds_excluidos FROM inventarios WHERE id = ?',
-      [inventarioId],
-    );
+    final r = _db.select('SELECT eds_excluidos FROM inventarios WHERE id = ?', [
+      inventarioId,
+    ]);
     if (r.isEmpty) return;
 
-    final lista = (jsonDecode(r.first['eds_excluidos'] as String? ?? '[]') as List)
-        .map((e) => e.toString())
-        .toList();
+    final lista =
+        (jsonDecode(r.first['eds_excluidos'] as String? ?? '[]') as List)
+            .map((e) => e.toString())
+            .toList();
 
-    _db.execute(
-      'UPDATE patrimonios SET ignorado = 0 WHERE inventario_id = ?',
-      [inventarioId],
-    );
+    _db.execute('UPDATE patrimonios SET ignorado = 0 WHERE inventario_id = ?', [
+      inventarioId,
+    ]);
     if (lista.isEmpty) return;
 
     final marcadores = List.filled(lista.length, '?').join(',');
@@ -576,8 +604,11 @@ class RepositorioOperacoes {
   ///
   /// Inclui operações originadas em terceiros: é isso que faz o trabalho de C
   /// chegar a A através de B, sem que A e C se encontrem.
-  List<Operacao> opsFaltantes(String inventarioId, VersionVector vetorDoPar,
-      {int limite = 5000}) {
+  List<Operacao> opsFaltantes(
+    String inventarioId,
+    VersionVector vetorDoPar, {
+    int limite = 5000,
+  }) {
     final nosso = vetorDe(inventarioId);
     final resultado = <Operacao>[];
 
@@ -612,8 +643,7 @@ class RepositorioOperacoes {
     );
     return {
       for (final l in linhas)
-        l['ctx_id'] as String:
-            VersionVector.decodificar(l['vetor'] as String),
+        l['ctx_id'] as String: VersionVector.decodificar(l['vetor'] as String),
     };
   }
 
@@ -627,7 +657,10 @@ class RepositorioOperacoes {
   }
 
   /// Últimas alterações do inventário inteiro.
-  List<Operacao> historicoDoInventario(String inventarioId, {int limite = 200}) {
+  List<Operacao> historicoDoInventario(
+    String inventarioId, {
+    int limite = 200,
+  }) {
     final linhas = _db.select(
       'SELECT * FROM ops WHERE inventario_id = ? AND entidade = ? '
       'AND campo = ? ORDER BY hlc DESC LIMIT ?',

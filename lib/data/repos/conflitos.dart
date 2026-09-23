@@ -45,20 +45,22 @@ class Conflito {
 
   /// Nome do campo como aparece para o usuário.
   String get rotuloCampo => switch (campo) {
-        CampoPatrimonio.salaAtual => 'Sala',
-        CampoPatrimonio.responsavelAtual => 'Responsável',
-        CampoPatrimonio.conservacao => 'Estado de conservação',
-        CampoPatrimonio.situacao => 'Situação de uso',
-        CampoPatrimonio.verificado => 'Verificação',
-        _ => campo,
-      };
+    CampoPatrimonio.salaAtual => 'Sala',
+    CampoPatrimonio.responsavelAtual => 'Responsável',
+    CampoPatrimonio.conservacao => 'Estado de conservação',
+    CampoPatrimonio.situacao => 'Situação de uso',
+    CampoPatrimonio.verificado => 'Verificação',
+    _ => campo,
+  };
 
   String rotuloValor(String? valor) {
     if (valor == null || valor.isEmpty) return '(vazio)';
     return switch (campo) {
-      CampoPatrimonio.conservacao => EstadoConservacao.de(valor)?.rotulo ?? valor,
+      CampoPatrimonio.conservacao =>
+        EstadoConservacao.de(valor)?.rotulo ?? valor,
       CampoPatrimonio.situacao => SituacaoUso.de(valor)?.rotulo ?? valor,
-      CampoPatrimonio.verificado => valor == '1' ? 'Verificado' : 'Não verificado',
+      CampoPatrimonio.verificado =>
+        valor == '1' ? 'Verificado' : 'Não verificado',
       _ => valor,
     };
   }
@@ -156,20 +158,20 @@ class RepositorioConflitos {
 
   static Conflito _daLinha(Row r) {
     Operacao op(String prefixo) => Operacao(
-          opId: r[prefixo == 'v' ? 'op_vencedora' : 'op_perdedora'] as String,
-          inventarioId: r['inventario_id'] as String,
-          entidade: r['${prefixo}_ent'] as String,
-          entidadeId: r['${prefixo}_ent_id'] as String,
-          campo: r['${prefixo}_campo'] as String,
-          valor: r['${prefixo}_valor'] as String?,
-          hlc: Hlc.decodificar(r['${prefixo}_hlc'] as String),
-          dispositivo: r['${prefixo}_disp'] as String,
-          seq: r['${prefixo}_seq'] as int,
-          ctxId: r['${prefixo}_ctx'] as String?,
-          usuarioNome: r['${prefixo}_nome'] as String?,
-          usuarioMatricula: r['${prefixo}_mat'] as String?,
-          criadoEm: r['${prefixo}_em'] as int,
-        );
+      opId: r[prefixo == 'v' ? 'op_vencedora' : 'op_perdedora'] as String,
+      inventarioId: r['inventario_id'] as String,
+      entidade: r['${prefixo}_ent'] as String,
+      entidadeId: r['${prefixo}_ent_id'] as String,
+      campo: r['${prefixo}_campo'] as String,
+      valor: r['${prefixo}_valor'] as String?,
+      hlc: Hlc.decodificar(r['${prefixo}_hlc'] as String),
+      dispositivo: r['${prefixo}_disp'] as String,
+      seq: r['${prefixo}_seq'] as int,
+      ctxId: r['${prefixo}_ctx'] as String?,
+      usuarioNome: r['${prefixo}_nome'] as String?,
+      usuarioMatricula: r['${prefixo}_mat'] as String?,
+      criadoEm: r['${prefixo}_em'] as int,
+    );
 
     return Conflito(
       id: r['id'] as String,

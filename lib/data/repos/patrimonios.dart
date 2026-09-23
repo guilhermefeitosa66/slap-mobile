@@ -148,8 +148,12 @@ class RepositorioPatrimonios {
       return const Leitura(resultado: ResultadoLeitura.naoLocalizado);
     }
 
-    final primeiro = modo == ModoLeitura.tombo ? 'tombo_chave' : 'codigo_barras_chave';
-    final segundo = modo == ModoLeitura.tombo ? 'codigo_barras_chave' : 'tombo_chave';
+    final primeiro = modo == ModoLeitura.tombo
+        ? 'tombo_chave'
+        : 'codigo_barras_chave';
+    final segundo = modo == ModoLeitura.tombo
+        ? 'codigo_barras_chave'
+        : 'tombo_chave';
 
     var linhas = _buscarPor(inventarioId, primeiro, chave);
     var cruzado = false;
@@ -165,7 +169,9 @@ class RepositorioPatrimonios {
 
     final p = _daLinha(linhas.first);
     return Leitura(
-      resultado: p.verificado ? ResultadoLeitura.jaVerificado : ResultadoLeitura.sucesso,
+      resultado: p.verificado
+          ? ResultadoLeitura.jaVerificado
+          : ResultadoLeitura.sucesso,
       patrimonio: p,
       achadoNoOutroCampo: cruzado,
       duplicados: linhas.length,
@@ -173,15 +179,13 @@ class RepositorioPatrimonios {
   }
 
   List<Row> _buscarPor(String inventarioId, String coluna, String chave) {
-    return _db
-        .select(
-          'SELECT * FROM patrimonios WHERE inventario_id = ? AND $coluna = ? '
-          // Itens fora do inventário por ED não devem "não ser localizados":
-          // eles aparecem, mas o usuário é avisado de que estão excluídos.
-          'ORDER BY ignorado, verificado DESC',
-          [inventarioId, chave],
-        )
-        .toList();
+    return _db.select(
+      'SELECT * FROM patrimonios WHERE inventario_id = ? AND $coluna = ? '
+      // Itens fora do inventário por ED não devem "não ser localizados":
+      // eles aparecem, mas o usuário é avisado de que estão excluídos.
+      'ORDER BY ignorado, verificado DESC',
+      [inventarioId, chave],
+    ).toList();
   }
 
   Patrimonio? porId(String id) {
@@ -394,8 +398,13 @@ class RepositorioPatrimonios {
 
     if (busca != null && busca.trim().isNotEmpty) {
       final chave = chaveBusca(busca);
-      condicoes.add('(descricao LIKE ? OR tombo_chave LIKE ? OR codigo_barras_chave LIKE ?)');
-      params..add('%${busca.trim()}%')..add('$chave%')..add('$chave%');
+      condicoes.add(
+        '(descricao LIKE ? OR tombo_chave LIKE ? OR codigo_barras_chave LIKE ?)',
+      );
+      params
+        ..add('%${busca.trim()}%')
+        ..add('$chave%')
+        ..add('$chave%');
     }
 
     final linhas = _db.select(
@@ -518,29 +527,31 @@ class RepositorioPatrimonios {
   // ---------------------------------------------------------------- mapa ---
 
   static Patrimonio _daLinha(Row r) => Patrimonio(
-        id: r['id'] as String,
-        inventarioId: r['inventario_id'] as String,
-        ordem: r['ordem'] as String?,
-        tombo: r['tombo'] as String,
-        codigoBarras: r['codigo_barras'] as String?,
-        ed: r['ed'] as String?,
-        descricao: r['descricao'] as String?,
-        responsavelOriginal: r['responsavel_original'] as String?,
-        salaOriginal: r['sala_original'] as String?,
-        valor: r['valor'] as String?,
-        conservacaoOriginal: EstadoConservacao.de(r['conservacao_original'] as String?),
-        situacaoOriginal: SituacaoUso.de(r['situacao_original'] as String?),
-        ignorado: (r['ignorado'] as int) == 1,
-        verificado: (r['verificado'] as int) == 1,
-        salaAtual: r['sala_atual'] as String?,
-        responsavelAtual: r['responsavel_atual'] as String?,
-        conservacao: EstadoConservacao.de(r['conservacao'] as String?),
-        situacao: SituacaoUso.de(r['situacao'] as String?),
-        verificadoEm: r['verificado_em'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(r['verificado_em'] as int),
-        verificadoPor: r['verificado_por'] as String?,
-        verificadoPorMatricula: r['verificado_por_matricula'] as String?,
-        verificadoPorDispositivo: r['verificado_por_dispositivo'] as String?,
-      );
+    id: r['id'] as String,
+    inventarioId: r['inventario_id'] as String,
+    ordem: r['ordem'] as String?,
+    tombo: r['tombo'] as String,
+    codigoBarras: r['codigo_barras'] as String?,
+    ed: r['ed'] as String?,
+    descricao: r['descricao'] as String?,
+    responsavelOriginal: r['responsavel_original'] as String?,
+    salaOriginal: r['sala_original'] as String?,
+    valor: r['valor'] as String?,
+    conservacaoOriginal: EstadoConservacao.de(
+      r['conservacao_original'] as String?,
+    ),
+    situacaoOriginal: SituacaoUso.de(r['situacao_original'] as String?),
+    ignorado: (r['ignorado'] as int) == 1,
+    verificado: (r['verificado'] as int) == 1,
+    salaAtual: r['sala_atual'] as String?,
+    responsavelAtual: r['responsavel_atual'] as String?,
+    conservacao: EstadoConservacao.de(r['conservacao'] as String?),
+    situacao: SituacaoUso.de(r['situacao'] as String?),
+    verificadoEm: r['verificado_em'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(r['verificado_em'] as int),
+    verificadoPor: r['verificado_por'] as String?,
+    verificadoPorMatricula: r['verificado_por_matricula'] as String?,
+    verificadoPorDispositivo: r['verificado_por_dispositivo'] as String?,
+  );
 }

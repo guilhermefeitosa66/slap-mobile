@@ -28,8 +28,26 @@ void main() {
       final planilha = LeitorPlanilha.ler(
         nomeArquivo: 'suap.xlsx',
         bytes: planilhaXlsx([
-          ['ORDEM', 'COD. BARRAS', 'TOMBO', 'ED', 'DESCRIÇÃO', 'RESPONSAVEL', 'SALA', 'VALOR'],
-          ['1', '-19281', '23254', '30', 'ESTABILIZADOR', 'Dann Luciano', 'SRN-CTI', '58'],
+          [
+            'ORDEM',
+            'COD. BARRAS',
+            'TOMBO',
+            'ED',
+            'DESCRIÇÃO',
+            'RESPONSAVEL',
+            'SALA',
+            'VALOR',
+          ],
+          [
+            '1',
+            '-19281',
+            '23254',
+            '30',
+            'ESTABILIZADOR',
+            'Dann Luciano',
+            'SRN-CTI',
+            '58',
+          ],
         ]),
       );
 
@@ -70,7 +88,13 @@ void main() {
       final planilha = LeitorPlanilha.ler(
         nomeArquivo: 'variante.xlsx',
         bytes: planilhaXlsx([
-          ['Nº Patrimonial', 'Descrição do Bem', 'Elemento de Despesa', 'Localização', 'Detentor'],
+          [
+            'Nº Patrimonial',
+            'Descrição do Bem',
+            'Elemento de Despesa',
+            'Localização',
+            'Detentor',
+          ],
           ['123', 'Mesa', '449052', 'Auditório', 'João'],
         ]),
       );
@@ -130,8 +154,11 @@ void main() {
       m = m.definir(CampoImportacao.codigoBarras, 0);
 
       expect(m.colunaDe(CampoImportacao.codigoBarras), 0);
-      expect(m.colunaDe(CampoImportacao.tombo), isNull,
-          reason: 'tombo perdeu a coluna que foi reatribuída');
+      expect(
+        m.colunaDe(CampoImportacao.tombo),
+        isNull,
+        reason: 'tombo perdeu a coluna que foi reatribuída',
+      );
     });
   });
 
@@ -164,7 +191,10 @@ void main() {
       final bytes = Uint8List.fromList(
         latin1.encode('TOMBO;SALA\n123;Coordenação\n'),
       );
-      final planilha = LeitorPlanilha.ler(nomeArquivo: 'latin.csv', bytes: bytes);
+      final planilha = LeitorPlanilha.ler(
+        nomeArquivo: 'latin.csv',
+        bytes: bytes,
+      );
 
       expect(planilha.linhas[1][1], 'Coordenação');
     });
@@ -189,8 +219,10 @@ void main() {
       banco = Banco.emMemoria();
       final ops = RepositorioOperacoes(banco);
       patrimonios = RepositorioPatrimonios(banco, ops);
-      inventario = RepositorioInventarios(banco, ops)
-          .criar(nome: 'Campus Picos', ano: 2026);
+      inventario = RepositorioInventarios(
+        banco,
+        ops,
+      ).criar(nome: 'Campus Picos', ano: 2026);
     });
 
     tearDown(() => banco.fechar());
@@ -225,7 +257,11 @@ void main() {
       ]);
 
       expect(previa.total, 1);
-      expect(previa.semTombo, 1, reason: 'a linha totalmente vazia nem é contada');
+      expect(
+        previa.semTombo,
+        1,
+        reason: 'a linha totalmente vazia nem é contada',
+      );
     });
 
     test('tombo repetido no arquivo é sinalizado e entra uma vez só', () {
@@ -243,7 +279,10 @@ void main() {
         previa: previa,
       );
 
-      expect(patrimonios.todos(inventario.id, incluirIgnorados: true).length, 1);
+      expect(
+        patrimonios.todos(inventario.id, incluirIgnorados: true).length,
+        1,
+      );
     });
 
     test('o ED escolhido sai do inventário sem sumir do banco', () {
@@ -259,13 +298,18 @@ void main() {
         previa: previa,
         edsExcluidos: {'18'},
       );
-      RepositorioInventarios(banco, RepositorioOperacoes(banco))
-          .definirEdsExcluidos(inventario.id, ['18']);
+      RepositorioInventarios(
+        banco,
+        RepositorioOperacoes(banco),
+      ).definirEdsExcluidos(inventario.id, ['18']);
 
       final progresso = patrimonios.progresso(inventario.id);
       expect(progresso.total, 1, reason: 'o livro não é pendência de ninguém');
       expect(progresso.ignorados, 1);
-      expect(patrimonios.todos(inventario.id, incluirIgnorados: true).length, 2);
+      expect(
+        patrimonios.todos(inventario.id, incluirIgnorados: true).length,
+        2,
+      );
     });
 
     test('reimportar preserva o levantamento já feito', () {
@@ -340,8 +384,11 @@ void main() {
       );
 
       expect(leitura.resultado, ResultadoLeitura.sucesso);
-      expect(leitura.patrimonio!.codigoBarras, '-19281',
-          reason: 'o valor do cadastro é preservado como veio');
+      expect(
+        leitura.patrimonio!.codigoBarras,
+        '-19281',
+        reason: 'o valor do cadastro é preservado como veio',
+      );
     });
   });
 }

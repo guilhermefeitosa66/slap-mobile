@@ -70,7 +70,11 @@ class LeitorPlanilha {
 
   // ------------------------------------------------------------------ XLSX ---
 
-  static PlanilhaLida _lerXlsx(String nomeArquivo, Uint8List bytes, String? aba) {
+  static PlanilhaLida _lerXlsx(
+    String nomeArquivo,
+    Uint8List bytes,
+    String? aba,
+  ) {
     final Excel planilha;
     try {
       planilha = Excel.decodeBytes(bytes);
@@ -81,7 +85,9 @@ class LeitorPlanilha {
     final abas = planilha.tables.keys.toList();
     if (abas.isEmpty) throw PlanilhaInvalida('A planilha não tem nenhuma aba.');
 
-    final escolhida = aba != null && planilha.tables.containsKey(aba) ? aba : abas.first;
+    final escolhida = aba != null && planilha.tables.containsKey(aba)
+        ? aba
+        : abas.first;
     final tabela = planilha.tables[escolhida]!;
 
     final linhas = <List<String?>>[];
@@ -111,7 +117,8 @@ class LeitorPlanilha {
       IntCellValue() => valor.value.toString(),
       DoubleCellValue() => _textoDoDecimal(valor.value),
       BoolCellValue() => valor.value ? 'sim' : 'não',
-      DateCellValue() => valor.asDateTimeLocal().toIso8601String().split('T').first,
+      DateCellValue() =>
+        valor.asDateTimeLocal().toIso8601String().split('T').first,
       DateTimeCellValue() => valor.asDateTimeLocal().toIso8601String(),
       TimeCellValue() => valor.toString(),
       FormulaCellValue() => valor.formula,

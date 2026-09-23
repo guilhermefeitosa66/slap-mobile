@@ -19,7 +19,13 @@ class CampoPatrimonio {
   static const conservacao = 'conservacao';
   static const situacao = 'situacao';
 
-  static const todos = [verificado, salaAtual, responsavelAtual, conservacao, situacao];
+  static const todos = [
+    verificado,
+    salaAtual,
+    responsavelAtual,
+    conservacao,
+    situacao,
+  ];
 }
 
 const List<String> ddlEsquema = [

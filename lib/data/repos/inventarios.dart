@@ -98,7 +98,9 @@ class RepositorioInventarios {
   void registrarRecebido(Inventario inv) => _inserir(inv);
 
   List<Inventario> listar() {
-    final linhas = _db.select('SELECT * FROM inventarios ORDER BY ano DESC, nome');
+    final linhas = _db.select(
+      'SELECT * FROM inventarios ORDER BY ano DESC, nome',
+    );
     return linhas.map(_daLinha).toList();
   }
 
@@ -141,11 +143,17 @@ class RepositorioInventarios {
   /// encerramento do processo.
   void removerLocalmente(String inventarioId) {
     banco.transacao(() {
-      _db.execute('DELETE FROM patrimonios WHERE inventario_id = ?', [inventarioId]);
+      _db.execute('DELETE FROM patrimonios WHERE inventario_id = ?', [
+        inventarioId,
+      ]);
       _db.execute('DELETE FROM ops WHERE inventario_id = ?', [inventarioId]);
-      _db.execute('DELETE FROM conflitos WHERE inventario_id = ?', [inventarioId]);
+      _db.execute('DELETE FROM conflitos WHERE inventario_id = ?', [
+        inventarioId,
+      ]);
       _db.execute('DELETE FROM pares WHERE inventario_id = ?', [inventarioId]);
-      _db.execute('DELETE FROM estado_sync WHERE inventario_id = ?', [inventarioId]);
+      _db.execute('DELETE FROM estado_sync WHERE inventario_id = ?', [
+        inventarioId,
+      ]);
       _db.execute('DELETE FROM inventarios WHERE id = ?', [inventarioId]);
       _db.execute(
         'DELETE FROM campos_patrimonio WHERE patrimonio_id NOT IN '
@@ -155,17 +163,17 @@ class RepositorioInventarios {
   }
 
   static Inventario _daLinha(Row r) => Inventario(
-        id: r['id'] as String,
-        nome: r['nome'] as String,
-        ano: r['ano'] as int,
-        criadoEm: DateTime.fromMillisecondsSinceEpoch(r['criado_em'] as int),
-        dispositivoOrigem: r['dispositivo_origem'] as String,
-        chaveSync: r['chave_sync'] as String,
-        edsExcluidos: (jsonDecode(r['eds_excluidos'] as String? ?? '[]') as List)
-            .map((e) => e.toString())
-            .toList(),
-        encerradoEm: r['encerrado_em'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(r['encerrado_em'] as int),
-      );
+    id: r['id'] as String,
+    nome: r['nome'] as String,
+    ano: r['ano'] as int,
+    criadoEm: DateTime.fromMillisecondsSinceEpoch(r['criado_em'] as int),
+    dispositivoOrigem: r['dispositivo_origem'] as String,
+    chaveSync: r['chave_sync'] as String,
+    edsExcluidos: (jsonDecode(r['eds_excluidos'] as String? ?? '[]') as List)
+        .map((e) => e.toString())
+        .toList(),
+    encerradoEm: r['encerrado_em'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(r['encerrado_em'] as int),
+  );
 }

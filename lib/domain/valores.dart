@@ -87,4 +87,5 @@ String formaComparavel(String? texto) {
 
 /// Verdadeiro quando dois textos representam o mesmo valor, ignorando caixa,
 /// acento e espaço sobrando.
-bool mesmoTexto(String? a, String? b) => formaComparavel(a) == formaComparavel(b);
+bool mesmoTexto(String? a, String? b) =>
+    formaComparavel(a) == formaComparavel(b);

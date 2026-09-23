@@ -62,7 +62,10 @@ class ResultadoImportacao {
 
 class Importador {
   /// Converte as linhas da planilha em patrimônios, sem gravar nada.
-  static PreviaImportacao preparar(PlanilhaLida planilha, Mapeamento mapeamento) {
+  static PreviaImportacao preparar(
+    PlanilhaLida planilha,
+    Mapeamento mapeamento,
+  ) {
     final itens = <PatrimonioImportado>[];
     final vistos = <String>{};
     final duplicados = <String>[];
@@ -70,7 +73,11 @@ class Importador {
     var semTombo = 0;
     var examinadas = 0;
 
-    for (var i = mapeamento.linhaCabecalho + 1; i < planilha.linhas.length; i++) {
+    for (
+      var i = mapeamento.linhaCabecalho + 1;
+      i < planilha.linhas.length;
+      i++
+    ) {
       final linha = planilha.linhas[i];
       examinadas++;
 
@@ -86,22 +93,33 @@ class Importador {
       final ed = _celula(linha, mapeamento.colunaDe(CampoImportacao.ed));
       porEd[ed ?? ''] = (porEd[ed ?? ''] ?? 0) + 1;
 
-      itens.add(PatrimonioImportado(
-        tombo: tombo,
-        ordem: _celula(linha, mapeamento.colunaDe(CampoImportacao.ordem)),
-        codigoBarras: _celula(linha, mapeamento.colunaDe(CampoImportacao.codigoBarras)),
-        ed: ed,
-        descricao: _celula(linha, mapeamento.colunaDe(CampoImportacao.descricao)),
-        responsavel: _celula(linha, mapeamento.colunaDe(CampoImportacao.responsavel)),
-        sala: _celula(linha, mapeamento.colunaDe(CampoImportacao.sala)),
-        valor: _celula(linha, mapeamento.colunaDe(CampoImportacao.valor)),
-        conservacao: _conservacao(
-          _celula(linha, mapeamento.colunaDe(CampoImportacao.conservacao)),
+      itens.add(
+        PatrimonioImportado(
+          tombo: tombo,
+          ordem: _celula(linha, mapeamento.colunaDe(CampoImportacao.ordem)),
+          codigoBarras: _celula(
+            linha,
+            mapeamento.colunaDe(CampoImportacao.codigoBarras),
+          ),
+          ed: ed,
+          descricao: _celula(
+            linha,
+            mapeamento.colunaDe(CampoImportacao.descricao),
+          ),
+          responsavel: _celula(
+            linha,
+            mapeamento.colunaDe(CampoImportacao.responsavel),
+          ),
+          sala: _celula(linha, mapeamento.colunaDe(CampoImportacao.sala)),
+          valor: _celula(linha, mapeamento.colunaDe(CampoImportacao.valor)),
+          conservacao: _conservacao(
+            _celula(linha, mapeamento.colunaDe(CampoImportacao.conservacao)),
+          ),
+          situacao: _situacao(
+            _celula(linha, mapeamento.colunaDe(CampoImportacao.situacao)),
+          ),
         ),
-        situacao: _situacao(
-          _celula(linha, mapeamento.colunaDe(CampoImportacao.situacao)),
-        ),
-      ));
+      );
     }
 
     final ordenados = porEd.entries.toList()
@@ -190,7 +208,8 @@ class Importador {
     for (final s in SituacaoUso.values) {
       if (chave == s.valor || chave == formaComparavel(s.rotulo)) return s;
     }
-    if (chave.startsWith('at') || chave.startsWith('emuso')) return SituacaoUso.ativo;
+    if (chave.startsWith('at') || chave.startsWith('emuso'))
+      return SituacaoUso.ativo;
     if (chave.startsWith('oci')) return SituacaoUso.ocioso;
     if (chave.startsWith('ins')) return SituacaoUso.inservivel;
     return null;

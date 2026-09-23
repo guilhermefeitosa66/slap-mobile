@@ -46,7 +46,11 @@ class ServidorSync {
   Future<int> iniciar() async {
     if (_servidor != null) return _servidor!.port;
 
-    final servidor = await HttpServer.bind(InternetAddress.anyIPv4, 0, shared: true);
+    final servidor = await HttpServer.bind(
+      InternetAddress.anyIPv4,
+      0,
+      shared: true,
+    );
     _servidor = servidor;
 
     unawaited(servidor.forEach(_atender));
@@ -66,7 +70,9 @@ class ServidorSync {
   Future<void> _atender(HttpRequest req) async {
     try {
       final caminho = req.uri.path;
-      final corpo = req.method == 'POST' ? await utf8.decoder.bind(req).join() : '';
+      final corpo = req.method == 'POST'
+          ? await utf8.decoder.bind(req).join()
+          : '';
 
       if (caminho == Rotas.hello) {
         return _responder(req, {
@@ -124,14 +130,21 @@ class ServidorSync {
 
     if (corpo.isEmpty) return null;
     try {
-      return (jsonDecode(corpo) as Map<String, dynamic>)['inventario'] as String?;
+      return (jsonDecode(corpo) as Map<String, dynamic>)['inventario']
+          as String?;
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> _atenderPull(HttpRequest req, String corpo, String remoto) async {
-    final pedido = PedidoPull.fromJson(jsonDecode(corpo) as Map<String, dynamic>);
+  Future<void> _atenderPull(
+    HttpRequest req,
+    String corpo,
+    String remoto,
+  ) async {
+    final pedido = PedidoPull.fromJson(
+      jsonDecode(corpo) as Map<String, dynamic>,
+    );
     final faltantes = ops.opsFaltantes(pedido.inventarioId, pedido.vetor);
 
     _registrarPar(remoto, pedido.inventarioId);
@@ -149,17 +162,25 @@ class ServidorSync {
     );
   }
 
-  Future<void> _atenderPush(HttpRequest req, String corpo, String remoto) async {
-    final lote = LoteOperacoes.fromJson(jsonDecode(corpo) as Map<String, dynamic>);
+  Future<void> _atenderPush(
+    HttpRequest req,
+    String corpo,
+    String remoto,
+  ) async {
+    final lote = LoteOperacoes.fromJson(
+      jsonDecode(corpo) as Map<String, dynamic>,
+    );
     final resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
 
     _registrarPar(remoto, lote.inventarioId);
-    _eventos.add(EventoSync(
-      inventarioId: lote.inventarioId,
-      dispositivoRemoto: remoto,
-      recebidas: resultado.aplicadas,
-      conflitos: resultado.conflitos,
-    ));
+    _eventos.add(
+      EventoSync(
+        inventarioId: lote.inventarioId,
+        dispositivoRemoto: remoto,
+        recebidas: resultado.aplicadas,
+        conflitos: resultado.conflitos,
+      ),
+    );
 
     await _responder(req, {
       'aplicadas': resultado.aplicadas,

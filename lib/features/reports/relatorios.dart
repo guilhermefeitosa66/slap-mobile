@@ -84,16 +84,25 @@ class GeradorRelatorios {
   }
 
   static Relatorio _ok(Inventario inv, List<Patrimonio> itens) {
-    final selecionados =
-        itens.where((p) => classificar(p) == Classificacao.ok).toList();
+    final selecionados = itens
+        .where((p) => classificar(p) == Classificacao.ok)
+        .toList();
 
     return Relatorio(
       tipo: TipoRelatorio.ok,
       tituloInventario: inv.titulo,
       cabecalho: const [
-        'Ordem', 'Tombo', 'Código de barras', 'ED', 'Descrição',
-        'Sala', 'Responsável', 'Estado', 'Situação',
-        'Verificado por', 'Verificado em',
+        'Ordem',
+        'Tombo',
+        'Código de barras',
+        'ED',
+        'Descrição',
+        'Sala',
+        'Responsável',
+        'Estado',
+        'Situação',
+        'Verificado por',
+        'Verificado em',
       ],
       linhas: [
         for (final p in selecionados)
@@ -143,9 +152,16 @@ class GeradorRelatorios {
       tipo: TipoRelatorio.divergencias,
       tituloInventario: inv.titulo,
       cabecalho: const [
-        'Tombo', 'Código de barras', 'Descrição', 'Campo',
-        'Valor no SUAP', 'Valor encontrado', 'Requer atenção',
-        'Verificado por', 'Matrícula', 'Verificado em',
+        'Tombo',
+        'Código de barras',
+        'Descrição',
+        'Campo',
+        'Valor no SUAP',
+        'Valor encontrado',
+        'Requer atenção',
+        'Verificado por',
+        'Matrícula',
+        'Verificado em',
       ],
       linhas: linhas,
     );
@@ -160,8 +176,14 @@ class GeradorRelatorios {
       tipo: TipoRelatorio.naoLocalizados,
       tituloInventario: inv.titulo,
       cabecalho: const [
-        'Ordem', 'Tombo', 'Código de barras', 'ED', 'Descrição',
-        'Sala original', 'Responsável original', 'Valor',
+        'Ordem',
+        'Tombo',
+        'Código de barras',
+        'ED',
+        'Descrição',
+        'Sala original',
+        'Responsável original',
+        'Valor',
       ],
       linhas: [
         for (final p in selecionados)
@@ -184,11 +206,23 @@ class GeradorRelatorios {
       tipo: TipoRelatorio.completo,
       tituloInventario: inv.titulo,
       cabecalho: const [
-        'Ordem', 'Tombo', 'Código de barras', 'ED', 'Descrição', 'Valor',
-        'Sala (SUAP)', 'Sala encontrada',
-        'Responsável (SUAP)', 'Responsável encontrado',
-        'Estado', 'Situação', 'Classificação', 'Requer atenção',
-        'Verificado por', 'Matrícula', 'Verificado em',
+        'Ordem',
+        'Tombo',
+        'Código de barras',
+        'ED',
+        'Descrição',
+        'Valor',
+        'Sala (SUAP)',
+        'Sala encontrada',
+        'Responsável (SUAP)',
+        'Responsável encontrado',
+        'Estado',
+        'Situação',
+        'Classificação',
+        'Requer atenção',
+        'Verificado por',
+        'Matrícula',
+        'Verificado em',
       ],
       linhas: [
         for (final p in itens)

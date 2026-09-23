@@ -55,7 +55,11 @@ void main() {
   ConfiguracaoLevantamento config(String sala, {String? responsavel}) =>
       ConfiguracaoLevantamento(sala: sala, responsavel: responsavel);
 
-  void verificar(Aparelho aparelho, String itemId, ConfiguracaoLevantamento cfg) {
+  void verificar(
+    Aparelho aparelho,
+    String itemId,
+    ConfiguracaoLevantamento cfg,
+  ) {
     final p = aparelho.patrimonios.porId(itemId)!;
     aparelho.patrimonios.registrarVerificacao(
       patrimonio: p,
@@ -75,39 +79,48 @@ void main() {
       final noB = b.patrimonios.porId(idItem1)!;
       expect(noB.verificado, isTrue);
       expect(noB.salaAtual, 'Auditório');
-      expect(noB.verificadoPor, 'Ana',
-          reason: 'o crédito acompanha a operação entre aparelhos');
+      expect(
+        noB.verificadoPor,
+        'Ana',
+        reason: 'o crédito acompanha a operação entre aparelhos',
+      );
     });
 
-    test('o trabalho de C chega a A através de B, sem A e C se encontrarem', () {
-      // É a topologia em malha: não existe aparelho central obrigatório.
-      verificar(c, idItem1, config('Laboratório'));
+    test(
+      'o trabalho de C chega a A através de B, sem A e C se encontrarem',
+      () {
+        // É a topologia em malha: não existe aparelho central obrigatório.
+        verificar(c, idItem1, config('Laboratório'));
 
-      RedeSimulada.sincronizar(c, b, inventario.id);
-      RedeSimulada.sincronizar(b, a, inventario.id);
+        RedeSimulada.sincronizar(c, b, inventario.id);
+        RedeSimulada.sincronizar(b, a, inventario.id);
 
-      final noA = a.patrimonios.porId(idItem1)!;
-      expect(noA.verificado, isTrue);
-      expect(noA.salaAtual, 'Laboratório');
-      expect(noA.verificadoPor, 'Carla');
-    });
+        final noA = a.patrimonios.porId(idItem1)!;
+        expect(noA.verificado, isTrue);
+        expect(noA.salaAtual, 'Laboratório');
+        expect(noA.verificadoPor, 'Carla');
+      },
+    );
 
-    test('trabalho independente de três aparelhos converge para o mesmo estado', () {
-      verificar(a, idItem1, config('Auditório'));
-      verificar(b, idItem2, config('Biblioteca'));
+    test(
+      'trabalho independente de três aparelhos converge para o mesmo estado',
+      () {
+        verificar(a, idItem1, config('Auditório'));
+        verificar(b, idItem2, config('Biblioteca'));
 
-      RedeSimulada.sincronizar(a, b, inventario.id);
-      RedeSimulada.sincronizar(b, c, inventario.id);
-      RedeSimulada.sincronizar(a, c, inventario.id);
+        RedeSimulada.sincronizar(a, b, inventario.id);
+        RedeSimulada.sincronizar(b, c, inventario.id);
+        RedeSimulada.sincronizar(a, c, inventario.id);
 
-      for (final item in [idItem1, idItem2]) {
-        expect(impressaoDe(b, item), impressaoDe(a, item));
-        expect(impressaoDe(c, item), impressaoDe(a, item));
-      }
+        for (final item in [idItem1, idItem2]) {
+          expect(impressaoDe(b, item), impressaoDe(a, item));
+          expect(impressaoDe(c, item), impressaoDe(a, item));
+        }
 
-      expect(a.patrimonios.progresso(inventario.id).verificados, 2);
-      expect(c.patrimonios.progresso(inventario.id).verificados, 2);
-    });
+        expect(a.patrimonios.progresso(inventario.id).verificados, 2);
+        expect(c.patrimonios.progresso(inventario.id).verificados, 2);
+      },
+    );
   });
 
   group('sincronização incremental', () {
@@ -127,15 +140,21 @@ void main() {
       verificar(a, idItem2, config('Auditório'));
 
       final pendentes = RedeSimulada.pendentesEntre(a, b, inventario.id);
-      expect(pendentes, lessThanOrEqualTo(5),
-          reason: 'apenas os campos do item novo, não os dois itens');
+      expect(
+        pendentes,
+        lessThanOrEqualTo(5),
+        reason: 'apenas os campos do item novo, não os dois itens',
+      );
       expect(pendentes, greaterThan(0));
     });
 
     test('aplicar o mesmo lote duas vezes não muda nada', () {
       verificar(a, idItem1, config('Auditório'));
 
-      final faltantes = a.ops.opsFaltantes(inventario.id, b.ops.vetorDe(inventario.id));
+      final faltantes = a.ops.opsFaltantes(
+        inventario.id,
+        b.ops.vetorDe(inventario.id),
+      );
       final contextos = a.ops.contextosDe(faltantes);
 
       final primeira = b.ops.aplicarRemotas(faltantes, contextos: contextos);
@@ -148,17 +167,20 @@ void main() {
   });
 
   group('conflitos', () {
-    test('duas pessoas conferindo o mesmo item sem se falar geram conflito', () {
-      // O caso da especificação: A diz Biblioteca, B diz Auditório, nenhum
-      // dos dois sabia do outro.
-      verificar(a, idItem1, config('Biblioteca'));
-      verificar(b, idItem1, config('Auditório'));
+    test(
+      'duas pessoas conferindo o mesmo item sem se falar geram conflito',
+      () {
+        // O caso da especificação: A diz Biblioteca, B diz Auditório, nenhum
+        // dos dois sabia do outro.
+        verificar(a, idItem1, config('Biblioteca'));
+        verificar(b, idItem1, config('Auditório'));
 
-      RedeSimulada.sincronizar(a, b, inventario.id);
+        RedeSimulada.sincronizar(a, b, inventario.id);
 
-      expect(_conflitosPendentes(a, inventario.id), greaterThan(0));
-      expect(_conflitosPendentes(b, inventario.id), greaterThan(0));
-    });
+        expect(_conflitosPendentes(a, inventario.id), greaterThan(0));
+        expect(_conflitosPendentes(b, inventario.id), greaterThan(0));
+      },
+    );
 
     test('as réplicas escolhem o mesmo vencedor, sem se consultar', () {
       verificar(a, idItem1, config('Biblioteca'));
@@ -194,8 +216,11 @@ void main() {
 
       expect(_conflitosPendentes(a, inventario.id), 0);
       expect(_conflitosPendentes(b, inventario.id), 0);
-      expect(a.patrimonios.porId(idItem1)!.salaAtual, 'Auditório',
-          reason: 'a escrita mais recente prevalece');
+      expect(
+        a.patrimonios.porId(idItem1)!.salaAtual,
+        'Auditório',
+        reason: 'a escrita mais recente prevalece',
+      );
     });
 
     test('concorrência com o mesmo valor não é conflito', () {
@@ -230,23 +255,29 @@ void main() {
       final resultado = a.patrimonios.porId(idItem1)!;
       expect(_conflitosPendentes(a, inventario.id), 0);
       expect(resultado.responsavelAtual, 'Pedro');
-      expect(resultado.conservacao, EstadoConservacao.ruim,
-          reason: 'as duas alterações sobrevivem');
+      expect(
+        resultado.conservacao,
+        EstadoConservacao.ruim,
+        reason: 'as duas alterações sobrevivem',
+      );
     });
 
-    test('três aparelhos alterando o mesmo campo convergem para um só valor', () {
-      verificar(a, idItem1, config('Biblioteca'));
-      verificar(b, idItem1, config('Auditório'));
-      verificar(c, idItem1, config('Laboratório'));
+    test(
+      'três aparelhos alterando o mesmo campo convergem para um só valor',
+      () {
+        verificar(a, idItem1, config('Biblioteca'));
+        verificar(b, idItem1, config('Auditório'));
+        verificar(c, idItem1, config('Laboratório'));
 
-      RedeSimulada.sincronizar(a, b, inventario.id);
-      RedeSimulada.sincronizar(b, c, inventario.id);
-      RedeSimulada.sincronizar(a, c, inventario.id);
-      RedeSimulada.sincronizar(a, b, inventario.id);
+        RedeSimulada.sincronizar(a, b, inventario.id);
+        RedeSimulada.sincronizar(b, c, inventario.id);
+        RedeSimulada.sincronizar(a, c, inventario.id);
+        RedeSimulada.sincronizar(a, b, inventario.id);
 
-      expect(impressaoDe(b, idItem1), impressaoDe(a, idItem1));
-      expect(impressaoDe(c, idItem1), impressaoDe(a, idItem1));
-    });
+        expect(impressaoDe(b, idItem1), impressaoDe(a, idItem1));
+        expect(impressaoDe(c, idItem1), impressaoDe(a, idItem1));
+      },
+    );
   });
 
   group('auditoria', () {
@@ -261,11 +292,15 @@ void main() {
 
       expect(autores, containsAll(['Ana', 'Bruno']));
 
-      final mudancasDeSala =
-          historico.where((o) => o.campo == 'sala_atual').toList();
+      final mudancasDeSala = historico
+          .where((o) => o.campo == 'sala_atual')
+          .toList();
       expect(mudancasDeSala.length, 2);
-      expect(mudancasDeSala.first.valor, 'Biblioteca',
-          reason: 'histórico vem do mais recente para o mais antigo');
+      expect(
+        mudancasDeSala.first.valor,
+        'Biblioteca',
+        reason: 'histórico vem do mais recente para o mais antigo',
+      );
     });
 
     test('o dado original do SUAP sobrevive a toda alteração', () {

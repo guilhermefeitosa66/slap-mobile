@@ -8,7 +8,11 @@ void main() {
       final proximo = Hlc.enviar(inicial, agora: 2000);
 
       expect(proximo.millis, 2000);
-      expect(proximo.counter, 0, reason: 'contador reinicia quando o tempo anda');
+      expect(
+        proximo.counter,
+        0,
+        reason: 'contador reinicia quando o tempo anda',
+      );
     });
 
     test('usa o contador lógico quando o relógio não avançou', () {
@@ -68,7 +72,11 @@ void main() {
 
     test('rejeita relógio absurdamente adiantado', () {
       final local = Hlc(1000, 0, 'A');
-      final remoto = Hlc(1000 + const Duration(hours: 2).inMilliseconds, 0, 'B');
+      final remoto = Hlc(
+        1000 + const Duration(hours: 2).inMilliseconds,
+        0,
+        'B',
+      );
 
       expect(
         () => Hlc.receber(local, remoto, agora: 1000),
@@ -78,7 +86,11 @@ void main() {
 
     test('aceita desvio pequeno, que é o normal entre celulares', () {
       final local = Hlc(1000, 0, 'A');
-      final remoto = Hlc(1000 + const Duration(seconds: 30).inMilliseconds, 0, 'B');
+      final remoto = Hlc(
+        1000 + const Duration(seconds: 30).inMilliseconds,
+        0,
+        'B',
+      );
 
       expect(() => Hlc.receber(local, remoto, agora: 1000), returnsNormally);
     });
@@ -104,7 +116,10 @@ void main() {
       final porTexto = [...relogios]
         ..sort((a, b) => a.codificar().compareTo(b.codificar()));
 
-      expect(porTexto.map((h) => h.codificar()), porObjeto.map((h) => h.codificar()));
+      expect(
+        porTexto.map((h) => h.codificar()),
+        porObjeto.map((h) => h.codificar()),
+      );
     });
 
     test('desempata por dispositivo, dando ordem total', () {

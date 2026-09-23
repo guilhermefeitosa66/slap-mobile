@@ -56,39 +56,43 @@ List<Divergencia> divergenciasDe(Patrimonio p) {
   final divergencias = <Divergencia>[];
 
   if (!mesmoTexto(p.salaOriginal, p.salaEfetiva)) {
-    divergencias.add(Divergencia(
-      CampoDivergente.sala,
-      p.salaOriginal,
-      p.salaEfetiva,
-    ));
+    divergencias.add(
+      Divergencia(CampoDivergente.sala, p.salaOriginal, p.salaEfetiva),
+    );
   }
 
   if (!mesmoTexto(p.responsavelOriginal, p.responsavelEfetivo)) {
-    divergencias.add(Divergencia(
-      CampoDivergente.responsavel,
-      p.responsavelOriginal,
-      p.responsavelEfetivo,
-    ));
+    divergencias.add(
+      Divergencia(
+        CampoDivergente.responsavel,
+        p.responsavelOriginal,
+        p.responsavelEfetivo,
+      ),
+    );
   }
 
   if (p.conservacaoOriginal != null &&
       p.conservacao != null &&
       p.conservacaoOriginal != p.conservacao) {
-    divergencias.add(Divergencia(
-      CampoDivergente.conservacao,
-      p.conservacaoOriginal!.rotulo,
-      p.conservacao!.rotulo,
-    ));
+    divergencias.add(
+      Divergencia(
+        CampoDivergente.conservacao,
+        p.conservacaoOriginal!.rotulo,
+        p.conservacao!.rotulo,
+      ),
+    );
   }
 
   if (p.situacaoOriginal != null &&
       p.situacao != null &&
       p.situacaoOriginal != p.situacao) {
-    divergencias.add(Divergencia(
-      CampoDivergente.situacao,
-      p.situacaoOriginal!.rotulo,
-      p.situacao!.rotulo,
-    ));
+    divergencias.add(
+      Divergencia(
+        CampoDivergente.situacao,
+        p.situacaoOriginal!.rotulo,
+        p.situacao!.rotulo,
+      ),
+    );
   }
 
   return divergencias;
@@ -98,7 +102,9 @@ List<Divergencia> divergenciasDe(Patrimonio p) {
 Classificacao classificar(Patrimonio p) {
   if (p.ignorado) return Classificacao.ignorado;
   if (!p.verificado) return Classificacao.naoLocalizado;
-  return divergenciasDe(p).isEmpty ? Classificacao.ok : Classificacao.divergente;
+  return divergenciasDe(p).isEmpty
+      ? Classificacao.ok
+      : Classificacao.divergente;
 }
 
 /// Números de acompanhamento de um inventário.

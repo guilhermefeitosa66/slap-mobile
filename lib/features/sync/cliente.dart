@@ -102,7 +102,11 @@ class ClienteSync {
 
     final recebidas = lote.ops.isEmpty
         ? const ResultadoAplicacao(
-            aplicadas: 0, ignoradas: 0, conflitos: 0, patrimoniosAfetados: {})
+            aplicadas: 0,
+            ignoradas: 0,
+            conflitos: 0,
+            patrimoniosAfetados: {},
+          )
         : ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
 
     final enviadas = await _enviar(par, inventarioId, chaveSync, lote.vetor);
@@ -244,4 +248,3 @@ class ClienteSync {
     }
   }
 }
-

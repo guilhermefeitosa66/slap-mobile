@@ -75,11 +75,16 @@ class Hlc implements Comparable<Hlc> {
       throw RelogioForaDeSincronia(remoto, fisico);
     }
 
-    final millis = [fisico, local.millis, remoto.millis].reduce((a, b) => a > b ? a : b);
+    final millis = [
+      fisico,
+      local.millis,
+      remoto.millis,
+    ].reduce((a, b) => a > b ? a : b);
 
     final int counter;
     if (millis == local.millis && millis == remoto.millis) {
-      counter = (local.counter > remoto.counter ? local.counter : remoto.counter) + 1;
+      counter =
+          (local.counter > remoto.counter ? local.counter : remoto.counter) + 1;
     } else if (millis == local.millis) {
       counter = local.counter + 1;
     } else if (millis == remoto.millis) {
