@@ -146,6 +146,7 @@ class Importador {
     required String inventarioId,
     required PreviaImportacao previa,
     Set<String> edsExcluidos = const {},
+    void Function(int feitos, int total)? aoProgredir,
   }) {
     final existentes = repositorio.chavesExistentes(inventarioId);
 
@@ -169,7 +170,13 @@ class Importador {
       novos.add(item);
     }
 
-    repositorio.inserirLote(inventarioId, novos);
+    repositorio.inserirLote(
+      inventarioId,
+      novos,
+      aoProgredir: aoProgredir == null
+          ? null
+          : (feitos) => aoProgredir(feitos, novos.length),
+    );
 
     return ResultadoImportacao(
       inseridos: novos.length,

@@ -339,6 +339,10 @@ sustentam:
   com a leitura, não depois dela.
 - **Gravação assíncrona**: o som e o retorno visual não esperam o commit no SQLite.
 - **Importação em isolate**, com transação única e statement preparado, para não travar a UI.
+  Ler o XLSX, montar a prévia e gravar rodam fora da thread de interface; a gravação abre uma
+  segunda conexão SQLite no isolate (WAL permite ler enquanto isso, e `busy_timeout` evita erro
+  se as duas escreverem juntas) e informa o progresso a cada 250 itens. Falha no meio desfaz a
+  transação inteira.
 - **Leitura em lote pela câmera** (§24): a câmera não fecha entre itens; os códigos entram numa
   fila e são processados em segundo plano enquanto a captura continua. O "OK" só confirma o que
   já foi processado.

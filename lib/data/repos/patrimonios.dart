@@ -159,6 +159,9 @@ class PatrimonioImportado {
 }
 
 class RepositorioPatrimonios {
+  /// De quantos em quantos itens a importação informa o progresso.
+  static const passoProgresso = 250;
+
   final Banco banco;
   final RepositorioOperacoes ops;
 
@@ -308,7 +311,15 @@ class RepositorioPatrimonios {
   /// numa operação de disco, não em dez mil. O SLAP faz um `INSERT` por linha
   /// sem transação, depois de já ter apagado os itens anteriores — falha no
   /// meio deixa o inventário destruído pela metade.
-  int inserirLote(String inventarioId, List<PatrimonioImportado> itens) {
+  ///
+  /// [aoProgredir] recebe quantos itens já entraram, a cada [passoProgresso].
+  /// A transação continua única: o progresso é só informativo, e uma falha em
+  /// qualquer ponto desfaz tudo.
+  int inserirLote(
+    String inventarioId,
+    List<PatrimonioImportado> itens, {
+    void Function(int feitos)? aoProgredir,
+  }) {
     if (itens.isEmpty) return 0;
 
     return banco.transacao(() {
@@ -320,6 +331,7 @@ class RepositorioPatrimonios {
       );
 
       try {
+        var feitos = 0;
         for (final i in itens) {
           stmt.execute([
             _uuid.v4(),
@@ -337,7 +349,12 @@ class RepositorioPatrimonios {
             chaveBusca(i.tombo),
             i.codigoBarras == null ? null : chaveBusca(i.codigoBarras),
           ]);
+          feitos++;
+          if (aoProgredir != null && feitos % passoProgresso == 0) {
+            aoProgredir(feitos);
+          }
         }
+        aoProgredir?.call(feitos);
       } finally {
         stmt.close();
       }

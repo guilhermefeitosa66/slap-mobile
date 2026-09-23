@@ -16,7 +16,13 @@ import 'schema.dart';
 class Banco {
   final Database db;
 
-  Banco._(this.db);
+  /// Arquivo do banco, ou `null` quando em memória.
+  ///
+  /// É o que permite abrir uma segunda conexão num isolate — a importação de
+  /// planilha grava lá, sem travar a interface.
+  final String? caminho;
+
+  Banco._(this.db, {this.caminho});
 
   static Banco? _instancia;
   static Banco get instancia {
@@ -39,7 +45,7 @@ class Banco {
     _configurar(db);
     _migrar(db);
 
-    final banco = Banco._(db);
+    final banco = Banco._(db, caminho: arquivo);
     banco._garantirIdentidade();
     _instancia = banco;
     return banco;
@@ -64,6 +70,10 @@ class Banco {
     // de segundos, e o dado perdido no pior caso é recuperável por sincronia.
     db.execute('PRAGMA synchronous = NORMAL');
     db.execute('PRAGMA foreign_keys = ON');
+    // Com a importação gravando por uma segunda conexão, a primeira pode
+    // encontrar o banco ocupado. Esperar alguns segundos é melhor que falhar
+    // uma leitura no meio do levantamento.
+    db.execute('PRAGMA busy_timeout = 10000');
     db.execute('PRAGMA temp_store = MEMORY');
   }
 

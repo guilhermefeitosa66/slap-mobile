@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/formato.dart';
+import 'importacao_em_segundo_plano.dart';
 import 'importador.dart';
 import 'leitor_planilha.dart';
 import 'mapeamento.dart';
@@ -27,6 +29,12 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
   bool _carregando = false;
   String? _erro;
 
+  /// O que está sendo feito enquanto [_carregando], dito na tela.
+  String? _etapa;
+
+  /// Progresso da gravação; `null` nas etapas que não o informam.
+  ProgressoImportacao? _progresso;
+
   PlanilhaLida? _planilha;
   Mapeamento? _mapeamento;
   PreviaImportacao? _previa;
@@ -35,6 +43,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
   Future<void> _escolherArquivo() async {
     setState(() {
       _carregando = true;
+      _etapa = null;
       _erro = null;
     });
 
@@ -49,34 +58,42 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
         return;
       }
 
+      setState(() => _etapa = 'Lendo ${arquivo.name}…');
+
       // Ler os bytes pelo próprio `PlatformFile` mantém a leitura dentro do
       // que o seletor do sistema já autorizou, sem permissão de armazenamento.
-      final planilha = LeitorPlanilha.ler(
+      // Decodificar o XLSX é a parte lenta, e vai para um isolate.
+      final (planilha, mapeamento) = await lerPlanilhaEmSegundoPlano(
         nomeArquivo: arquivo.name,
         bytes: await arquivo.readAsBytes(),
       );
-      final mapeamento = detectarMapeamento(planilha.linhas);
+      if (!mounted) return;
 
       setState(() {
         _planilha = planilha;
         _mapeamento = mapeamento;
         _carregando = false;
+        _etapa = null;
         _passo = 1;
       });
     } on PlanilhaInvalida catch (e) {
+      if (!mounted) return;
       setState(() {
         _erro = e.mensagem;
         _carregando = false;
+        _etapa = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _erro = 'Não foi possível ler o arquivo: $e';
         _carregando = false;
+        _etapa = null;
       });
     }
   }
 
-  void _confirmarMapeamento() {
+  Future<void> _confirmarMapeamento() async {
     final planilha = _planilha!;
     final mapeamento = _mapeamento!;
 
@@ -89,22 +106,38 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
     }
 
     setState(() {
-      _previa = Importador.preparar(planilha, mapeamento);
+      _carregando = true;
+      _etapa = 'Conferindo as linhas…';
       _erro = null;
+    });
+    final previa = await prepararEmSegundoPlano(planilha, mapeamento);
+    if (!mounted) return;
+
+    setState(() {
+      _previa = previa;
+      _carregando = false;
+      _etapa = null;
       _passo = 2;
     });
   }
 
   Future<void> _importar() async {
     final previa = _previa!;
-    setState(() => _carregando = true);
+    setState(() {
+      _carregando = true;
+      _etapa = 'Gravando os patrimônios…';
+      _progresso = null;
+    });
 
     try {
-      final resultado = Importador.aplicar(
-        repositorio: ref.read(patrimoniosProvider),
+      final resultado = await importarEmSegundoPlano(
+        banco: ref.read(bancoProvider),
         inventarioId: widget.inventarioId,
         previa: previa,
         edsExcluidos: _edsExcluidos,
+        aoProgredir: (p) {
+          if (mounted) setState(() => _progresso = p);
+        },
       );
 
       ref
@@ -123,58 +156,100 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _erro = 'Falha ao importar: $e';
+        _erro =
+            'Falha ao importar: $e. Nada foi gravado — a planilha entra '
+            'inteira ou não entra.';
         _carregando = false;
+        _etapa = null;
+        _progresso = null;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Importar planilha')),
-      body: Column(
-        children: [
-          if (_erro != null)
-            MaterialBanner(
-              backgroundColor: Theme.of(context).colorScheme.errorContainer,
-              content: Text(_erro!),
-              actions: [
-                TextButton(
-                  onPressed: () => setState(() => _erro = null),
-                  child: const Text('Entendi'),
+    // Durante a gravação, sair da tela deixaria a importação sem ninguém para
+    // registrar os EDs excluídos ao fim.
+    return PopScope(
+      canPop: !_carregando || _passo < 2,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Importar planilha')),
+        body: Column(
+          children: [
+            if (_erro != null)
+              MaterialBanner(
+                backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                content: Text(_erro!),
+                actions: [
+                  TextButton(
+                    onPressed: () => setState(() => _erro = null),
+                    child: const Text('Entendi'),
+                  ),
+                ],
+              ),
+            if (_carregando) _Andamento(etapa: _etapa, progresso: _progresso),
+            Expanded(
+              child: switch (_passo) {
+                0 => _PassoArquivo(
+                  aoEscolher: _carregando ? null : _escolherArquivo,
                 ),
-              ],
+                1 => _PassoMapeamento(
+                  planilha: _planilha!,
+                  mapeamento: _mapeamento!,
+                  aoMudar: (m) => setState(() => _mapeamento = m),
+                  aoConfirmar: _confirmarMapeamento,
+                  aoVoltar: () => setState(() => _passo = 0),
+                ),
+                _ => _PassoElementos(
+                  previa: _previa!,
+                  excluidos: _edsExcluidos,
+                  aoAlternar: (ed, excluir) => setState(() {
+                    if (excluir) {
+                      _edsExcluidos.add(ed);
+                    } else {
+                      _edsExcluidos.remove(ed);
+                    }
+                  }),
+                  aoImportar: _carregando ? null : _importar,
+                  aoVoltar: () => setState(() => _passo = 1),
+                ),
+              },
             ),
-          if (_carregando) const LinearProgressIndicator(),
-          Expanded(
-            child: switch (_passo) {
-              0 => _PassoArquivo(
-                aoEscolher: _carregando ? null : _escolherArquivo,
-              ),
-              1 => _PassoMapeamento(
-                planilha: _planilha!,
-                mapeamento: _mapeamento!,
-                aoMudar: (m) => setState(() => _mapeamento = m),
-                aoConfirmar: _confirmarMapeamento,
-                aoVoltar: () => setState(() => _passo = 0),
-              ),
-              _ => _PassoElementos(
-                previa: _previa!,
-                excluidos: _edsExcluidos,
-                aoAlternar: (ed, excluir) => setState(() {
-                  if (excluir) {
-                    _edsExcluidos.add(ed);
-                  } else {
-                    _edsExcluidos.remove(ed);
-                  }
-                }),
-                aoImportar: _carregando ? null : _importar,
-                aoVoltar: () => setState(() => _passo = 1),
-              ),
-            },
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// O que está acontecendo, com número quando há número para dar.
+class _Andamento extends StatelessWidget {
+  final String? etapa;
+  final ProgressoImportacao? progresso;
+
+  const _Andamento({required this.etapa, required this.progresso});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progresso;
+    final texto = p == null
+        ? etapa
+        : '${formatarInteiro(p.feitos)} de ${formatarInteiro(p.total)} '
+              'patrimônios gravados';
+
+    return Semantics(
+      liveRegion: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LinearProgressIndicator(value: p?.fracao),
+          if (texto != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text(texto, style: Theme.of(context).textTheme.bodySmall),
+            ),
         ],
       ),
     );
