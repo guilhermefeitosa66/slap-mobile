@@ -496,7 +496,10 @@ class DetalhePatrimonio extends ConsumerWidget {
           ],
 
           const SizedBox(height: 24),
-          if (p.verificado)
+          // Encerrado, o levantamento não muda mais — nem para desfazer.
+          if (p.verificado &&
+              !(ref.read(inventarioProvider(p.inventarioId))?.encerrado ??
+                  false))
             OutlinedButton.icon(
               onPressed: () => _desfazer(context, ref, p),
               icon: const Icon(Icons.undo),

@@ -477,10 +477,31 @@ class RepositorioOperacoes {
     );
   }
 
+  /// Aplica um campo do inventário, se a operação for a mais nova dele.
+  ///
+  /// Last-writer-wins pelo HLC, igual em todas as réplicas. Operação antiga
+  /// chegando depois fica no log e não altera nada — é o que impede, por
+  /// exemplo, um aparelho que sincronizou tarde de reabrir um inventário
+  /// encerrado.
   void _aplicarCampoInventario(Operacao op) {
     const permitidos = {'nome', 'ano', 'eds_excluidos', 'encerrado_em'};
     if (!permitidos.contains(op.campo)) return;
 
+    final vigente = _db.select(
+      'SELECT hlc FROM campos_inventario WHERE inventario_id = ? AND campo = ?',
+      [op.entidadeId, op.campo],
+    );
+    if (vigente.isNotEmpty &&
+        Hlc.decodificar(vigente.first['hlc'] as String) >= op.hlc) {
+      return;
+    }
+
+    _db.execute(
+      'INSERT INTO campos_inventario (inventario_id, campo, valor, hlc, op_id) '
+      'VALUES (?,?,?,?,?) ON CONFLICT(inventario_id, campo) DO UPDATE SET '
+      'valor = excluded.valor, hlc = excluded.hlc, op_id = excluded.op_id',
+      [op.entidadeId, op.campo, op.valor, op.hlc.codificar(), op.opId],
+    );
     _db.execute('UPDATE inventarios SET ${op.campo} = ? WHERE id = ?', [
       op.valor,
       op.entidadeId,

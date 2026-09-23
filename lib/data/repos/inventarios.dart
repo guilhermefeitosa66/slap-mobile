@@ -5,6 +5,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
 import '../banco.dart';
+import '../schema.dart';
 import 'operacoes.dart';
 
 const _uuid = Uuid();
@@ -120,19 +121,51 @@ class RepositorioInventarios {
       entidade: 'inventario',
       entidadeId: inventarioId,
       campos: {'eds_excluidos': jsonEncode(eds)},
-      usuarioNome: banco.lerConfig('usuario_nome'),
-      usuarioMatricula: banco.lerConfig('usuario_matricula'),
+      usuarioNome: banco.lerConfig(Config.usuarioNome),
+      usuarioMatricula: banco.lerConfig(Config.usuarioMatricula),
     );
     ops.reaplicarEdsExcluidos(inventarioId);
   }
 
   void renomear(String inventarioId, String nome) {
+    _registrar(inventarioId, {'nome': nome.trim()});
+  }
+
+  /// Encerra o processo: a partir daqui, o que não foi verificado é "não
+  /// localizado" de fato, e não "ninguém passou por lá ainda".
+  ///
+  /// É operação sobre o inventário como outra qualquer: vai para o log, com
+  /// autor, e chega aos outros aparelhos na próxima sincronização.
+  void encerrar(String inventarioId, {DateTime? quando}) {
+    final momento = (quando ?? DateTime.now()).millisecondsSinceEpoch;
+    _registrar(inventarioId, {'encerrado_em': '$momento'});
+  }
+
+  /// Desfaz o encerramento. Fica registrado no log como o encerramento.
+  void reabrir(String inventarioId) {
+    _registrar(inventarioId, {'encerrado_em': null});
+  }
+
+  /// Quem encerrou o inventário, pela operação que está valendo.
+  String? encerradoPor(String inventarioId) {
+    final r = _db.select(
+      'SELECT o.usuario_nome FROM campos_inventario c '
+      'JOIN ops o ON o.op_id = c.op_id '
+      "WHERE c.inventario_id = ? AND c.campo = 'encerrado_em' "
+      'AND c.valor IS NOT NULL',
+      [inventarioId],
+    );
+    return r.isEmpty ? null : r.first['usuario_nome'] as String?;
+  }
+
+  void _registrar(String inventarioId, Map<String, String?> campos) {
     ops.registrarLocal(
       inventarioId: inventarioId,
       entidade: 'inventario',
       entidadeId: inventarioId,
-      campos: {'nome': nome.trim()},
-      usuarioNome: banco.lerConfig('usuario_nome'),
+      campos: campos,
+      usuarioNome: banco.lerConfig(Config.usuarioNome),
+      usuarioMatricula: banco.lerConfig(Config.usuarioMatricula),
     );
   }
 
@@ -152,6 +185,9 @@ class RepositorioInventarios {
       ]);
       _db.execute('DELETE FROM pares WHERE inventario_id = ?', [inventarioId]);
       _db.execute('DELETE FROM estado_sync WHERE inventario_id = ?', [
+        inventarioId,
+      ]);
+      _db.execute('DELETE FROM campos_inventario WHERE inventario_id = ?', [
         inventarioId,
       ]);
       _db.execute('DELETE FROM inventarios WHERE id = ?', [inventarioId]);

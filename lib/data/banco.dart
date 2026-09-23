@@ -95,12 +95,11 @@ class Banco {
 
     db.execute('BEGIN');
     try {
-      if (atual == 0) {
-        for (final ddl in ddlEsquema) {
+      for (var versao = atual + 1; versao <= versaoEsquema; versao++) {
+        for (final ddl in migracoes[versao]!) {
           db.execute(ddl);
         }
       }
-      // Migrações futuras entram aqui, comparando `atual`.
 
       db.execute('PRAGMA user_version = $versaoEsquema');
       db.execute('COMMIT');

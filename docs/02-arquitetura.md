@@ -325,6 +325,21 @@ responsável. Não há credencial nem dado pessoal sensível no tráfego, e o al
 local. Cifrar o corpo com AES-GCM derivado da `sync_key` está no roteiro; não entrou na v1 para
 não adicionar dependência de criptografia antes do protocolo estar estável.
 
+### 5.10 Encerramento e campos do inventário
+
+Encerrar o inventário é o marco que torna "não localizado" definitivo: sem ele não se sabe se o
+item não foi achado ou se ninguém passou por lá ainda. É uma operação sobre a entidade
+`inventario` (`encerrado_em`), com autor, que sincroniza como qualquer outra; reabrir é outra
+operação, com o mesmo registro. Encerrado, o levantamento fica bloqueado em todos os aparelhos que
+já souberem disso. Leituras feitas antes de saber — num aparelho longe da rede — não se perdem: o
+log as aceita, e elas entram no resultado.
+
+Os campos do inventário (nome, ano, EDs excluídos, encerramento) convergem por last-writer-wins
+pelo HLC, com o vencedor guardado em `campos_inventario` (esquema v2). Até a v1 a operação era
+aplicada sem comparar: uma antiga chegando depois desfazia a mais nova — com o encerramento, isso
+reabriria um inventário encerrado. Não há registro de conflito aqui, porque não há o que a pessoa
+decidir.
+
 ---
 
 ## 6. Velocidade

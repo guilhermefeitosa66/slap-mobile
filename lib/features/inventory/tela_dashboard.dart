@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:intl/intl.dart';
+
 import '../../app/componentes.dart';
 import '../../app/tema.dart';
 import '../../core/formato.dart';
 import '../../app/providers.dart';
+import '../../data/repos/inventarios.dart';
 import '../../domain/divergencia.dart';
 import '../sync/compartilhar_inventario.dart';
+import 'acoes_inventario.dart';
 
 /// Visão geral de um inventário: onde ele está e o que fazer em seguida.
 class TelaDashboard extends ConsumerWidget {
@@ -37,6 +41,31 @@ class TelaDashboard extends ConsumerWidget {
             icon: const Icon(Icons.qr_code_2),
             onPressed: () => mostrarQrDoInventario(context, inv),
           ),
+          PopupMenuButton<_Acao>(
+            tooltip: 'Mais ações',
+            onSelected: (acao) => switch (acao) {
+              _Acao.encerrar => encerrarInventario(context, ref, inv),
+              _Acao.reabrir => reabrirInventario(context, ref, inv),
+            },
+            itemBuilder: (_) => [
+              if (inv.encerrado)
+                const PopupMenuItem(
+                  value: _Acao.reabrir,
+                  child: ListTile(
+                    leading: Icon(Icons.lock_open_outlined),
+                    title: Text('Reabrir inventário'),
+                  ),
+                )
+              else
+                const PopupMenuItem(
+                  value: _Acao.encerrar,
+                  child: ListTile(
+                    leading: Icon(Icons.lock_outline),
+                    title: Text('Encerrar inventário'),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -44,6 +73,10 @@ class TelaDashboard extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 112),
           children: [
+            if (inv.encerrado) ...[
+              _CartaoEncerrado(inventario: inv),
+              const SizedBox(height: 8),
+            ],
             if (vazio)
               _CartaoImportar(inventarioId: inventarioId)
             else ...[
@@ -58,12 +91,14 @@ class TelaDashboard extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              _Acoes(inventarioId: inventarioId),
+              _Acoes(inventarioId: inventarioId, encerrado: inv.encerrado),
             ],
           ],
         ),
       ),
-      floatingActionButton: vazio
+      // Encerrado, não há o que levantar: o botão some, e o cartão acima diz
+      // por quê e como reabrir.
+      floatingActionButton: vazio || inv.encerrado
           ? null
           : FloatingActionButton.extended(
               onPressed: () =>
@@ -262,8 +297,9 @@ class _AvisoConflitos extends StatelessWidget {
 
 class _Acoes extends StatelessWidget {
   final String inventarioId;
+  final bool encerrado;
 
-  const _Acoes({required this.inventarioId});
+  const _Acoes({required this.inventarioId, required this.encerrado});
 
   @override
   Widget build(BuildContext context) {
@@ -286,12 +322,13 @@ class _Acoes extends StatelessWidget {
         'Buscar e conferir patrimônios',
         'itens',
       ),
-      (
-        Icons.upload_file,
-        'Importar planilha',
-        'Acrescentar itens do SUAP',
-        'importar',
-      ),
+      if (!encerrado)
+        (
+          Icons.upload_file,
+          'Importar planilha',
+          'Acrescentar itens do SUAP',
+          'importar',
+        ),
     ];
 
     return CartaoAgrupado(
@@ -305,6 +342,63 @@ class _Acoes extends StatelessWidget {
             onTap: () => context.push('/inventario/$inventarioId/$rota'),
           ),
       ],
+    );
+  }
+}
+
+enum _Acao { encerrar, reabrir }
+
+/// O inventário está encerrado: quando, por quem e como reabrir.
+class _CartaoEncerrado extends ConsumerWidget {
+  final Inventario inventario;
+
+  const _CartaoEncerrado({required this.inventario});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tom = CoresResultado.of(context).neutro;
+    final tema = Theme.of(context);
+    final quando = DateFormat(
+      "dd/MM/yyyy 'às' HH:mm",
+    ).format(inventario.encerradoEm!);
+    final quem = ref.read(inventariosProvider).encerradoPor(inventario.id);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.lock_outline, color: tom.texto),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Inventário encerrado',
+                  style: tema.textTheme.titleSmall?.copyWith(color: tom.texto),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Em $quando${quem == null ? '' : ', por $quem'}. O levantamento '
+            'está bloqueado; os relatórios tratam como não localizado o que '
+            'não foi verificado.',
+            style: tema.textTheme.bodyMedium?.copyWith(color: tom.texto),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => reabrirInventario(context, ref, inventario),
+            icon: const Icon(Icons.lock_open_outlined),
+            label: const Text('Reabrir'),
+          ),
+        ],
+      ),
     );
   }
 }

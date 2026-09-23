@@ -11,6 +11,7 @@ import '../../data/repos/patrimonios.dart';
 import 'estado_levantamento.dart';
 import 'linha_leitura.dart';
 import 'manter_tela_ligada.dart';
+import 'tela_levantamento.dart' show LevantamentoEncerrado;
 
 /// Leitura contínua pela câmera.
 ///
@@ -70,6 +71,9 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
 
   Future<void> _aoDetectar(BarcodeCapture captura) async {
     if (_ocupado) return;
+    if (ref.read(inventarioProvider(widget.inventarioId))?.encerrado ?? false) {
+      return;
+    }
 
     final config = ref.read(configuracaoProvider(widget.inventarioId));
     if (config == null) return;
@@ -136,6 +140,11 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(inventarioProvider(widget.inventarioId))?.encerrado ??
+        false) {
+      return const LevantamentoEncerrado();
+    }
+
     final config = ref.watch(configuracaoProvider(widget.inventarioId));
     final sucessos = _lidos
         .where((l) => l.resultado == ResultadoLeitura.sucesso)

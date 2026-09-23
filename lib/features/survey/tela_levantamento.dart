@@ -73,6 +73,9 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   /// Com sala definida, mas sem leitura há horas, a sala é confirmada antes:
   /// quem volta no dia seguinte provavelmente está em outro lugar.
   Future<void> _garantirConfiguracao() async {
+    // Encerrado, a tela só explica o bloqueio: não há sala a configurar.
+    if (_encerrado) return;
+
     final atual = ref.read(configuracaoProvider(widget.inventarioId));
     if (atual != null) {
       final ultima = ref
@@ -146,9 +149,15 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     FocusScope.of(context).requestFocus(_foco);
   }
 
+  /// O inventário foi encerrado — aqui ou em outro aparelho, chegando por
+  /// sincronização com a tela aberta.
+  bool get _encerrado =>
+      ref.read(inventarioProvider(widget.inventarioId))?.encerrado ?? false;
+
   Future<void> _processar(String codigo) async {
     final texto = codigo.trim();
     _campo.clear();
+    if (_encerrado) return;
 
     if (texto.isEmpty) {
       _devolverFoco();
@@ -258,6 +267,11 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
   @override
   Widget build(BuildContext context) {
+    final inventario = ref.watch(inventarioProvider(widget.inventarioId));
+    if (inventario?.encerrado ?? false) {
+      return const LevantamentoEncerrado();
+    }
+
     final config = ref.watch(configuracaoProvider(widget.inventarioId));
     final modo = ref.watch(modoLeituraProvider);
     final historico = ref.watch(historicoProvider(widget.inventarioId));
@@ -568,3 +582,52 @@ final atalhosLevantamento = <ShortcutActivator, Intent>{
   LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
       const AtalhoConfiguracao(),
 };
+
+/// O inventário está encerrado: nada a ler, e o porquê.
+///
+/// Usado pelo levantamento e pela câmera. Sai da árvore o campo de leitura e
+/// a câmera, e com eles o pedido de tela ligada.
+class LevantamentoEncerrado extends StatelessWidget {
+  const LevantamentoEncerrado({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Levantamento')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 56,
+                color: tema.colorScheme.outline,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Inventário encerrado',
+                style: tema.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Nenhuma leitura é gravada enquanto ele estiver encerrado. '
+                'Para continuar o levantamento, reabra o inventário no painel.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                child: const Text('Voltar ao painel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

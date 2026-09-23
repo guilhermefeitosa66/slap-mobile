@@ -133,7 +133,8 @@ class _CartaoInventario extends ConsumerWidget {
         ? 'Sem patrimônios importados'
         : '${formatarInteiro(progresso.verificados)} de '
               '${formatarInteiro(progresso.total)} · '
-              '${progresso.concluido ? 'concluído' : '${formatarPercentual(progresso.percentual)}%'}';
+              '${progresso.concluido ? 'concluído' : '${formatarPercentual(progresso.percentual)}%'}'
+              '${inv.encerrado ? ' · encerrado' : ''}';
 
     return Card(
       child: InkWell(
@@ -165,7 +166,21 @@ class _CartaoInventario extends ConsumerWidget {
                 valor: progresso.total == 0 ? 0 : progresso.percentual / 100,
               ),
               const SizedBox(height: 9),
-              Text(situacao, style: tema.textTheme.bodySmall),
+              Row(
+                children: [
+                  if (inv.encerrado) ...[
+                    Icon(
+                      Icons.lock_outline,
+                      size: 15,
+                      color: tema.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Expanded(
+                    child: Text(situacao, style: tema.textTheme.bodySmall),
+                  ),
+                ],
+              ),
               if (conflitos > 0) ...[
                 const SizedBox(height: 10),
                 Row(

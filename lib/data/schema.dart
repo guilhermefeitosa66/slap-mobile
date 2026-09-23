@@ -6,7 +6,7 @@
 /// serem a mesma estrutura, em vez de três mecanismos concorrentes.
 library;
 
-const int versaoEsquema = 1;
+const int versaoEsquema = 2;
 
 /// Campos de patrimônio que o levantamento altera.
 ///
@@ -28,6 +28,7 @@ class CampoPatrimonio {
   ];
 }
 
+/// Versão 1: o esquema inicial.
 const List<String> ddlEsquema = [
   '''
   CREATE TABLE inventarios (
@@ -197,6 +198,44 @@ const List<String> ddlEsquema = [
   ) WITHOUT ROWID
   ''',
 ];
+
+/// Versão 2: valor vencedor de cada campo do inventário.
+///
+/// Até a v1, operação sobre o inventário era aplicada sem comparar com o
+/// valor em vigor: uma operação antiga chegando depois — de um aparelho que
+/// sincronizou tarde — desfazia uma mais nova. Com o encerramento, isso
+/// reabriria um inventário encerrado. Aqui fica o HLC do vencedor, e só
+/// operação mais nova altera o campo (last-writer-wins, como nos patrimônios,
+/// mas sem registro de conflito: não há o que a pessoa decidir).
+const List<String> migracaoV2 = [
+  '''
+  CREATE TABLE campos_inventario (
+    inventario_id TEXT NOT NULL,
+    campo         TEXT NOT NULL,
+    valor         TEXT,
+    hlc           TEXT NOT NULL,
+    op_id         TEXT NOT NULL,
+    PRIMARY KEY (inventario_id, campo)
+  ) WITHOUT ROWID
+  ''',
+  // O vencedor de cada campo já está no log: é a operação de maior HLC.
+  '''
+  INSERT INTO campos_inventario (inventario_id, campo, valor, hlc, op_id)
+  SELECT o.entidade_id, o.campo, o.valor, o.hlc, o.op_id
+  FROM ops o
+  WHERE o.entidade = 'inventario'
+    AND o.hlc = (
+      SELECT MAX(o2.hlc) FROM ops o2
+      WHERE o2.entidade = 'inventario'
+        AND o2.entidade_id = o.entidade_id
+        AND o2.campo = o.campo
+    )
+  ''',
+];
+
+/// Migrações por versão de destino. Um banco novo passa por todas, em ordem:
+/// é o mesmo caminho de quem atualiza, e por isso é o caminho testado.
+const Map<int, List<String>> migracoes = {1: ddlEsquema, 2: migracaoV2};
 
 /// Chaves da tabela `config`.
 class Config {
