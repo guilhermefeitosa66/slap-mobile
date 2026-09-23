@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/ajustes/tela_ajustes.dart';
 import '../features/divergence/tela_itens.dart';
 import '../features/identity/tela_identidade.dart';
 import '../features/import/tela_importacao.dart';
@@ -48,6 +49,7 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
             return identidade.configurada ? null : '/identidade';
           },
         ),
+        GoRoute(path: '/ajustes', builder: (_, _) => const TelaAjustes()),
         GoRoute(
           path: '/identidade',
           builder: (_, estado) => TelaIdentidade(

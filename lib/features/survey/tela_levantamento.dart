@@ -12,6 +12,7 @@ import '../../domain/patrimonio.dart';
 import 'configuracao_sheet.dart';
 import 'estado_levantamento.dart';
 import 'linha_leitura.dart';
+import 'manter_tela_ligada.dart';
 import 'tela_camera.dart';
 
 /// A tela do levantamento.
@@ -200,142 +201,147 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     final historico = ref.watch(historicoProvider(widget.inventarioId));
     final progresso = ref.watch(progressoProvider(widget.inventarioId));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Levantamento'),
-        actions: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Semantics(
-                label:
-                    '${progresso.verificados} de ${progresso.total} verificados',
-                excludeSemantics: true,
-                child: Text.rich(
-                  TextSpan(
-                    text: formatarInteiro(progresso.verificados),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '/${formatarInteiro(progresso.total)}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
+    return ManterTelaLigada(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Levantamento'),
+          actions: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Semantics(
+                  label:
+                      '${progresso.verificados} de ${progresso.total} verificados',
+                  excludeSemantics: true,
+                  child: Text.rich(
+                    TextSpan(
+                      text: formatarInteiro(progresso.verificados),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
                       ),
-                    ],
+                      children: [
+                        TextSpan(
+                          text: '/${formatarInteiro(progresso.total)}',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (config != null)
-            BarraConfiguracao(
-              config: config,
-              aoTocar: () async {
-                await abrirConfiguracao(context, ref, widget.inventarioId);
+          ],
+        ),
+        body: Column(
+          children: [
+            if (config != null)
+              BarraConfiguracao(
+                config: config,
+                aoTocar: () async {
+                  await abrirConfiguracao(context, ref, widget.inventarioId);
+                  _devolverFoco();
+                },
+              ),
+            _SeletorModo(
+              modo: modo,
+              aoMudar: (novo) {
+                ref.read(modoLeituraProvider.notifier).definir(novo);
                 _devolverFoco();
               },
             ),
-          _SeletorModo(
-            modo: modo,
-            aoMudar: (novo) {
-              ref.read(modoLeituraProvider.notifier).definir(novo);
-              _devolverFoco();
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _campo,
-                    focusNode: _foco,
-                    autofocus: true,
-                    // O teclado numérico cobre a digitação manual de tombo, e
-                    // o leitor externo entra como teclado de qualquer forma.
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.go,
-                    style: estiloCodigo(
-                      context,
-                      tamanho: 22,
-                    ).copyWith(letterSpacing: 0.9),
-                    decoration: InputDecoration(
-                      hintText: modo.rotulo,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 2,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _campo,
+                      focusNode: _foco,
+                      autofocus: true,
+                      // O teclado numérico cobre a digitação manual de tombo, e
+                      // o leitor externo entra como teclado de qualquer forma.
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.go,
+                      style: estiloCodigo(
+                        context,
+                        tamanho: 22,
+                      ).copyWith(letterSpacing: 0.9),
+                      decoration: InputDecoration(
+                        hintText: modo.rotulo,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 14,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        suffixIcon: IconButton(
+                          tooltip: 'Procurar',
+                          icon: const Icon(Icons.arrow_forward),
+                          onPressed: () => _processar(_campo.text),
                         ),
                       ),
-                      suffixIcon: IconButton(
-                        tooltip: 'Procurar',
-                        icon: const Icon(Icons.arrow_forward),
-                        onPressed: () => _processar(_campo.text),
-                      ),
+                      onSubmitted: _processar,
                     ),
-                    onSubmitted: _processar,
                   ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  height: 56,
-                  width: 56,
-                  child: Tooltip(
-                    message: 'Abrir câmera',
-                    child: FilledButton(
-                      onPressed: _abrirCamera,
-                      style: FilledButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(56, 56),
-                      ),
-                      child: const Icon(
-                        Icons.photo_camera_outlined,
-                        size: 26,
-                        semanticLabel: 'Abrir câmera',
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 56,
+                    width: 56,
+                    child: Tooltip(
+                      message: 'Abrir câmera',
+                      child: FilledButton(
+                        onPressed: _abrirCamera,
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(56, 56),
+                        ),
+                        child: const Icon(
+                          Icons.photo_camera_outlined,
+                          size: 26,
+                          semanticLabel: 'Abrir câmera',
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (_aguardandoConfirmacao != null)
-            _ConfirmarSobrescrita(
-              patrimonio: _aguardandoConfirmacao!,
-              aoConfirmar: _confirmarSobrescrita,
-              aoCancelar: () {
-                setState(() => _aguardandoConfirmacao = null);
-                _devolverFoco();
-              },
+            if (_aguardandoConfirmacao != null)
+              _ConfirmarSobrescrita(
+                patrimonio: _aguardandoConfirmacao!,
+                aoConfirmar: _confirmarSobrescrita,
+                aoCancelar: () {
+                  setState(() => _aguardandoConfirmacao = null);
+                  _devolverFoco();
+                },
+              ),
+            const Divider(height: 1),
+            Expanded(
+              child: historico.isEmpty
+                  ? const _Instrucoes()
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: historico.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, indent: 50),
+                      itemBuilder: (_, i) =>
+                          LinhaLeitura(registro: historico[i]),
+                    ),
             ),
-          const Divider(height: 1),
-          Expanded(
-            child: historico.isEmpty
-                ? const _Instrucoes()
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: historico.length,
-                    separatorBuilder: (_, _) =>
-                        const Divider(height: 1, indent: 50),
-                    itemBuilder: (_, i) => LinhaLeitura(registro: historico[i]),
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

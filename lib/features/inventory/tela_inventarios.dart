@@ -26,7 +26,7 @@ class TelaInventarios extends ConsumerWidget {
         ),
         actions: [
           IconButton.outlined(
-            tooltip: 'Meus dados',
+            tooltip: 'Meus dados e ajustes',
             icon: const Icon(Icons.person_outline),
             style: IconButton.styleFrom(
               backgroundColor: Theme.of(
@@ -39,7 +39,7 @@ class TelaInventarios extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: () => context.push('/identidade?inicial=false'),
+            onPressed: () => context.push('/ajustes'),
           ),
           const SizedBox(width: 12),
         ],

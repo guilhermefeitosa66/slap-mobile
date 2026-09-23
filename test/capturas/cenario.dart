@@ -1,12 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:slap_mobile/core/sons.dart';
 import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
 import 'package:slap_mobile/data/schema.dart';
+
+export '../apoio/app_de_teste.dart' show SonsMudos;
 
 /// Um inventário de demonstração, com levantamento em andamento.
 ///
@@ -116,18 +117,6 @@ class Cenario {
   }
 
   void fechar() => banco.fechar();
-}
-
-/// Sons mudos: o teste não tem saída de áudio nem motor de vibração.
-class SonsMudos extends Sons {
-  @override
-  Future<void> preparar() async {}
-
-  @override
-  Future<void> tocar(Som som) async {}
-
-  @override
-  Future<void> dispose() async {}
 }
 
 /// Carrega as fontes de verdade, para a captura sair como no aparelho.

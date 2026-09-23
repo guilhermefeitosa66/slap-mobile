@@ -10,6 +10,7 @@ import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
 import 'estado_levantamento.dart';
 import 'linha_leitura.dart';
+import 'manter_tela_ligada.dart';
 
 /// Leitura contínua pela câmera.
 ///
@@ -142,86 +143,91 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
 
     final apoio = CoresApoio.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        // A câmera fica escura nos dois temas: um cabeçalho claro sobre o
-        // quadro da câmera ofusca quem está mirando a etiqueta.
-        backgroundColor: PaletaClara.tinta,
-        foregroundColor: Colors.white,
-        title: Text('Lidos: ${formatarInteiro(sucessos)}'),
-        actions: [
-          IconButton(
-            tooltip: 'Lanterna',
-            icon: const Icon(Icons.flashlight_on),
-            onPressed: () => _controlador.toggleTorch(),
-          ),
-          IconButton(
-            tooltip: 'Trocar câmera',
-            icon: const Icon(Icons.cameraswitch),
-            onPressed: () => _controlador.switchCamera(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (config != null)
-            Container(
-              width: double.infinity,
-              color: apoio.faixa,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              child: Text(
-                '${config.sala} · ${config.conservacao.rotulo} · '
-                '${config.situacao.rotulo}',
-                style: TextStyle(color: apoio.sobreFaixa, fontSize: 13),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+    return ManterTelaLigada(
+      child: Scaffold(
+        appBar: AppBar(
+          // A câmera fica escura nos dois temas: um cabeçalho claro sobre o
+          // quadro da câmera ofusca quem está mirando a etiqueta.
+          backgroundColor: PaletaClara.tinta,
+          foregroundColor: Colors.white,
+          title: Text('Lidos: ${formatarInteiro(sucessos)}'),
+          actions: [
+            IconButton(
+              tooltip: 'Lanterna',
+              icon: const Icon(Icons.flashlight_on),
+              onPressed: () => _controlador.toggleTorch(),
+            ),
+            IconButton(
+              tooltip: 'Trocar câmera',
+              icon: const Icon(Icons.cameraswitch),
+              onPressed: () => _controlador.switchCamera(),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            if (config != null)
+              Container(
+                width: double.infinity,
+                color: apoio.faixa,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 9,
+                ),
+                child: Text(
+                  '${config.sala} · ${config.conservacao.rotulo} · '
+                  '${config.situacao.rotulo}',
+                  style: TextStyle(color: apoio.sobreFaixa, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            Expanded(
+              flex: 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  MobileScanner(
+                    controller: _controlador,
+                    onDetect: (captura) => _aoDetectar(captura),
+                    errorBuilder: (context, erro) => _ErroCamera(erro: erro),
+                  ),
+                  const _Mira(),
+                ],
               ),
             ),
-          Expanded(
-            flex: 3,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                MobileScanner(
-                  controller: _controlador,
-                  onDetect: (captura) => _aoDetectar(captura),
-                  errorBuilder: (context, erro) => _ErroCamera(erro: erro),
-                ),
-                const _Mira(),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: _lidos.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Aponte para as etiquetas. A câmera continua aberta '
-                        'entre um patrimônio e outro.',
-                        textAlign: TextAlign.center,
+            Expanded(
+              flex: 2,
+              child: _lidos.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'Aponte para as etiquetas. A câmera continua aberta '
+                          'entre um patrimônio e outro.',
+                          textAlign: TextAlign.center,
+                        ),
                       ),
+                    )
+                  : ListView.separated(
+                      itemCount: _lidos.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, indent: 50),
+                      itemBuilder: (_, i) => LinhaLeitura(registro: _lidos[i]),
                     ),
-                  )
-                : ListView.separated(
-                    itemCount: _lidos.length,
-                    separatorBuilder: (_, _) =>
-                        const Divider(height: 1, indent: 50),
-                    itemBuilder: (_, i) => LinhaLeitura(registro: _lidos[i]),
-                  ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: FilledButton.icon(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.check),
-          label: Text(
-            sucessos == 0
-                ? 'Concluir'
-                : 'Concluir (${formatarInteiro(sucessos)} registrados)',
+            ),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.check),
+            label: Text(
+              sucessos == 0
+                  ? 'Concluir'
+                  : 'Concluir (${formatarInteiro(sucessos)} registrados)',
+            ),
           ),
         ),
       ),

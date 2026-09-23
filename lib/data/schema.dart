@@ -210,4 +210,15 @@ class Config {
   /// Último HLC emitido. Global ao aparelho, e não por inventário, para que o
   /// relógio nunca ande para trás.
   static const hlcLocal = 'hlc_local';
+
+  // Preferências do aparelho, gravadas como '1' ou '0'. Ausente vale o padrão.
+
+  /// Manter a tela ligada no levantamento e na câmera. Padrão: sim.
+  static const manterTelaLigada = 'pref_tela_ligada';
+
+  /// Som de retorno das leituras. Padrão: sim.
+  static const sons = 'pref_sons';
+
+  /// Vibração de retorno das leituras. Padrão: sim.
+  static const vibracao = 'pref_vibracao';
 }

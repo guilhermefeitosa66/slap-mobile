@@ -2,6 +2,7 @@ package io.github.guilhermefeitosa66.slap_mobile
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -32,6 +33,24 @@ class MainActivity : FlutterActivity() {
                     }
                     "liberarMulticast" -> {
                         liberarMulticast()
+                        resultado.success(null)
+                    }
+                    else -> resultado.notImplemented()
+                }
+            }
+
+        // Tela ligada durante o levantamento. A flag vale só enquanto a janela
+        // está visível: sair do aplicativo devolve o bloqueio normal sozinho.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CANAL_TELA)
+            .setMethodCallHandler { chamada, resultado ->
+                when (chamada.method) {
+                    "manterLigada" -> {
+                        val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                        if (chamada.arguments as? Boolean == true) {
+                            window.addFlags(flag)
+                        } else {
+                            window.clearFlags(flag)
+                        }
                         resultado.success(null)
                     }
                     else -> resultado.notImplemented()
@@ -78,5 +97,6 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val CANAL_REDE = "slap/rede"
+        const val CANAL_TELA = "slap/tela"
     }
 }
