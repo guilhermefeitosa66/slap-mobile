@@ -286,7 +286,7 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemCount: historico.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (_, i) => LinhaLeitura(registro: historico[i]),
                   ),
           ),

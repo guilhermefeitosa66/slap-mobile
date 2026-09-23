@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../core/version_vector.dart';
 import '../../data/banco.dart';
 import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';

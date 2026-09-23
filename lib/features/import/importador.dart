@@ -208,8 +208,9 @@ class Importador {
     for (final s in SituacaoUso.values) {
       if (chave == s.valor || chave == formaComparavel(s.rotulo)) return s;
     }
-    if (chave.startsWith('at') || chave.startsWith('emuso'))
+    if (chave.startsWith('at') || chave.startsWith('emuso')) {
       return SituacaoUso.ativo;
+    }
     if (chave.startsWith('oci')) return SituacaoUso.ocioso;
     if (chave.startsWith('ins')) return SituacaoUso.inservivel;
     return null;

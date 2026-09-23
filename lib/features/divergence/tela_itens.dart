@@ -94,7 +94,7 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                   )
                 : ListView.separated(
                     itemCount: itens.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (_, i) => _LinhaPatrimonio(
                       patrimonio: itens[i],
                       aoTocar: () => _abrirDetalhe(itens[i]),
@@ -175,7 +175,10 @@ class _LinhaPatrimonio extends StatelessWidget {
           if (divergencias.isNotEmpty)
             Text(
               divergencias.map((d) => d.campo.rotulo).join(', '),
-              style: TextStyle(color: CoresResultado.alerta, fontSize: 12),
+              style: const TextStyle(
+                color: CoresResultado.alerta,
+                fontSize: 12,
+              ),
             ),
         ],
       ),

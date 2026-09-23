@@ -304,7 +304,7 @@ class RepositorioPatrimonios {
           ]);
         }
       } finally {
-        stmt.dispose();
+        stmt.close();
       }
 
       return itens.length;
@@ -350,7 +350,7 @@ class RepositorioPatrimonios {
           ]);
         }
       } finally {
-        stmt.dispose();
+        stmt.close();
       }
 
       return itens.length;

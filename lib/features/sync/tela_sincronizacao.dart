@@ -89,8 +89,9 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
         setState(() => _resultados[par.dispositivoId] = e.mensagem);
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => _resultados[par.dispositivoId] = 'Falhou: $e');
+      }
     } finally {
       if (mounted) setState(() => _sincronizando.remove(par.dispositivoId));
     }

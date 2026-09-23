@@ -141,7 +141,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            _Rotulo('Estado de conservação'),
+            const _Rotulo('Estado de conservação'),
             const SizedBox(height: 8),
             SegmentedButton<EstadoConservacao>(
               segments: [
@@ -153,7 +153,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            _Rotulo('Situação de uso'),
+            const _Rotulo('Situação de uso'),
             const SizedBox(height: 8),
             SegmentedButton<SituacaoUso>(
               segments: [
@@ -165,7 +165,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            _Rotulo('Responsável'),
+            const _Rotulo('Responsável'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
               initialValue: _responsavel,

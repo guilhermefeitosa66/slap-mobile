@@ -80,7 +80,7 @@ class TelaInventarios extends ConsumerWidget {
         .criar(nome: dados.nome, ano: dados.ano);
     ref.read(revisaoProvider.notifier).mudou();
 
-    if (context.mounted) context.push('/inventario/${inv.id}/importar');
+    if (context.mounted) await context.push('/inventario/${inv.id}/importar');
   }
 }
 

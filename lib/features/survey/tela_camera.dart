@@ -52,7 +52,7 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
         BarcodeFormat.code39,
         BarcodeFormat.ean13,
         BarcodeFormat.ean8,
-        BarcodeFormat.itf,
+        BarcodeFormat.itf14,
         BarcodeFormat.codabar,
         BarcodeFormat.qrCode,
       ],
@@ -200,7 +200,7 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
                   )
                 : ListView.separated(
                     itemCount: _lidos.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (_, i) => _LinhaCamera(registro: _lidos[i]),
                   ),
           ),

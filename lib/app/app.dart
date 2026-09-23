@@ -37,7 +37,7 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
       routes: [
         GoRoute(
           path: '/',
-          builder: (_, __) => const TelaInventarios(),
+          builder: (_, _) => const TelaInventarios(),
           redirect: (context, state) {
             // Sem identidade não há a quem atribuir as verificações, e o
             // relatório final sairia sem autor.

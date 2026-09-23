@@ -136,7 +136,7 @@ class Banco {
   }
 
   void fechar() {
-    db.dispose();
+    db.close();
     if (identical(_instancia, this)) _instancia = null;
   }
 }
