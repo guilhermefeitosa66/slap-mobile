@@ -32,8 +32,9 @@ void main() {
   final formatos = {
     // 1080 × 1920: proporção 9:16 aceita pela Play Store.
     'celular': (const Size(360, 640), 3.0),
-    // 1600 × 2560 em retrato, tablet de 10 polegadas.
-    'tablet': (const Size(800, 1280), 2.0),
+    // 1800 × 3200, também 9:16: a Play Store pede essa proporção, e o
+    // tamanho serve tanto para o espaço de 7 quanto para o de 10 polegadas.
+    'tablet': (const Size(900, 1600), 2.0),
   };
 
   setUpAll(carregarFontes);

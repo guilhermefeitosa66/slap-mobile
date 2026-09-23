@@ -21,6 +21,8 @@ O que sai:
 - iOS: AppIcon.appiconset, sangrado e opaco (o sistema recorta os cantos, e
   a App Store recusa ícone com transparência).
 - docs/loja/icone-512.png: o ícone de alta resolução da Play Store.
+- docs/loja/destaque.png: a imagem de destaque da Play Store (1024 × 500),
+  com o mesmo motivo e as fontes do aplicativo.
 
 O ícone adaptativo do Android (API 26+) e o monocromático dos ícones com tema
 (Android 13+) são vetores e não passam por aqui.
@@ -34,11 +36,12 @@ Requer Pillow.
 import json
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 RAIZ = Path(__file__).resolve().parent.parent
 
 TEAL = (0x0F, 0x5C, 0x52)
+TEAL_CLARO = (0xDC, 0xE9, 0xE6)
 BRANCO = (0xFF, 0xFF, 0xFF)
 
 BARRAS = [(3, 19), (7, 19), (11, 19), (15, 15), (19, 19)]
@@ -123,7 +126,46 @@ def loja() -> None:
     print(destino.relative_to(RAIZ))
 
 
+
+def destaque() -> None:
+    """Imagem de destaque da Play Store: 1024 × 500, sem transparência.
+
+    A loja pode cortar as bordas e sobrepor o botão de vídeo no centro; o
+    motivo e o texto ficam longe das bordas e não dependem do meio.
+    """
+    largura, altura = 1024, 500
+    s = SUPERAMOSTRAGEM // 2
+    imagem = Image.new("RGB", (largura * s, altura * s), TEAL)
+    pincel = ImageDraw.Draw(imagem)
+
+    # O motivo, grande, à esquerda: a mesma grade de 24 unidades.
+    unidade = 11 * s
+    centro_x, centro_y = 190 * s, altura * s / 2
+    raio = unidade
+    for x, fim in BARRAS:
+        x0 = centro_x + (x - 11) * unidade
+        y0 = centro_y + (TOPO - 12) * unidade
+        y1 = centro_y + (fim - 12) * unidade
+        pincel.rounded_rectangle(
+            (x0 - raio, y0 - raio, x0 + raio, y1 + raio), radius=raio, fill=BRANCO
+        )
+
+    fontes = RAIZ / "assets/fontes"
+    titulo = ImageFont.truetype(str(fontes / "Archivo-SemiBold.ttf"), 84 * s)
+    texto = ImageFont.truetype(str(fontes / "PublicSans-Regular.ttf"), 32 * s)
+    esquerda = 380 * s
+    pincel.text((esquerda, 150 * s), "SLAP Mobile", font=titulo, fill=BRANCO)
+    linhas = ["Inventário patrimonial offline,", "sincronizado direto entre celulares."]
+    for n, linha in enumerate(linhas):
+        pincel.text((esquerda, (272 + n * 46) * s), linha, font=texto, fill=TEAL_CLARO)
+
+    destino = RAIZ / "docs/loja/destaque.png"
+    imagem.resize((largura, altura), Image.LANCZOS).save(destino, optimize=True)
+    print(destino.relative_to(RAIZ))
+
+
 if __name__ == "__main__":
     android()
     ios()
     loja()
+    destaque()
