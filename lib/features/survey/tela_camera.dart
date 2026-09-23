@@ -135,7 +135,10 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
     ref
         .read(historicosProvider.notifier)
         .registrar(widget.inventarioId, registro);
-    if (mounted) setState(() => _lidos.insert(0, registro));
+    if (mounted) {
+      anunciarLeitura(context, registro);
+      setState(() => _lidos.insert(0, registro));
+    }
   }
 
   @override

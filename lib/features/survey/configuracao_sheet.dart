@@ -263,6 +263,7 @@ class BarraConfiguracao extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Flexible(
+                            flex: 3,
                             child: Text(
                               config.sala,
                               style: TextStyle(
@@ -277,11 +278,18 @@ class BarraConfiguracao extends StatelessWidget {
                           ),
                           if (config.desde case final desde?) ...[
                             const SizedBox(width: 8),
-                            Text(
-                              descreverDesde(desde),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: apoio.sobreFaixaSecundario,
+                            // A sala tem prioridade: com fonte grande, o
+                            // "desde" encolhe antes dela.
+                            Flexible(
+                              flex: 2,
+                              child: Text(
+                                descreverDesde(desde),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: apoio.sobreFaixaSecundario,
+                                ),
                               ),
                             ),
                           ],

@@ -222,6 +222,7 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     ref
         .read(historicosProvider.notifier)
         .registrar(widget.inventarioId, leitura);
+    if (mounted) anunciarLeitura(context, leitura);
     if (leitura.resultado != ResultadoLeitura.jaVerificado) {
       setState(() => _aguardandoConfirmacao = null);
     }
@@ -236,20 +237,16 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     await ref.read(sonsProvider).tocar(Som.sucesso);
 
     setState(() => _aguardandoConfirmacao = null);
-    ref
-        .read(historicosProvider.notifier)
-        .registrar(
-          widget.inventarioId,
-
-          LeituraRegistrada(
-            leitura: Leitura(
-              resultado: ResultadoLeitura.sucesso,
-              patrimonio: patrimonio,
-            ),
-            codigoLido: patrimonio.tombo,
-            depois: depois,
-          ),
-        );
+    _registrar(
+      LeituraRegistrada(
+        leitura: Leitura(
+          resultado: ResultadoLeitura.sucesso,
+          patrimonio: patrimonio,
+        ),
+        codigoLido: patrimonio.tombo,
+        depois: depois,
+      ),
+    );
     _devolverFoco();
   }
 

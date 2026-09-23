@@ -160,25 +160,38 @@ class _CartaoProgresso extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(
-                  // Percentual fracionário, ao contrário da divisão inteira do
-                  // SLAP, que mostra 99% durante todo o último 1% do trabalho.
-                  formatarPercentual(progresso.percentual),
-                  style: tema.textTheme.displaySmall,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '%',
-                  style: tema.textTheme.titleLarge?.copyWith(
-                    color: tema.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
+                // Com a fonte do sistema grande, o número encolhe para caber
+                // ao lado do selo, em vez de empurrá-lo para fora da tela.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          // Percentual fracionário, ao contrário da divisão
+                          // inteira do SLAP, que mostra 99% durante todo o
+                          // último 1% do trabalho.
+                          formatarPercentual(progresso.percentual),
+                          style: tema.textTheme.displaySmall,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '%',
+                          style: tema.textTheme.titleLarge?.copyWith(
+                            color: tema.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const Spacer(),
-                if (progresso.concluido)
+                if (progresso.concluido) ...[
+                  const SizedBox(width: 8),
                   Chip(
                     avatar: Icon(
                       Icons.check,
@@ -187,6 +200,7 @@ class _CartaoProgresso extends StatelessWidget {
                     ),
                     label: const Text('Concluído'),
                   ),
+                ],
               ],
             ),
             const SizedBox(height: 16),

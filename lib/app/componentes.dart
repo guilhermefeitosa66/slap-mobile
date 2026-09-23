@@ -104,6 +104,9 @@ class BarraProgresso extends StatelessWidget {
 
     return LinearProgressIndicator(
       value: valor.clamp(0, 1),
+      semanticsLabel: 'Progresso',
+      semanticsValue:
+          '${(valor.clamp(0, 1) * 100).toStringAsFixed(1).replaceAll('.', ',')}%',
       minHeight: espessura,
       borderRadius: BorderRadius.circular(espessura / 2),
       backgroundColor: apoio.trilho,

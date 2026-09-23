@@ -22,16 +22,7 @@ class TelaConflitos extends ConsumerWidget {
     final conflitos = ref.read(conflitosProvider).listar(inventarioId);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Conflitos'),
-        actions: [
-          if (conflitos.isNotEmpty)
-            TextButton(
-              onPressed: () => _aceitarTodos(context, ref),
-              child: const Text('Aceitar todos'),
-            ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Conflitos')),
       body: conflitos.isEmpty
           ? const _SemConflitos()
           : ListView(
@@ -50,6 +41,18 @@ class TelaConflitos extends ConsumerWidget {
                     conflito: c,
                     aoResolver: (valor) => _resolver(context, ref, c, valor),
                   ),
+                // No corpo, e não na barra: com a fonte do sistema grande o
+                // texto não cabia ao lado do título.
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _aceitarTodos(context, ref),
+                  icon: const Icon(Icons.done_all),
+                  label: Text(
+                    conflitos.length == 1
+                        ? 'Manter o valor que está valendo'
+                        : 'Manter todos os valores que estão valendo',
+                  ),
+                ),
               ],
             ),
     );
@@ -77,7 +80,7 @@ class TelaConflitos extends ConsumerWidget {
     final confirmou = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Aceitar todos?'),
+        title: const Text('Manter o que está valendo?'),
         content: const Text(
           'Os valores que já estão valendo serão mantidos e os conflitos '
           'saem da lista. Nenhum dado é alterado.',
@@ -89,7 +92,7 @@ class TelaConflitos extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Aceitar'),
+            child: const Text('Manter'),
           ),
         ],
       ),

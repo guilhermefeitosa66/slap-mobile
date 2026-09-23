@@ -191,12 +191,14 @@ class _CartaoInventario extends ConsumerWidget {
                   children: [
                     Icon(Icons.warning_amber_rounded, size: 18, color: erro),
                     const SizedBox(width: 7),
-                    Text(
-                      '$conflitos ${conflitos == 1 ? 'conflito' : 'conflitos'} '
-                      'para conferir',
-                      style: tema.textTheme.bodySmall?.copyWith(
-                        color: erro,
-                        fontWeight: FontWeight.w500,
+                    Expanded(
+                      child: Text(
+                        '$conflitos ${conflitos == 1 ? 'conflito' : 'conflitos'} '
+                        'para conferir',
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: erro,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
