@@ -289,6 +289,16 @@ Duas vias em paralelo, porque nenhuma é confiável sozinha:
 2. **Beacon UDP multicast** em `239.7.7.7:47771`, a cada 3 segundos. Existe porque mDNS falha
    com frequência em rede de celular e em alguns pontos de acesso.
 
+No Android o beacon depende do `MulticastLock`: sem ele o Wi-Fi descarta os pacotes multicast
+recebidos, e o beacon envia mas nunca recebe — um defeito silencioso, porque o mDNS continua
+achando alguns aparelhos. O `MainActivity` expõe a trava pelo canal `slap/rede`; a descoberta a
+adquire ao iniciar e a libera ao parar, e também logo no início se nenhuma via subir. Trava negada
+fica no log (`slap.descoberta`) e vira aviso na tela, em vez de sumir.
+
+Para conferir o beacon sozinho, com o mDNS desligado, gere o APK com
+`--dart-define=SLAP_DESCOBERTA=beacon`: dois aparelhos na mesma rede têm de se encontrar só por ele
+(o ícone do aparelho na lista mostra por qual via ele foi achado).
+
 Nenhuma das duas atravessa isolamento de cliente ("AP isolation"). Quando a rede tem isolamento,
 nada em software resolve — o app detecta a ausência de pares e orienta o usuário a usar um
 hotspot próprio.

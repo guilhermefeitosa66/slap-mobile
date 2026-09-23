@@ -75,7 +75,12 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     });
 
     await descoberta.iniciar();
-    if (!mounted) return;
+    if (!mounted) {
+      // A tela fechou enquanto a descoberta subia: ninguém mais vai pará-la,
+      // e a trava de multicast ficaria presa gastando bateria.
+      await descoberta.dispose();
+      return;
+    }
 
     setState(() {
       _descoberta = descoberta;

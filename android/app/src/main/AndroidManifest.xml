@@ -16,8 +16,10 @@
     <!-- Saber se há Wi-Fi antes de tentar descobrir os outros aparelhos. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- MulticastLock. Sem ele o Android descarta os pacotes multicast e nem o
-         mDNS nem o beacon de descoberta funcionam. -->
+    <!-- MulticastLock. Sem ele o Android descarta os pacotes multicast no
+         Wi-Fi, e o beacon UDP de descoberta envia mas não recebe nada. O
+         MainActivity só o segura enquanto a tela de sincronização procura
+         aparelhos. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <!-- A câmera é o caminho preferido, mas não o único: o levantamento
