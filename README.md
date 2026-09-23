@@ -36,6 +36,10 @@ flutter build apk --release --split-per-abi
 Os arquivos saem em `build/app/outputs/flutter-apk/`. Instale o que corresponde ao processador do
 aparelho — `arm64-v8a` cobre praticamente todos os celulares dos últimos anos.
 
+Sem a chave de release (`android/key.properties`), esse APK sai assinado com a chave de debug:
+serve para testar, mas não atualiza uma versão publicada. A release assinada segue
+[docs/release.md](docs/release.md) e [docs/assinatura.md](docs/assinatura.md).
+
 Como o APK não vem da Play Store, o Android pede autorização para instalar de fonte desconhecida.
 A permissão é concedida ao aplicativo usado para abrir o arquivo, em
 **Configurações → Aplicativos → Acesso especial → Instalar apps desconhecidos**.
