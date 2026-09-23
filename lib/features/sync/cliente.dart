@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../../core/formato.dart';
+import '../../core/hlc.dart';
 import '../../core/version_vector.dart';
 import '../../data/repos/operacoes.dart';
 import 'protocolo.dart';
@@ -11,6 +13,35 @@ class FalhaSync implements Exception {
 
   @override
   String toString() => mensagem;
+}
+
+/// A sincronização foi recusada porque os relógios estão longe demais.
+///
+/// Nenhuma operação daquele par é aplicada enquanto a diferença durar:
+/// aceitar operação do futuro arrastaria o relógio deste aparelho e, depois,
+/// o de todos os outros. Celular com data errada é comum, e sem esta
+/// explicação o usuário não teria como adivinhar que o problema é esse.
+class RelogioDivergente extends FalhaSync {
+  /// Como mostrar o aparelho de relógio diferente.
+  final String aparelho;
+
+  /// Quanto o relógio de [aparelho] está à frente deste. Negativo quando
+  /// está atrás.
+  final Duration diferenca;
+
+  RelogioDivergente({required this.aparelho, required this.diferenca})
+    : super(_mensagem(aparelho, diferenca));
+
+  bool get adiantado => !diferenca.isNegative;
+
+  /// Hora que o outro aparelho marca agora, segundo a diferença medida.
+  DateTime horaDoOutro(DateTime agora) => agora.add(diferenca);
+
+  static String _mensagem(String aparelho, Duration diferenca) =>
+      'O relógio de $aparelho está ${descreverDuracao(diferenca.abs())} '
+      '${diferenca.isNegative ? 'atrasado' : 'adiantado'} em relação a este '
+      'aparelho. Nada foi trocado. Ative a data e a hora automáticas nos dois '
+      'aparelhos e sincronize de novo.';
 }
 
 /// Um aparelho encontrado na rede local.
@@ -70,7 +101,15 @@ class ClienteSync {
   /// alcance.
   final Duration tempoLimite;
 
-  ClienteSync(this.ops, {this.tempoLimite = const Duration(seconds: 15)});
+  /// Relógio deste aparelho. Substituível nos testes, para simular aparelho
+  /// com data errada.
+  final DateTime Function() relogio;
+
+  ClienteSync(
+    this.ops, {
+    this.tempoLimite = const Duration(seconds: 15),
+    DateTime Function()? relogio,
+  }) : relogio = relogio ?? DateTime.now;
 
   /// Identifica um aparelho. Não exige chave: serve para listá-lo antes de
   /// saber se ele participa de algum inventário em comum.
@@ -96,6 +135,10 @@ class ClienteSync {
     required String inventarioId,
     required String chaveSync,
   }) async {
+    // Os relógios são conferidos antes de qualquer troca: com diferença
+    // grande, nenhum dos dois lados deve aplicar nada do outro.
+    await _conferirRelogio(par);
+
     // Uma viagem para puxar: a resposta traz as operações que nos faltam e a
     // version vector do par. Outra para enviar exatamente o que falta a ele.
     final lote = await _puxar(par, inventarioId, chaveSync);
@@ -107,7 +150,7 @@ class ClienteSync {
             conflitos: 0,
             patrimoniosAfetados: {},
           )
-        : ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+        : _aplicar(par, lote);
 
     final enviadas = await _enviar(par, inventarioId, chaveSync, lote.vetor);
 
@@ -119,6 +162,55 @@ class ClienteSync {
     );
   }
 
+  /// Compara o relógio do par com o nosso, pela apresentação dele.
+  ///
+  /// O horário remoto é comparado com o meio da viagem de ida e volta, o que
+  /// desconta a latência da rede — irrelevante perto do limite de minutos,
+  /// mas de graça.
+  Future<void> _conferirRelogio(Par par) async {
+    final antes = relogio();
+    final apresentacao = await apresentar(par.host, par.porta);
+    final depois = relogio();
+
+    final remoto = apresentacao.agora;
+    if (remoto == null) return;
+
+    final meio =
+        antes.millisecondsSinceEpoch +
+        depois.difference(antes).inMilliseconds ~/ 2;
+    final diferenca = Duration(milliseconds: remoto - meio);
+    if (diferenca.abs() > deslocamentoMaximoRelogio) {
+      throw RelogioDivergente(aparelho: par.rotulo, diferenca: diferenca);
+    }
+  }
+
+  /// Aplica o lote puxado, traduzindo relógio adiantado em explicação.
+  ///
+  /// A operação do futuro pode ser de um terceiro, que chegou ao par por
+  /// sincronização anterior: o aviso nomeia quem a escreveu, não o par.
+  ResultadoAplicacao _aplicar(Par par, LoteOperacoes lote) {
+    try {
+      return ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+    } on RelogioForaDeSincronia catch (e) {
+      final autor = e.recebido.nodeId;
+      throw RelogioDivergente(
+        aparelho: _rotuloDe(autor, par, lote.ops),
+        diferenca: Duration(milliseconds: e.recebido.millis - e.agoraLocal),
+      );
+    }
+  }
+
+  String _rotuloDe(String dispositivo, Par par, List<Operacao> lote) {
+    if (dispositivo == par.dispositivoId) return par.rotulo;
+    for (final op in lote) {
+      final nome = op.usuarioNome?.trim();
+      if (op.dispositivo == dispositivo && nome != null && nome.isNotEmpty) {
+        return 'um aparelho de $nome';
+      }
+    }
+    return 'aparelho ${dispositivo.substring(0, 6)}';
+  }
+
   Future<LoteOperacoes> _puxar(
     Par par,
     String inventarioId,
@@ -127,6 +219,7 @@ class ClienteSync {
     final resposta = await _requisitar(
       host: par.host,
       porta: par.porta,
+      rotulo: par.rotulo,
       metodo: 'POST',
       caminho: Rotas.pull,
       corpo: PedidoPull(
@@ -151,6 +244,7 @@ class ClienteSync {
     await _requisitar(
       host: par.host,
       porta: par.porta,
+      rotulo: par.rotulo,
       metodo: 'POST',
       caminho: Rotas.push,
       corpo: LoteOperacoes(
@@ -174,6 +268,7 @@ class ClienteSync {
     final resposta = await _requisitar(
       host: par.host,
       porta: par.porta,
+      rotulo: par.rotulo,
       metodo: 'GET',
       caminho: Rotas.pacote,
       query: {'inventario': inventarioId},
@@ -187,6 +282,7 @@ class ClienteSync {
     required int porta,
     required String metodo,
     required String caminho,
+    String? rotulo,
     Map<String, dynamic>? corpo,
     Map<String, String>? query,
     String? chaveSync,
@@ -219,6 +315,7 @@ class ClienteSync {
             // servidor também usa ao conferir.
             caminho: caminho,
             corpo: textoCorpo,
+            agora: relogio(),
           ),
         );
       }
@@ -231,6 +328,9 @@ class ClienteSync {
       final resposta = await req.close().timeout(tempoLimite);
       final texto = await utf8.decoder.bind(resposta).join();
 
+      if (resposta.statusCode == HttpStatus.conflict) {
+        throw _relogioRecusado(texto, rotulo ?? host);
+      }
       if (resposta.statusCode == HttpStatus.unauthorized) {
         throw FalhaSync(
           'O aparelho recusou a conexão. Ele participa deste inventário?',
@@ -246,5 +346,36 @@ class ClienteSync {
     } finally {
       cliente.close(force: true);
     }
+  }
+
+  /// Traduz a recusa por relógio do outro lado.
+  ///
+  /// Quando o par aponta o autor das operações do futuro, o aviso é sobre
+  /// ele; senão, a diferença é entre o relógio do par e o nosso.
+  FalhaSync _relogioRecusado(String texto, String rotulo) {
+    final ErroRelogio? erro;
+    try {
+      erro = ErroRelogio.fromJson(jsonDecode(texto) as Map<String, dynamic>);
+    } catch (_) {
+      return FalhaSync('Resposta inesperada (409).');
+    }
+    if (erro == null) return FalhaSync('Resposta inesperada (409).');
+
+    if (erro.dispositivo != null && erro.diferencaMs != null) {
+      final ehEste = erro.dispositivo == ops.dispositivoId;
+      return RelogioDivergente(
+        aparelho: ehEste
+            ? 'este aparelho'
+            : 'aparelho ${erro.dispositivo!.substring(0, 6)}',
+        diferenca: Duration(milliseconds: erro.diferencaMs!),
+      );
+    }
+
+    return RelogioDivergente(
+      aparelho: rotulo,
+      diferenca: Duration(
+        milliseconds: erro.agora - relogio().millisecondsSinceEpoch,
+      ),
+    );
   }
 }

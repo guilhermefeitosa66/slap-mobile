@@ -11,3 +11,17 @@ String formatarInteiro(int n) => _inteiro.format(n);
 
 /// Percentual com uma casa decimal, sem o símbolo.
 String formatarPercentual(double p) => _umaCasa.format(p);
+
+/// Duração por extenso e arredondada, para mensagens: `12 min`, `2 h 5 min`,
+/// `3 dias`.
+String descreverDuracao(Duration d) {
+  final minutos = d.inMinutes.abs();
+  if (minutos < 1) return 'menos de 1 min';
+  if (minutos < 60) return '$minutos min';
+  final horas = d.inHours.abs();
+  if (horas < 48) {
+    final resto = minutos % 60;
+    return resto == 0 ? '$horas h' : '$horas h $resto min';
+  }
+  return '${d.inDays.abs()} dias';
+}

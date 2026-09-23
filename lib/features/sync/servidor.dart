@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../../core/hlc.dart';
 import '../../data/banco.dart';
 import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';
@@ -22,6 +23,10 @@ class ServidorSync {
 
   HttpServer? _servidor;
 
+  /// Relógio deste aparelho. Substituível nos testes, para simular aparelho
+  /// com data errada.
+  final DateTime Function() relogio;
+
   /// Última sincronização recebida, para a interface reagir sem consultar o
   /// banco em laço.
   final _eventos = StreamController<EventoSync>.broadcast();
@@ -31,7 +36,8 @@ class ServidorSync {
     required this.ops,
     required this.inventarios,
     required this.patrimonios,
-  });
+    DateTime Function()? relogio,
+  }) : relogio = relogio ?? DateTime.now;
 
   Stream<EventoSync> get eventos => _eventos.stream;
 
@@ -78,6 +84,7 @@ class ServidorSync {
           ...Apresentacao(
             dispositivoId: banco.dispositivoId,
             usuarioNome: banco.lerConfig(Config.usuarioNome),
+            agora: relogio().millisecondsSinceEpoch,
           ).toJson(),
         });
       }
@@ -97,14 +104,34 @@ class ServidorSync {
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
       }
 
-      final remoto = Assinatura.verificar(
+      final conferencia = Assinatura.conferir(
         cabecalho: req.headers.value(HttpHeaders.authorizationHeader),
         chaveSync: inventario.chaveSync,
         metodo: req.method,
         caminho: caminho,
         corpo: corpo,
+        agora: relogio(),
       );
-      if (remoto == null) {
+      if (conferencia.situacao == SituacaoAssinatura.foraDaJanela) {
+        // Chave certa, horário errado: é o relógio de um dos dois aparelhos.
+        // Nada é aplicado, e o outro lado recebe o nosso horário para dizer
+        // ao usuário de quanto é a diferença.
+        _avisarRelogio(
+          inventarioId: inventario.id,
+          remoto: conferencia.dispositivoId!,
+          diferenca: Duration(
+            milliseconds:
+                conferencia.momento! - relogio().millisecondsSinceEpoch,
+          ),
+        );
+        return _responderJson(
+          req,
+          HttpStatus.conflict,
+          ErroRelogio(agora: relogio().millisecondsSinceEpoch).toJson(),
+        );
+      }
+      final remoto = conferencia.dispositivoId;
+      if (!conferencia.valida || remoto == null) {
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
       }
 
@@ -169,7 +196,30 @@ class ServidorSync {
     final lote = LoteOperacoes.fromJson(
       jsonDecode(corpo) as Map<String, dynamic>,
     );
-    final resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+
+    final ResultadoAplicacao resultado;
+    try {
+      resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+    } on RelogioForaDeSincronia catch (e) {
+      // Operações com horário no futuro. A transação já foi desfeita: nada
+      // do lote entrou. Aceitar arrastaria o relógio deste aparelho, e depois
+      // o de todos, para o futuro.
+      final diferenca = e.recebido.millis - e.agoraLocal;
+      _avisarRelogio(
+        inventarioId: lote.inventarioId,
+        remoto: e.recebido.nodeId,
+        diferenca: Duration(milliseconds: diferenca),
+      );
+      return _responderJson(
+        req,
+        HttpStatus.conflict,
+        ErroRelogio(
+          agora: relogio().millisecondsSinceEpoch,
+          dispositivo: e.recebido.nodeId,
+          diferencaMs: diferenca,
+        ).toJson(),
+      );
+    }
 
     _registrarPar(remoto, lote.inventarioId);
     _eventos.add(
@@ -213,12 +263,36 @@ class ServidorSync {
     );
   }
 
-  Future<void> _responder(HttpRequest req, Map<String, dynamic> corpo) async {
+  Future<void> _responder(HttpRequest req, Map<String, dynamic> corpo) =>
+      _responderJson(req, HttpStatus.ok, corpo);
+
+  Future<void> _responderJson(
+    HttpRequest req,
+    int status,
+    Map<String, dynamic> corpo,
+  ) async {
     req.response
-      ..statusCode = HttpStatus.ok
+      ..statusCode = status
       ..headers.contentType = ContentType.json
       ..write(jsonEncode(corpo));
     await req.response.close();
+  }
+
+  void _avisarRelogio({
+    required String inventarioId,
+    required String remoto,
+    required Duration diferenca,
+  }) {
+    if (_eventos.isClosed) return;
+    _eventos.add(
+      EventoSync(
+        inventarioId: inventarioId,
+        dispositivoRemoto: remoto,
+        recebidas: 0,
+        conflitos: 0,
+        diferencaRelogio: diferenca,
+      ),
+    );
   }
 
   Future<void> _erro(HttpRequest req, int status, String mensagem) async {
@@ -237,10 +311,17 @@ class EventoSync {
   final int recebidas;
   final int conflitos;
 
+  /// Preenchido quando a sincronização foi recusada por relógio: quanto o
+  /// relógio do outro aparelho está à frente deste (negativo se atrás).
+  final Duration? diferencaRelogio;
+
   const EventoSync({
     required this.inventarioId,
     required this.dispositivoRemoto,
     required this.recebidas,
     required this.conflitos,
+    this.diferencaRelogio,
   });
+
+  bool get recusadoPorRelogio => diferencaRelogio != null;
 }

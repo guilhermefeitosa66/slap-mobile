@@ -198,6 +198,21 @@ serializado como string ordenável. Ele acompanha o tempo real quando o relógio
 contador lógico quando não avança, garantindo ordem total sem perder o sentido humano de
 "quando isso foi lido".
 
+**Relógio fora de sincronia.** Um aparelho com a data errada é o caso comum que o HLC não pode
+absorver: aceitar uma operação do futuro arrastaria o relógio de quem a recebe, e depois o de
+todos, para o futuro. Acima de 5 minutos de diferença a sincronização é recusada, e a recusa é
+explicada — qual aparelho, quanto adiantado ou atrasado, as duas horas lado a lado e a orientação
+de ativar data e hora automáticas. Três pontos detectam o problema:
+
+1. a apresentação (`/hello`) traz o horário do par, e o cliente confere antes de trocar qualquer
+   operação;
+2. a assinatura com a chave certa e horário fora da janela responde `409` com o horário de quem
+   recusou, em vez do `401` de chave errada;
+3. um lote com operação do futuro — que pode ser de um terceiro, escrita quando aquele aparelho
+   estava com a data errada — é recusado inteiro, na mesma transação, e o autor é nomeado.
+
+Nenhuma operação daquele par é aplicada até a diferença sumir.
+
 ### 5.3 Version vector e contexto causal
 
 Cada dispositivo numera suas próprias operações com um `seq` monotônico. O estado de

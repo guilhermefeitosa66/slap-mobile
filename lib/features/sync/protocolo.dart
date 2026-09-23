@@ -68,25 +68,69 @@ class Assinatura {
     required String corpo,
     DateTime? agora,
   }) {
-    if (cabecalho == null || !cabecalho.startsWith('$_prefixo ')) return null;
+    final conferencia = conferir(
+      cabecalho: cabecalho,
+      chaveSync: chaveSync,
+      metodo: metodo,
+      caminho: caminho,
+      corpo: corpo,
+      agora: agora,
+    );
+    return conferencia.valida ? conferencia.dispositivoId : null;
+  }
+
+  /// Confere o cabeçalho distinguindo assinatura errada de relógio errado.
+  ///
+  /// A distinção importa porque os dois casos pedem coisas diferentes a quem
+  /// está com o celular na mão. Com a chave certa e o horário fora da janela,
+  /// o problema é o relógio de um dos aparelhos — e dizer "o aparelho recusou
+  /// a conexão" mandaria a pessoa procurar defeito no QR code.
+  ///
+  /// O HMAC é conferido antes do horário: só quem tem a chave fica sabendo que
+  /// o problema é o relógio.
+  static ConferenciaAssinatura conferir({
+    required String? cabecalho,
+    required String chaveSync,
+    required String metodo,
+    required String caminho,
+    required String corpo,
+    DateTime? agora,
+  }) {
+    const invalida = ConferenciaAssinatura._(SituacaoAssinatura.invalida);
+
+    if (cabecalho == null || !cabecalho.startsWith('$_prefixo ')) {
+      return invalida;
+    }
 
     final partes = cabecalho.substring(_prefixo.length + 1).split(':');
-    if (partes.length != 3) return null;
+    if (partes.length != 3) return invalida;
 
     final dispositivoId = partes[0];
     final momento = int.tryParse(partes[1]);
     final recebido = partes[2];
-    if (momento == null) return null;
-
-    final diferenca =
-        ((agora ?? DateTime.now()).millisecondsSinceEpoch - momento).abs();
-    if (diferenca > janelaAssinatura.inMilliseconds) return null;
+    if (momento == null) return invalida;
 
     final esperado = _calcular(chaveSync, metodo, caminho, corpo, momento);
 
     // Comparação de tempo constante: comparar com `==` vazaria, pelo tempo de
     // resposta, quantos bytes iniciais do HMAC um atacante acertou.
-    return _iguaisEmTempoConstante(esperado, recebido) ? dispositivoId : null;
+    if (!_iguaisEmTempoConstante(esperado, recebido)) return invalida;
+
+    final diferenca =
+        ((agora ?? DateTime.now()).millisecondsSinceEpoch - momento).abs();
+    if (diferenca > janelaAssinatura.inMilliseconds) {
+      return ConferenciaAssinatura._(
+        SituacaoAssinatura.foraDaJanela,
+        dispositivoId: dispositivoId,
+        momento: momento,
+      );
+    }
+
+    return ConferenciaAssinatura._(
+      SituacaoAssinatura.valida,
+      dispositivoId: dispositivoId,
+      momento: momento,
+    );
   }
 
   static String _calcular(
@@ -112,6 +156,68 @@ class Assinatura {
   }
 }
 
+enum SituacaoAssinatura {
+  valida,
+  invalida,
+
+  /// Assinada com a chave certa, mas com horário longe demais do deste
+  /// aparelho: um dos relógios está errado (ou é uma requisição repetida).
+  foraDaJanela,
+}
+
+class ConferenciaAssinatura {
+  final SituacaoAssinatura situacao;
+  final String? dispositivoId;
+
+  /// Horário que o remetente pôs na assinatura, em milissegundos.
+  final int? momento;
+
+  const ConferenciaAssinatura._(
+    this.situacao, {
+    this.dispositivoId,
+    this.momento,
+  });
+
+  bool get valida => situacao == SituacaoAssinatura.valida;
+}
+
+/// Resposta de erro para relógio fora de sincronia, em qualquer rota.
+///
+/// Leva o horário de quem responde, para que o outro lado saiba de quanto é a
+/// diferença e qual aparelho mostrar como adiantado ou atrasado.
+class ErroRelogio {
+  static const codigo = 'relogio';
+
+  /// Horário de quem respondeu, em milissegundos.
+  final int agora;
+
+  /// Aparelho cujas operações vieram com relógio no futuro, quando o problema
+  /// foi detectado no conteúdo, e não na assinatura. Pode ser um terceiro,
+  /// cujas operações chegaram por intermédio do par.
+  final String? dispositivo;
+
+  /// Quanto o relógio de [dispositivo] está à frente, em milissegundos.
+  final int? diferencaMs;
+
+  const ErroRelogio({required this.agora, this.dispositivo, this.diferencaMs});
+
+  Map<String, dynamic> toJson() => {
+    'erro': codigo,
+    'agora': agora,
+    'dispositivo': ?dispositivo,
+    'diferenca_ms': ?diferencaMs,
+  };
+
+  static ErroRelogio? fromJson(Map<String, dynamic> j) {
+    if (j['erro'] != codigo || j['agora'] is! num) return null;
+    return ErroRelogio(
+      agora: (j['agora'] as num).toInt(),
+      dispositivo: j['dispositivo'] as String?,
+      diferencaMs: (j['diferenca_ms'] as num?)?.toInt(),
+    );
+  }
+}
+
 /// Identificação devolvida por `/hello`.
 ///
 /// Não é autenticada, porque serve para o aparelho aparecer na lista antes de
@@ -123,22 +229,30 @@ class Apresentacao {
   final String? usuarioNome;
   final int versao;
 
+  /// Relógio de quem se apresenta, em milissegundos. Permite conferir os
+  /// relógios antes de trocar qualquer operação. `null` em aparelho antigo,
+  /// que não informava.
+  final int? agora;
+
   const Apresentacao({
     required this.dispositivoId,
     this.usuarioNome,
     this.versao = versaoProtocolo,
+    this.agora,
   });
 
   Map<String, dynamic> toJson() => {
     'dispositivo': dispositivoId,
     'usuario': usuarioNome,
     'versao': versao,
+    'agora': ?agora,
   };
 
   factory Apresentacao.fromJson(Map<String, dynamic> j) => Apresentacao(
     dispositivoId: j['dispositivo'] as String,
     usuarioNome: j['usuario'] as String?,
     versao: (j['versao'] as num?)?.toInt() ?? 0,
+    agora: (j['agora'] as num?)?.toInt(),
   );
 }
 

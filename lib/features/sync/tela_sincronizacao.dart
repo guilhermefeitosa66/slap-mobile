@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../app/componentes.dart';
 import '../../app/providers.dart';
 import '../../app/tema.dart';
+import '../../core/formato.dart';
 import 'cliente.dart';
 import 'compartilhar_inventario.dart';
 import 'descoberta.dart';
+import 'servidor.dart';
 
 /// Sincronização com os outros aparelhos do inventário.
 class TelaSincronizacao extends ConsumerStatefulWidget {
@@ -24,6 +29,15 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
   List<Par> _pares = const [];
   final _sincronizando = <String>{};
   final _resultados = <String, String>{};
+
+  /// Pares recusados por relógio, com a diferença medida. Sai daqui quando
+  /// uma sincronização com o par passa.
+  final _relogios = <String, RelogioDivergente>{};
+
+  /// Alguém tentou sincronizar com este aparelho e foi recusado por relógio.
+  EventoSync? _recusaRecebida;
+
+  StreamSubscription<EventoSync>? _eventos;
   String? _aviso;
 
   @override
@@ -34,6 +48,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
 
   @override
   void dispose() {
+    _eventos?.cancel();
     _descoberta?.dispose();
     super.dispose();
   }
@@ -41,6 +56,13 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
   Future<void> _ligar() async {
     final servidor = ref.read(servidorSyncProvider);
     final porta = await servidor.iniciar();
+
+    // O que os outros enviam a este aparelho também precisa aparecer: os
+    // números mudam, e uma recusa por relógio tem de ser explicada dos dois
+    // lados, não só no aparelho que iniciou.
+    _eventos = servidor.eventos
+        .where((e) => e.inventarioId == widget.inventarioId)
+        .listen(_aoReceber);
 
     final descoberta = Descoberta(
       dispositivoId: ref.read(bancoProvider).dispositivoId,
@@ -62,6 +84,25 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     });
   }
 
+  void _aoReceber(EventoSync evento) {
+    if (!mounted) return;
+    if (evento.recusadoPorRelogio) {
+      setState(() => _recusaRecebida = evento);
+      return;
+    }
+    if (evento.recebidas > 0) ref.read(revisaoProvider.notifier).mudou();
+    if (_recusaRecebida?.dispositivoRemoto == evento.dispositivoRemoto) {
+      setState(() => _recusaRecebida = null);
+    }
+  }
+
+  String _rotuloDoDispositivo(String dispositivoId) {
+    for (final par in _pares) {
+      if (par.dispositivoId == dispositivoId) return par.rotulo;
+    }
+    return 'aparelho ${dispositivoId.substring(0, 6)}';
+  }
+
   Future<void> _sincronizar(Par par) async {
     final inventario = ref.read(inventarioProvider(widget.inventarioId));
     if (inventario == null) return;
@@ -81,11 +122,20 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
 
       if (!mounted) return;
       setState(() {
+        _relogios.remove(par.dispositivoId);
         _resultados[par.dispositivoId] = resultado.houveTroca
             ? 'Recebidas ${resultado.recebidas}, enviadas ${resultado.enviadas}'
                   '${resultado.conflitos > 0 ? ' · ${resultado.conflitos} conflitos' : ''}'
             : 'Já estava tudo sincronizado';
       });
+    } on RelogioDivergente catch (e) {
+      if (mounted) {
+        setState(() {
+          _relogios[par.dispositivoId] = e;
+          _resultados[par.dispositivoId] =
+              'Relógios diferentes — nada foi trocado';
+        });
+      }
     } on FalhaSync catch (e) {
       if (mounted) {
         setState(() => _resultados[par.dispositivoId] = e.mensagem);
@@ -133,6 +183,11 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
               aoTocar: () =>
                   context.push('/inventario/${widget.inventarioId}/conflitos'),
             ),
+          if (_recusaRecebida case final recusa?)
+            _AvisoRelogio(
+              aparelho: _rotuloDoDispositivo(recusa.dispositivoRemoto),
+              diferenca: recusa.diferencaRelogio!,
+            ),
           if (_aviso != null) _Orientacao(texto: _aviso!),
           const SizedBox(height: 8),
           Row(
@@ -154,7 +209,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
           if (_pares.isEmpty)
             const _NenhumPar()
           else
-            for (final par in _pares)
+            for (final par in _pares) ...[
               Card(
                 child: ListTile(
                   contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
@@ -201,6 +256,12 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                       : () => _sincronizar(par),
                 ),
               ),
+              if (_relogios[par.dispositivoId] case final relogio?)
+                _AvisoRelogio(
+                  aparelho: relogio.aparelho,
+                  diferenca: relogio.diferenca,
+                ),
+            ],
         ],
       ),
       floatingActionButton: _pares.isEmpty
@@ -275,6 +336,81 @@ class _Orientacao extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(texto, style: Theme.of(context).textTheme.bodySmall),
+    );
+  }
+}
+
+/// Relógios longe demais: qual aparelho, de quanto, e o que fazer.
+///
+/// Mostra as duas horas lado a lado. Não há como o aplicativo saber qual das
+/// duas está certa — mas quem está com os aparelhos na mão sabe, olhando para
+/// um relógio qualquer.
+class _AvisoRelogio extends StatelessWidget {
+  final String aparelho;
+  final Duration diferenca;
+
+  const _AvisoRelogio({required this.aparelho, required this.diferenca});
+
+  @override
+  Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).naoLocalizado;
+    final tema = Theme.of(context);
+    final estilo = tema.textTheme.bodyMedium?.copyWith(color: tom.texto);
+    final agora = DateTime.now();
+    final hora = DateFormat('HH:mm');
+    final data = DateFormat('dd/MM');
+    final outro = agora.add(diferenca);
+    final mesmoDia = DateUtils.isSameDay(agora, outro);
+    String marca(DateTime t) =>
+        mesmoDia ? hora.format(t) : '${data.format(t)} ${hora.format(t)}';
+
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 2, bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: tom.fundo,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.schedule, color: tom.texto, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Relógios fora de sincronia',
+                    style: tema.textTheme.titleSmall?.copyWith(
+                      color: tom.texto,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'O relógio de $aparelho está '
+              '${descreverDuracao(diferenca.abs())} '
+              '${diferenca.isNegative ? 'atrasado' : 'adiantado'} em relação '
+              'a este aparelho. Nada foi trocado com ele.',
+              style: estilo,
+            ),
+            const SizedBox(height: 8),
+            Text('Este aparelho: ${marca(agora)}', style: estilo),
+            Text('O outro: ${marca(outro)}', style: estilo),
+            const SizedBox(height: 8),
+            Text(
+              'Nos dois aparelhos, abra Configurações → Sistema → Data e hora '
+              'e ative a data e a hora automáticas. Depois, sincronize de novo.',
+              style: estilo?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
