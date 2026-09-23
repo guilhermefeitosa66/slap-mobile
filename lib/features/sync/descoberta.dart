@@ -263,8 +263,9 @@ class Descoberta {
       final id = j['disp'] as String?;
       final portaRemota = (j['porta'] as num?)?.toInt();
 
+      // Aparelho de outra versão aparece na lista mesmo assim: esconder faria
+      // a pessoa procurar defeito na rede, e a sincronização explica.
       if (id == null || id == dispositivoId || portaRemota == null) return;
-      if (j['v'] != versaoProtocolo) return;
 
       _adicionar(
         Par(

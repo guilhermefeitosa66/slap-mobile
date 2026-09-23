@@ -5,6 +5,7 @@ import '../../core/formato.dart';
 import '../../core/hlc.dart';
 import '../../core/version_vector.dart';
 import '../../data/repos/operacoes.dart';
+import 'cifra.dart';
 import 'protocolo.dart';
 
 class FalhaSync implements Exception {
@@ -184,6 +185,16 @@ class ClienteSync {
     final apresentacao = await apresentar(par.host, par.porta);
     final depois = relogio();
 
+    // Versão diferente não troca nada: um dos lados interpretaria errado.
+    if (apresentacao.versao != versaoProtocolo) {
+      throw FalhaSync(
+        mensagemVersaoDiferente(
+          quem: 'O aparelho de ${par.rotulo}',
+          versao: apresentacao.versao,
+        ),
+      );
+    }
+
     final remoto = apresentacao.agora;
     if (remoto == null) return;
 
@@ -237,6 +248,7 @@ class ClienteSync {
       rotulo: par.rotulo,
       metodo: 'POST',
       caminho: Rotas.pull,
+      inventarioId: inventarioId,
       corpo: PedidoPull(
         inventarioId: inventarioId,
         vetor: ops.vetorParaPedido(inventarioId),
@@ -268,6 +280,7 @@ class ClienteSync {
       rotulo: par.rotulo,
       metodo: 'POST',
       caminho: Rotas.push,
+      inventarioId: inventarioId,
       corpo: LoteOperacoes(
         inventarioId: inventarioId,
         ops: faltantes,
@@ -299,12 +312,16 @@ class ClienteSync {
       rotulo: par.rotulo,
       metodo: 'GET',
       caminho: Rotas.pacote,
-      query: {'inventario': inventarioId},
+      inventarioId: inventarioId,
       chaveSync: chaveSync,
     );
     return PacoteInventario.fromJson(resposta);
   }
 
+  /// Uma requisição ao par.
+  ///
+  /// Com [chaveSync] — tudo menos a apresentação —, o corpo vai cifrado e
+  /// assinado, o inventário vai na query, e a resposta volta cifrada.
   Future<Map<String, dynamic>> _requisitar({
     required String host,
     required int porta,
@@ -312,10 +329,11 @@ class ClienteSync {
     required String caminho,
     String? rotulo,
     Map<String, dynamic>? corpo,
-    Map<String, String>? query,
+    String? inventarioId,
     String? chaveSync,
   }) async {
     final cliente = HttpClient()..connectionTimeout = tempoLimite;
+    final cifra = chaveSync == null ? null : CifraSync(chaveSync);
 
     try {
       final uri = Uri(
@@ -323,39 +341,56 @@ class ClienteSync {
         host: host,
         port: porta,
         path: caminho,
-        queryParameters: query,
+        queryParameters: inventarioId == null
+            ? null
+            : {'inventario': inventarioId},
       );
 
       final req = metodo == 'GET'
           ? await cliente.getUrl(uri)
           : await cliente.postUrl(uri);
 
-      final textoCorpo = corpo == null ? '' : jsonEncode(corpo);
+      final textoCorpo = corpo == null
+          ? ''
+          : cifra == null
+          ? jsonEncode(corpo)
+          : cifra.cifrar(
+              corpo,
+              contexto: CifraSync.contextoPedido(metodo, caminho),
+            );
 
       if (chaveSync != null) {
-        req.headers.set(
-          HttpHeaders.authorizationHeader,
-          Assinatura.gerar(
-            chaveSync: chaveSync,
-            dispositivoId: ops.dispositivoId,
-            metodo: metodo,
-            // A assinatura cobre o caminho sem a query, que é o que o
-            // servidor também usa ao conferir.
-            caminho: caminho,
-            corpo: textoCorpo,
-            agora: relogio(),
-          ),
-        );
+        req.headers
+          ..set(cabecalhoVersao, '$versaoProtocolo')
+          ..set(
+            HttpHeaders.authorizationHeader,
+            Assinatura.gerar(
+              chaveSync: chaveSync,
+              dispositivoId: ops.dispositivoId,
+              metodo: metodo,
+              // A assinatura cobre o caminho sem a query, que é o que o
+              // servidor também usa ao conferir, e o corpo como ele
+              // trafega: cifrado.
+              caminho: caminho,
+              corpo: textoCorpo,
+              agora: relogio(),
+            ),
+          );
       }
 
       if (corpo != null) {
-        req.headers.contentType = ContentType.json;
+        req.headers.contentType = cifra == null
+            ? ContentType.json
+            : ContentType.text;
         req.write(textoCorpo);
       }
 
       final resposta = await req.close().timeout(tempoLimite);
       final texto = await utf8.decoder.bind(resposta).join();
 
+      if (resposta.statusCode == HttpStatus.upgradeRequired) {
+        throw _versaoRecusada(texto, rotulo ?? host);
+      }
       if (resposta.statusCode == HttpStatus.conflict) {
         throw _relogioRecusado(texto, rotulo ?? host);
       }
@@ -368,12 +403,44 @@ class ClienteSync {
         throw FalhaSync('Resposta inesperada (${resposta.statusCode}).');
       }
 
-      return jsonDecode(texto) as Map<String, dynamic>;
+      if (cifra == null) return jsonDecode(texto) as Map<String, dynamic>;
+      try {
+        return cifra.decifrar(
+          texto,
+          contexto: CifraSync.contextoResposta(metodo, caminho),
+        );
+      } on CorpoIlegivel {
+        throw FalhaSync(
+          'A resposta de ${rotulo ?? host} não pôde ser decifrada. Os dois '
+          'aparelhos têm a mesma versão do aplicativo?',
+        );
+      }
     } on SocketException catch (e) {
       throw FalhaSync('Não foi possível falar com $host: ${e.message}');
     } finally {
       cliente.close(force: true);
     }
+  }
+
+  FalhaSync _versaoRecusada(String texto, String rotulo) {
+    try {
+      final j = jsonDecode(texto) as Map<String, dynamic>;
+      final versao = (j['versao'] as num?)?.toInt();
+      if (versao != null) {
+        return FalhaSync(
+          mensagemVersaoDiferente(
+            quem: 'O aparelho de $rotulo',
+            versao: versao,
+          ),
+        );
+      }
+    } catch (_) {
+      // Resposta sem o formato esperado: a mensagem genérica serve.
+    }
+    return FalhaSync(
+      '$rotulo usa outra versão do aplicativo. Atualize os dois aparelhos '
+      'para a mesma versão e sincronize de novo.',
+    );
   }
 
   /// Traduz a recusa por relógio do outro lado.

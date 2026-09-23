@@ -7,6 +7,7 @@ import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';
 import '../../domain/patrimonio.dart';
 import '../../domain/valores.dart';
+import 'cifra.dart';
 
 /// Tipo de serviço anunciado por mDNS. O primeiro rótulo precisa ter no
 /// máximo 15 caracteres, por especificação (RFC 6335).
@@ -18,7 +19,20 @@ const int portaMulticast = 47771;
 
 /// Versão do protocolo. Aparelhos com versões diferentes se recusam a
 /// sincronizar, em vez de trocarem dados que um dos lados interpreta errado.
-const int versaoProtocolo = 1;
+///
+/// 2: corpo cifrado (AES-GCM), chaves derivadas por HKDF, inventário na query
+/// e cabeças nos pedidos.
+const int versaoProtocolo = 2;
+
+/// Cabeçalho com a versão do protocolo de quem pede.
+const String cabecalhoVersao = 'x-slap-versao';
+
+/// Explicação para quando as versões do protocolo não batem.
+String mensagemVersaoDiferente({required String quem, required int versao}) =>
+    '$quem usa uma versão '
+    '${versao < versaoProtocolo ? 'anterior' : 'mais nova'} do aplicativo '
+    '(protocolo $versao; este usa $versaoProtocolo). Atualize os dois '
+    'aparelhos para a mesma versão e sincronize de novo.';
 
 /// Janela de tolerância da assinatura. Limita a repetição de uma requisição
 /// capturada na rede.
@@ -38,10 +52,9 @@ class Rotas {
 /// escreve, e uma requisição capturada não pode ser alterada nem repetida fora
 /// da janela de tempo.
 ///
-/// **Limite assumido:** o corpo trafega em claro. Na rede local, quem estiver
-/// autenticado nela e capturando pacotes consegue ler dados patrimoniais.
-/// Não há credencial no tráfego, e o alcance é o segmento local. Cifrar o
-/// corpo está no roteiro; ver `docs/02-arquitetura.md`, seção 5.9.
+/// A assinatura cobre o corpo como ele trafega — cifrado (ver [CifraSync]) —,
+/// e usa uma chave derivada da `chave_sync`, e não ela mesma. Ver
+/// `docs/02-arquitetura.md`, seção 5.9.
 class Assinatura {
   static const _prefixo = 'SLAP';
 
@@ -142,7 +155,11 @@ class Assinatura {
   ) {
     final resumoCorpo = sha256.convert(utf8.encode(corpo)).toString();
     final mensagem = '$metodo\n$caminho\n$momento\n$resumoCorpo';
-    final hmac = Hmac(sha256, base64Url.decode(chaveSync));
+    final chave = hkdfSha256(
+      base64Url.decode(chaveSync),
+      info: utf8.encode(CifraSync.infoAssinatura),
+    );
+    final hmac = Hmac(sha256, chave);
     return base64Url.encode(hmac.convert(utf8.encode(mensagem)).bytes);
   }
 

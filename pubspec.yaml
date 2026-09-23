@@ -51,6 +51,7 @@ dependencies:
   collection: ^1.19.1
   nsd: ^5.0.0
   sqlite3: ^3.5.2
+  pointycastle: ^4.0.0
 
 dev_dependencies:
   flutter_test:

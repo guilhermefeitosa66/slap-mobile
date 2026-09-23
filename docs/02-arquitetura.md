@@ -267,10 +267,10 @@ Sem servidor central e sem papel fixo (spec §43). Cada aparelho é simultaneame
 servidor: um `HttpServer` do `dart:io` numa porta efêmera.
 
 ```
-GET  /hello                      → identidade do aparelho e inventários que possui
-POST /sync/pull  {inv, vector}   → operações que o solicitante não tem
-POST /sync/push  {inv, ops[]}    → operações enviadas pelo solicitante
-GET  /inventory/{id}/bundle      → réplica inicial completa (distribuição do §38)
+GET  /hello                          → identidade, versão e horário do aparelho (em claro)
+POST /sync/pull?inventario={id}      → {vetor, cabeças} → operações que o solicitante não tem
+POST /sync/push?inventario={id}      → {ops[], contextos, vetor, cabeças} → aplica
+GET  /inventario/pacote?inventario={id} → réplica inicial: inventário e dados do SUAP
 ```
 
 Uma sincronização entre A e B é `pull` seguido de `push`, nos dois sentidos. Como cada réplica
@@ -313,17 +313,33 @@ Quem escaneia passa a conhecer a chave, encontra o par na rede e puxa o bundle i
 Isso responde três coisas de uma vez: quem participa do inventário, como a réplica inicial chega
 ao aparelho (§38) e como autorizar a sincronização.
 
-### 5.9 Segurança e seu limite
+### 5.9 Segurança
 
-Toda requisição é assinada com HMAC-SHA256 da `sync_key` do inventário, sobre método, caminho,
-hash do corpo e timestamp. Quem não tem a chave não lê nem escreve, e uma requisição capturada
-não pode ser modificada nem repetida fora da janela de tempo.
+Três camadas, todas derivadas da `sync_key` que o QR code entrega:
 
-**Limitação assumida e documentada:** o corpo trafega em claro. Na rede local, quem já estiver
-autenticado nela e capturando pacotes consegue ler dados patrimoniais — descrição, sala,
-responsável. Não há credencial nem dado pessoal sensível no tráfego, e o alcance é o segmento
-local. Cifrar o corpo com AES-GCM derivado da `sync_key` está no roteiro; não entrou na v1 para
-não adicionar dependência de criptografia antes do protocolo estar estável.
+- **Autenticação.** Toda requisição é assinada com HMAC-SHA256 sobre método, caminho, hash do
+  corpo e timestamp. Quem não tem a chave não lê nem escreve, e uma requisição capturada não pode
+  ser modificada nem repetida fora da janela de 5 minutos. Chave errada e inventário inexistente
+  recebem a mesma resposta, para não confirmar a existência do inventário a quem não tem a chave.
+- **Sigilo (protocolo 2).** O corpo de cada requisição e de cada resposta autenticada vai cifrado
+  com AES-256-GCM — antes, quem estivesse na mesma rede capturando pacotes lia descrição, sala e
+  responsável dos patrimônios. O conteúdo é comprimido com gzip antes de cifrar, e o GCM autentica
+  também método, caminho e sentido: um corpo não serve em outra rota, e uma resposta não passa por
+  pedido. Nonce de 96 bits de `Random.secure()`, novo a cada mensagem; com a mesma chave, a chance
+  de repetir é desprezível muito além das 2^32 mensagens — um inventário troca alguns milhares.
+  Na rede vai `base64url(nonce ‖ cifrado ‖ etiqueta)`, e a assinatura cobre esse texto.
+- **Separação de chaves.** A `sync_key` não é usada direto: HKDF-SHA256 deriva dela uma chave para
+  a cifra (`slap/sync/cifra`) e outra para a assinatura (`slap/sync/assinatura`).
+
+Em claro ficam só a apresentação (`/hello`: identidade do aparelho, nome do usuário, versão e
+horário — o mesmo que o beacon já anuncia) e o identificador do inventário na query, necessário
+para o servidor saber com qual chave conferir a assinatura antes de confiar em qualquer coisa.
+
+**Versões.** A mudança de formato subiu o protocolo para 2. Pedido com outra versão recebe `426`
+com a versão de quem responde, e a apresentação também traz a versão: nos dois sentidos, a tela
+diz qual aparelho está com versão anterior ou mais nova e pede para atualizar os dois. Aparelho de
+outra versão continua aparecendo na lista de descoberta — escondê-lo faria a pessoa procurar
+defeito na rede.
 
 ### 5.10 Encerramento e campos do inventário
 
