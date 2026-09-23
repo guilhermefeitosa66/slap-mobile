@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../app/app.dart';
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
 import '../../domain/divergencia.dart';
 import '../../domain/patrimonio.dart';
 
@@ -46,7 +47,7 @@ class _TelaItensState extends ConsumerState<TelaItens> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
             child: TextField(
               controller: _busca,
               decoration: InputDecoration(
@@ -63,10 +64,10 @@ class _TelaItensState extends ConsumerState<TelaItens> {
             ),
           ),
           SizedBox(
-            height: 48,
+            height: 56,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 _Filtro(
                   rotulo: 'Todos',
@@ -77,7 +78,7 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                   _Filtro(
                     rotulo: c.rotulo,
                     ativo: _filtro == c,
-                    cor: CoresResultado.de(c),
+                    cor: CoresResultado.of(context).de(c).texto,
                     aoTocar: () => setState(() => _filtro = c),
                   ),
               ],
@@ -94,7 +95,8 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                   )
                 : ListView.separated(
                     itemCount: itens.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, indent: 50),
                     itemBuilder: (_, i) => _LinhaPatrimonio(
                       patrimonio: itens[i],
                       aoTocar: () => _abrirDetalhe(itens[i]),
@@ -131,15 +133,37 @@ class _Filtro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
         label: Text(rotulo),
         selected: ativo,
+        showCheckmark: false,
+        labelStyle: TextStyle(
+          color: ativo ? esquema.onPrimary : esquema.onSurface,
+          fontWeight: ativo ? FontWeight.w600 : FontWeight.w500,
+        ),
+        side: BorderSide(
+          color: ativo ? esquema.primary : esquema.outlineVariant,
+        ),
         onSelected: (_) => aoTocar(),
         avatar: cor == null
             ? null
-            : CircleAvatar(backgroundColor: cor, radius: 6),
+            : ExcludeSemantics(
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: cor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: ativo ? esquema.onPrimary : Colors.transparent,
+                    ),
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -155,44 +179,71 @@ class _LinhaPatrimonio extends StatelessWidget {
   Widget build(BuildContext context) {
     final classificacao = classificar(patrimonio);
     final divergencias = divergenciasDe(patrimonio);
+    final tom = CoresResultado.of(context).de(classificacao);
+    final tema = Theme.of(context);
 
-    return ListTile(
-      leading: Icon(
-        CoresResultado.icone(classificacao),
-        color: CoresResultado.de(classificacao),
-      ),
-      title: Text(
-        patrimonio.descricao ?? 'Sem descrição',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Tombo ${patrimonio.tombo} · ${patrimonio.salaEfetiva ?? "sem sala"}',
-          ),
-          if (divergencias.isNotEmpty)
-            Text(
-              divergencias.map((d) => d.campo.rotulo).join(', '),
-              style: const TextStyle(
-                color: CoresResultado.alerta,
-                fontSize: 12,
+    return InkWell(
+      onTap: aoTocar,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                CoresResultado.icone(classificacao),
+                color: tom.texto,
+                size: 22,
+                semanticLabel: classificacao.rotulo,
               ),
             ),
-        ],
-      ),
-      trailing: patrimonio.exigeAtencao
-          ? Tooltip(
-              message: 'Requer providência',
-              child: Icon(
-                Icons.priority_high,
-                color: Theme.of(context).colorScheme.error,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    patrimonio.descricao ?? 'Sem descrição',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tema.textTheme.bodyMedium?.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tombo ${patrimonio.tombo} · '
+                    '${patrimonio.salaEfetiva ?? "sem sala"}',
+                    style: tema.textTheme.bodySmall,
+                  ),
+                  if (divergencias.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        divergencias.map((d) => d.campo.rotulo).join(', '),
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: tom.texto,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            )
-          : null,
-      isThreeLine: divergencias.isNotEmpty,
-      onTap: aoTocar,
+            ),
+            if (patrimonio.exigeAtencao)
+              Tooltip(
+                message: 'Requer providência',
+                child: Icon(
+                  Icons.priority_high,
+                  color: tema.colorScheme.error,
+                  semanticLabel: 'Requer providência',
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -231,16 +282,16 @@ class DetalhePatrimonio extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(
-                CoresResultado.icone(classificacao),
-                color: CoresResultado.de(classificacao),
+              IconeEmTom(
+                icone: CoresResultado.icone(classificacao),
+                tom: CoresResultado.of(context).de(classificacao),
+                tamanho: 32,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Text(
                 classificacao.rotulo,
-                style: TextStyle(
-                  color: CoresResultado.de(classificacao),
-                  fontWeight: FontWeight.bold,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: CoresResultado.of(context).de(classificacao).texto,
                 ),
               ),
             ],
@@ -264,25 +315,7 @@ class DetalhePatrimonio extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            for (final d in divergencias)
-              Card(
-                color: CoresResultado.alerta.withValues(alpha: 0.08),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        d.campo.rotulo,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('SUAP: ${d.valorSuap ?? "(vazio)"}'),
-                      Text('Encontrado: ${d.valorEncontrado ?? "(vazio)"}'),
-                    ],
-                  ),
-                ),
-              ),
+            for (final d in divergencias) _CartaoDivergencia(divergencia: d),
           ],
 
           const SizedBox(height: 16),
@@ -380,6 +413,45 @@ class _Campo extends StatelessWidget {
             child: Text(rotulo, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(child: Text(valor)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CartaoDivergencia extends StatelessWidget {
+  final Divergencia divergencia;
+
+  const _CartaoDivergencia({required this.divergencia});
+
+  @override
+  Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).jaVerificado;
+    final estilo = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: tom.texto, fontSize: 13.5);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            divergencia.campo.rotulo,
+            style: estilo?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 3),
+          Text('SUAP: ${divergencia.valorSuap ?? "(vazio)"}', style: estilo),
+          Text(
+            'Encontrado: ${divergencia.valorEncontrado ?? "(vazio)"}',
+            style: estilo,
+          ),
         ],
       ),
     );

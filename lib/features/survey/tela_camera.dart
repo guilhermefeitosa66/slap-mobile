@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import '../../app/app.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../core/codigo.dart';
 import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
 import 'estado_levantamento.dart';
+import 'linha_leitura.dart';
 
 /// Leitura contínua pela câmera.
 ///
@@ -138,9 +140,15 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
         .where((l) => l.resultado == ResultadoLeitura.sucesso)
         .length;
 
+    final apoio = CoresApoio.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Lidos: $sucessos'),
+        // A câmera fica escura nos dois temas: um cabeçalho claro sobre o
+        // quadro da câmera ofusca quem está mirando a etiqueta.
+        backgroundColor: PaletaClara.tinta,
+        foregroundColor: Colors.white,
+        title: Text('Lidos: ${formatarInteiro(sucessos)}'),
         actions: [
           IconButton(
             tooltip: 'Lanterna',
@@ -159,14 +167,12 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
           if (config != null)
             Container(
               width: double.infinity,
-              color: Theme.of(context).colorScheme.primaryContainer,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: apoio.faixa,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
               child: Text(
                 '${config.sala} · ${config.conservacao.rotulo} · '
                 '${config.situacao.rotulo}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                ),
+                style: TextStyle(color: apoio.sobreFaixa, fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -200,55 +206,24 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
                   )
                 : ListView.separated(
                     itemCount: _lidos.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (_, i) => _LinhaCamera(registro: _lidos[i]),
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, indent: 50),
+                    itemBuilder: (_, i) => LinhaLeitura(registro: _lidos[i]),
                   ),
           ),
         ],
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(12),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: FilledButton.icon(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.check),
           label: Text(
-            sucessos == 0 ? 'Concluir' : 'Concluir ($sucessos registrados)',
+            sucessos == 0
+                ? 'Concluir'
+                : 'Concluir (${formatarInteiro(sucessos)} registrados)',
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _LinhaCamera extends StatelessWidget {
-  final LeituraRegistrada registro;
-
-  const _LinhaCamera({required this.registro});
-
-  @override
-  Widget build(BuildContext context) {
-    final (cor, icone) = switch (registro.resultado) {
-      ResultadoLeitura.sucesso => (CoresResultado.sucesso, Icons.check_circle),
-      ResultadoLeitura.jaVerificado => (
-        CoresResultado.alerta,
-        Icons.replay_circle_filled,
-      ),
-      ResultadoLeitura.naoLocalizado => (CoresResultado.erro, Icons.error),
-    };
-
-    return ListTile(
-      dense: true,
-      leading: Icon(icone, color: cor),
-      title: Text(
-        registro.patrimonio?.descricao ?? 'Código ${registro.codigoLido}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        registro.patrimonio == null
-            ? 'Não localizado neste inventário'
-            : 'Tombo ${registro.patrimonio!.tombo}',
-        style: TextStyle(color: cor),
       ),
     );
   }
@@ -265,8 +240,8 @@ class _Mira extends StatelessWidget {
           width: 260,
           height: 120,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.white70, width: 3),
-            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white, width: 3),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../app/app.dart';
+import '../../app/componentes.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../app/providers.dart';
 import '../../domain/divergencia.dart';
 import '../sync/compartilhar_inventario.dart';
@@ -40,7 +42,7 @@ class TelaDashboard extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async => ref.read(revisaoProvider.notifier).mudou(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 112),
           children: [
             if (vazio)
               _CartaoImportar(inventarioId: inventarioId)
@@ -49,13 +51,13 @@ class TelaDashboard extends ConsumerWidget {
               const SizedBox(height: 8),
               _Grupos(inventarioId: inventarioId, progresso: progresso),
               if (conflitos > 0) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 _AvisoConflitos(
                   inventarioId: inventarioId,
                   quantidade: conflitos,
                 ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               _Acoes(inventarioId: inventarioId),
             ],
           ],
@@ -66,7 +68,7 @@ class TelaDashboard extends ConsumerWidget {
           : FloatingActionButton.extended(
               onPressed: () =>
                   context.push('/inventario/$inventarioId/levantamento'),
-              icon: const Icon(Icons.qr_code_scanner),
+              icon: const IconeCodigoBarras(),
               label: const Text('Levantar'),
             ),
     );
@@ -80,6 +82,8 @@ class _CartaoProgresso extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -93,38 +97,47 @@ class _CartaoProgresso extends StatelessWidget {
                 Text(
                   // Percentual fracionário, ao contrário da divisão inteira do
                   // SLAP, que mostra 99% durante todo o último 1% do trabalho.
-                  progresso.percentual.toStringAsFixed(1),
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  formatarPercentual(progresso.percentual),
+                  style: tema.textTheme.displaySmall,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '%',
+                  style: tema.textTheme.titleLarge?.copyWith(
+                    color: tema.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const Text('%', style: TextStyle(fontSize: 20)),
                 const Spacer(),
                 if (progresso.concluido)
-                  const Chip(
-                    avatar: Icon(Icons.check, size: 18),
-                    label: Text('Concluído'),
+                  Chip(
+                    avatar: Icon(
+                      Icons.check,
+                      size: 18,
+                      color: CoresResultado.of(context).registrado.texto,
+                    ),
+                    label: const Text('Concluído'),
                   ),
               ],
             ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: progresso.total == 0 ? 0 : progresso.percentual / 100,
-              minHeight: 10,
-              borderRadius: BorderRadius.circular(5),
+            const SizedBox(height: 16),
+            BarraProgresso(
+              valor: progresso.total == 0 ? 0 : progresso.percentual / 100,
+              espessura: 10,
             ),
             const SizedBox(height: 12),
             Text(
-              '${progresso.verificados} verificados · '
-              '${progresso.pendentes} pendentes · '
-              '${progresso.total} no total',
-              style: Theme.of(context).textTheme.bodyMedium,
+              '${formatarInteiro(progresso.verificados)} verificados · '
+              '${formatarInteiro(progresso.pendentes)} pendentes · '
+              '${formatarInteiro(progresso.total)} no total',
+              style: tema.textTheme.bodyMedium,
             ),
             if (progresso.ignorados > 0) ...[
               const SizedBox(height: 4),
               Text(
-                '${progresso.ignorados} fora do inventário por elemento de despesa',
-                style: Theme.of(context).textTheme.bodySmall,
+                '${formatarInteiro(progresso.ignorados)} fora do inventário '
+                'por elemento de despesa',
+                style: tema.textTheme.bodySmall,
               ),
             ],
           ],
@@ -143,49 +156,51 @@ class _Grupos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cores = CoresResultado.of(context);
+    final tema = Theme.of(context);
+
     final grupos = [
-      (Classificacao.ok, progresso.ok, 'Sem alteração no SUAP'),
+      (Classificacao.ok, 'Itens OK', progresso.ok, 'Sem alteração no SUAP'),
       (
         Classificacao.divergente,
+        'Divergentes',
         progresso.divergentes,
         'Precisam de atualização',
       ),
       (
         Classificacao.naoLocalizado,
+        'Não localizados',
         progresso.naoLocalizados,
-        'Não encontrados',
+        'Ainda não encontrados',
       ),
     ];
 
-    return Column(
-      children: [
-        for (final (classificacao, quantidade, descricao) in grupos)
-          Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: CoresResultado.de(
-                  classificacao,
-                ).withValues(alpha: 0.15),
-                child: Icon(
-                  CoresResultado.icone(classificacao),
-                  color: CoresResultado.de(classificacao),
-                ),
-              ),
-              title: Text(classificacao.rotulo),
-              subtitle: Text(descricao),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$quantidade',
-                    style: Theme.of(context).textTheme.titleLarge,
+    return CartaoAgrupado(
+      linhas: [
+        for (final (classificacao, titulo, quantidade, descricao) in grupos)
+          ListTile(
+            leading: IconeEmTom(
+              icone: CoresResultado.icone(classificacao),
+              tom: cores.de(classificacao),
+            ),
+            title: Text(titulo, style: tema.textTheme.titleSmall),
+            subtitle: Text(descricao),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  formatarInteiro(quantidade),
+                  style: tema.textTheme.titleLarge?.copyWith(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const Icon(Icons.chevron_right),
-                ],
-              ),
-              onTap: () => context.push(
-                '/inventario/$inventarioId/itens?grupo=${classificacao.name}',
-              ),
+                ),
+                const SizedBox(width: 4),
+                const SetaNavegacao(),
+              ],
+            ),
+            onTap: () => context.push(
+              '/inventario/$inventarioId/itens?grupo=${classificacao.name}',
             ),
           ),
       ],
@@ -201,25 +216,45 @@ class _AvisoConflitos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = Theme.of(context).colorScheme;
+    final tom = CoresResultado.of(context).naoLocalizado;
+    final tema = Theme.of(context);
 
-    return Card(
-      color: cores.errorContainer,
-      child: ListTile(
-        leading: Icon(
-          Icons.warning_amber_rounded,
-          color: cores.onErrorContainer,
-        ),
-        title: Text(
-          '$quantidade ${quantidade == 1 ? 'conflito' : 'conflitos'}',
-          style: TextStyle(color: cores.onErrorContainer),
-        ),
-        subtitle: Text(
-          'Duas pessoas alteraram o mesmo campo sem saber uma da outra.',
-          style: TextStyle(color: cores.onErrorContainer),
-        ),
-        trailing: Icon(Icons.chevron_right, color: cores.onErrorContainer),
+    return Material(
+      color: tom.fundo,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () => context.push('/inventario/$inventarioId/conflitos'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: tom.texto),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$quantidade ${quantidade == 1 ? 'conflito' : 'conflitos'}',
+                      style: tema.textTheme.titleSmall?.copyWith(
+                        color: tom.texto,
+                      ),
+                    ),
+                    Text(
+                      'Duas pessoas alteraram o mesmo campo sem saber uma '
+                      'da outra.',
+                      style: tema.textTheme.bodySmall?.copyWith(
+                        color: tom.texto,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SetaNavegacao(cor: tom.texto),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -259,17 +294,15 @@ class _Acoes extends StatelessWidget {
       ),
     ];
 
-    return Column(
-      children: [
+    return CartaoAgrupado(
+      linhas: [
         for (final (icone, titulo, descricao, rota) in acoes)
-          Card(
-            child: ListTile(
-              leading: Icon(icone),
-              title: Text(titulo),
-              subtitle: Text(descricao),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/inventario/$inventarioId/$rota'),
-            ),
+          ListTile(
+            leading: Icon(icone),
+            title: Text(titulo),
+            subtitle: Text(descricao),
+            trailing: const SetaNavegacao(),
+            onTap: () => context.push('/inventario/$inventarioId/$rota'),
           ),
       ],
     );

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
 import 'cliente.dart';
 import 'compartilhar_inventario.dart';
 import 'descoberta.dart';
@@ -123,30 +125,15 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 112),
         children: [
           if (conflitos > 0)
-            Card(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: ListTile(
-                leading: const Icon(Icons.warning_amber_rounded),
-                title: Text('$conflitos conflitos para conferir'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push(
-                  '/inventario/${widget.inventarioId}/conflitos',
-                ),
-              ),
+            _AvisoConflitos(
+              quantidade: conflitos,
+              aoTocar: () =>
+                  context.push('/inventario/${widget.inventarioId}/conflitos'),
             ),
-          if (_aviso != null)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _aviso!,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ),
+          if (_aviso != null) _Orientacao(texto: _aviso!),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -170,24 +157,42 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
             for (final par in _pares)
               Card(
                 child: ListTile(
-                  leading: CircleAvatar(
+                  contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  leading: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Icon(
                       par.origem == 'mdns'
                           ? Icons.wifi_tethering
                           : Icons.podcasts,
+                      color: Theme.of(context).colorScheme.primary,
+                      semanticLabel: par.origem == 'mdns'
+                          ? 'Encontrado por mDNS'
+                          : 'Encontrado pelo anúncio na rede',
                     ),
                   ),
-                  title: Text(par.rotulo),
+                  title: Text(
+                    par.rotulo,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                   subtitle: Text(
                     _resultados[par.dispositivoId] ?? par.endereco,
                   ),
                   trailing: _sincronizando.contains(par.dispositivoId)
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
                         )
                       : IconButton(
+                          tooltip: 'Sincronizar com ${par.rotulo}',
                           icon: const Icon(Icons.sync),
                           onPressed: () => _sincronizar(par),
                         ),
@@ -205,6 +210,71 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
               icon: const Icon(Icons.sync),
               label: const Text('Sincronizar todos'),
             ),
+    );
+  }
+}
+
+class _AvisoConflitos extends StatelessWidget {
+  final int quantidade;
+  final VoidCallback aoTocar;
+
+  const _AvisoConflitos({required this.quantidade, required this.aoTocar});
+
+  @override
+  Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).naoLocalizado;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: aoTocar,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: tom.texto),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    '$quantidade ${quantidade == 1 ? 'conflito' : 'conflitos'} '
+                    'para conferir',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: tom.texto,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                SetaNavegacao(cor: tom.texto),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Quadro de orientação, mais discreto que um cartão: não é ação, é contexto.
+class _Orientacao extends StatelessWidget {
+  final String texto;
+
+  const _Orientacao({required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: CoresApoio.of(context).aviso,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(texto, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

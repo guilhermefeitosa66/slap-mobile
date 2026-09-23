@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../sync/entrar_inventario.dart';
 
 /// Lista dos inventários que existem neste aparelho.
@@ -16,19 +19,35 @@ class TelaInventarios extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventários'),
+        toolbarHeight: 72,
+        title: Text(
+          'Inventários',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
         actions: [
-          IconButton(
+          IconButton.outlined(
             tooltip: 'Meus dados',
             icon: const Icon(Icons.person_outline),
+            style: IconButton.styleFrom(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerLowest,
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             onPressed: () => context.push('/identidade?inicial=false'),
           ),
+          const SizedBox(width: 12),
         ],
       ),
       body: inventarios.isEmpty
           ? const _Vazio()
           : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 160),
               itemCount: inventarios.length,
               itemBuilder: (context, i) {
                 final inv = inventarios[i];
@@ -39,9 +58,20 @@ class TelaInventarios extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          FloatingActionButton.small(
+          FloatingActionButton(
             heroTag: 'entrar',
-            tooltip: 'Entrar em um inventário',
+            tooltip: 'Entrar em um inventário lendo o QR code',
+            elevation: 1,
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerLowest,
+            foregroundColor: Theme.of(context).colorScheme.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
             onPressed: () => entrarEmInventario(context, ref),
             child: const Icon(Icons.qr_code_scanner),
           ),
@@ -96,59 +126,58 @@ class _CartaoInventario extends ConsumerWidget {
 
     final progresso = ref.watch(progressoProvider(inventarioId));
     final conflitos = ref.watch(conflitosPendentesProvider(inventarioId));
+    final tema = Theme.of(context);
+    final erro = CoresResultado.of(context).naoLocalizado.texto;
+
+    final situacao = progresso.total == 0
+        ? 'Sem patrimônios importados'
+        : '${formatarInteiro(progresso.verificados)} de '
+              '${formatarInteiro(progresso.total)} · '
+              '${progresso.concluido ? 'concluído' : '${formatarPercentual(progresso.percentual)}%'}';
 
     return Card(
       child: InkWell(
         onTap: () => context.push('/inventario/$inventarioId'),
-        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
                 children: [
                   Expanded(
-                    child: Text(
-                      inv.nome,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    child: Text(inv.nome, style: tema.textTheme.titleMedium),
                   ),
+                  const SizedBox(width: 10),
                   Text(
                     '${inv.ano}',
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: tema.textTheme.titleMedium?.copyWith(
+                      fontSize: 15,
+                      color: tema.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: progresso.total == 0 ? 0 : progresso.percentual / 100,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+              const SizedBox(height: 14),
+              BarraProgresso(
+                valor: progresso.total == 0 ? 0 : progresso.percentual / 100,
               ),
-              const SizedBox(height: 8),
-              Text(
-                progresso.total == 0
-                    ? 'Sem patrimônios importados'
-                    : '${progresso.verificados} de ${progresso.total} '
-                          '(${progresso.percentual.toStringAsFixed(1)}%)',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              const SizedBox(height: 9),
+              Text(situacao, style: tema.textTheme.bodySmall),
               if (conflitos > 0) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
                   children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 4),
+                    Icon(Icons.warning_amber_rounded, size: 18, color: erro),
+                    const SizedBox(width: 7),
                     Text(
                       '$conflitos ${conflitos == 1 ? 'conflito' : 'conflitos'} '
                       'para conferir',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                      style: tema.textTheme.bodySmall?.copyWith(
+                        color: erro,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],

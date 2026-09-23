@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/app.dart';
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../domain/patrimonio.dart';
 import 'configuracao_sheet.dart';
 import 'estado_levantamento.dart';
+import 'linha_leitura.dart';
 import 'tela_camera.dart';
 
 /// A tela do levantamento.
@@ -204,9 +207,28 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
-              child: Text(
-                '${progresso.verificados}/${progresso.total}',
-                style: Theme.of(context).textTheme.titleMedium,
+              child: Semantics(
+                label:
+                    '${progresso.verificados} de ${progresso.total} verificados',
+                excludeSemantics: true,
+                child: Text.rich(
+                  TextSpan(
+                    text: formatarInteiro(progresso.verificados),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: '/${formatarInteiro(progresso.total)}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
             ),
           ),
@@ -230,8 +252,9 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
             },
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: TextField(
@@ -242,11 +265,25 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                     // o leitor externo entra como teclado de qualquer forma.
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.go,
-                    style: const TextStyle(fontSize: 22, letterSpacing: 1.5),
+                    style: estiloCodigo(
+                      context,
+                      tamanho: 22,
+                    ).copyWith(letterSpacing: 0.9),
                     decoration: InputDecoration(
                       hintText: modo.rotulo,
-                      prefixIcon: const Icon(Icons.keyboard),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
                       suffixIcon: IconButton(
+                        tooltip: 'Procurar',
                         icon: const Icon(Icons.arrow_forward),
                         onPressed: () => _processar(_campo.text),
                       ),
@@ -254,17 +291,24 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                     onSubmitted: _processar,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 SizedBox(
                   height: 56,
                   width: 56,
-                  child: FilledButton(
-                    onPressed: _abrirCamera,
-                    style: FilledButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(56, 56),
+                  child: Tooltip(
+                    message: 'Abrir câmera',
+                    child: FilledButton(
+                      onPressed: _abrirCamera,
+                      style: FilledButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(56, 56),
+                      ),
+                      child: const Icon(
+                        Icons.photo_camera_outlined,
+                        size: 26,
+                        semanticLabel: 'Abrir câmera',
+                      ),
                     ),
-                    child: const Icon(Icons.photo_camera),
                   ),
                 ),
               ],
@@ -286,7 +330,8 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemCount: historico.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, indent: 50),
                     itemBuilder: (_, i) => LinhaLeitura(registro: historico[i]),
                   ),
           ),
@@ -305,89 +350,27 @@ class _SeletorModo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: SegmentedButton<ModoLeitura>(
-        segments: const [
-          ButtonSegment(
-            value: ModoLeitura.codigoBarras,
-            icon: Icon(Icons.barcode_reader),
-            label: Text('Cód. barras'),
-          ),
-          ButtonSegment(
-            value: ModoLeitura.tombo,
-            icon: Icon(Icons.tag),
-            label: Text('Tombo'),
-          ),
-        ],
-        selected: {modo},
-        onSelectionChanged: (s) => aoMudar(s.first),
-      ),
-    );
-  }
-}
-
-/// Uma leitura da sessão, com o resultado destacado.
-class LinhaLeitura extends StatelessWidget {
-  final LeituraRegistrada registro;
-
-  const LinhaLeitura({super.key, required this.registro});
-
-  @override
-  Widget build(BuildContext context) {
-    final (cor, icone, rotulo) = switch (registro.resultado) {
-      ResultadoLeitura.sucesso => (
-        CoresResultado.sucesso,
-        Icons.check_circle,
-        'Registrado',
-      ),
-      ResultadoLeitura.jaVerificado => (
-        CoresResultado.alerta,
-        Icons.replay_circle_filled,
-        'Já verificado',
-      ),
-      ResultadoLeitura.naoLocalizado => (
-        CoresResultado.erro,
-        Icons.error,
-        'Não localizado',
-      ),
-    };
-
-    final p = registro.patrimonio;
-
-    return ListTile(
-      dense: true,
-      leading: Icon(icone, color: cor),
-      title: Text(
-        p?.descricao ?? 'Código ${registro.codigoLido}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            p == null
-                ? rotulo
-                : 'Tombo ${p.tombo} · $rotulo'
-                      '${p.verificadoPor == null ? '' : ' por ${p.verificadoPor}'}',
-            style: TextStyle(color: cor),
-          ),
-          if (registro.leitura.achadoNoOutroCampo)
-            const Text(
-              'Encontrado no outro campo — cadastro inconsistente',
-              style: TextStyle(fontSize: 11),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<ModoLeitura>(
+          showSelectedIcon: false,
+          expandedInsets: EdgeInsets.zero,
+          segments: const [
+            ButtonSegment(
+              value: ModoLeitura.codigoBarras,
+              icon: IconeCodigoBarras(tamanho: 18),
+              label: Text('Cód. barras'),
             ),
-          if (registro.leitura.temDuplicados)
-            Text(
-              '${registro.leitura.duplicados} itens com este código',
-              style: const TextStyle(fontSize: 11),
+            ButtonSegment(
+              value: ModoLeitura.tombo,
+              icon: Icon(Icons.tag, size: 18),
+              label: Text('Tombo'),
             ),
-          if (p != null && p.ignorado)
-            const Text(
-              'Este item está fora do inventário (ED excluído)',
-              style: TextStyle(fontSize: 11),
-            ),
-        ],
+          ],
+          selected: {modo},
+          onSelectionChanged: (s) => aoMudar(s.first),
+        ),
       ),
     );
   }
@@ -406,36 +389,62 @@ class _ConfirmarSobrescrita extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).jaVerificado;
+    final tema = Theme.of(context);
+
     return Container(
-      width: double.infinity,
-      color: CoresResultado.alerta.withValues(alpha: 0.12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Tombo ${patrimonio.tombo} já foi verificado'
             '${patrimonio.verificadoPor == null ? '' : ' por ${patrimonio.verificadoPor}'}',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: tema.textTheme.titleSmall?.copyWith(
+              color: tom.texto,
+              fontSize: 14,
+            ),
           ),
           if (patrimonio.salaAtual != null)
-            Text('Registrado em: ${patrimonio.salaAtual}'),
-          const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Registrado em: ${patrimonio.salaAtual}',
+                style: tema.textTheme.bodyMedium?.copyWith(
+                  color: tom.texto,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: aoCancelar,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: tom.texto,
+                    side: BorderSide(
+                      color: tom.texto.withValues(alpha: 0.55),
+                      width: 1.5,
+                    ),
+                  ),
                   child: const Text('Manter'),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
                   onPressed: aoConfirmar,
                   style: FilledButton.styleFrom(
-                    backgroundColor: CoresResultado.alerta,
-                    minimumSize: const Size.fromHeight(44),
+                    backgroundColor: tom.texto,
+                    foregroundColor: tom.fundo,
+                    minimumSize: const Size.fromHeight(alvoMinimo),
                   ),
                   child: const Text('Regravar'),
                 ),
@@ -459,10 +468,9 @@ class _Instrucoes extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.barcode_reader,
-              size: 56,
-              color: Theme.of(context).colorScheme.outline,
+            IconeCodigoBarras(
+              tamanho: 56,
+              cor: Theme.of(context).colorScheme.outline,
             ),
             const SizedBox(height: 16),
             const Text(
