@@ -130,3 +130,6 @@ __pycache__/
 *.xlsx
 *.xls
 !docs/**/*.xlsx
+
+# Site gerado por tool/gerar_site.py (publicado pelo workflow Site).
+/_site/

@@ -1,0 +1,58 @@
+# Publica o site do projeto no GitHub Pages: a apresentação e a política de
+# privacidade, gerada de docs/privacidade.md. As lojas pedem a política numa
+# URL estável:
+#
+#   https://guilhermefeitosa66.github.io/slap-mobile/privacidade/
+#
+# Uma vez só, antes da primeira execução: Settings → Pages → Source:
+# "GitHub Actions".
+name: Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/privacidade.md
+      - docs/loja/icone-512.png
+      - assets/fontes/**
+      - tool/gerar_site.py
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Uma publicação por vez; a que está em andamento termina.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Gerar e publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}privacidade/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install "markdown==3.9"
+
+      - run: python tool/gerar_site.py _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: publicacao
+        uses: actions/deploy-pages@v4

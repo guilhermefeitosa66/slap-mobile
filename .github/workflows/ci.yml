@@ -48,6 +48,13 @@ jobs:
       - name: Scripts
         run: shellcheck tool/*.sh
 
+      # O site da política de privacidade só é publicado a partir da main;
+      # aqui, a garantia de que ele continua sendo gerado.
+      - name: Site
+        run: |
+          pip install "markdown==3.9"
+          python3 tool/gerar_site.py "$RUNNER_TEMP/site"
+
       # O analisador observa o projeto inteiro por inotify, e o limite padrão
       # de instâncias do runner às vezes não basta: o `flutter analyze` falha
       # com "Too many open files" sem que haja nada errado no código.

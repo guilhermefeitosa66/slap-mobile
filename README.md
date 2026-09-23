@@ -19,8 +19,13 @@ no SUAP e o que não foi localizado — e exporta cada um em XLSX ou CSV.
 Apenas **câmera**, para ler códigos de barras e o QR de pareamento, e **acesso à rede local**,
 para os aparelhos se encontrarem e sincronizarem.
 
-Sem localização, sem armazenamento, sem contas, sem telemetria. Nenhum dado sai do aparelho a
-não ser para outro aparelho do mesmo inventário, na mesma rede local.
+Sem localização, sem armazenamento, sem contas, sem anúncios, sem telemetria própria. Os dados do
+inventário só saem do aparelho para outro aparelho do mesmo inventário, na mesma rede local e
+cifrados. A exceção: no Android, a biblioteca do Google que lê os códigos (ML Kit) envia ao Google
+diagnósticos de funcionamento dela — nunca as imagens nem os códigos lidos.
+
+Detalhes na [política de privacidade](https://guilhermefeitosa66.github.io/slap-mobile/privacidade/)
+([fonte](docs/privacidade.md)).
 
 ## Instalação
 
