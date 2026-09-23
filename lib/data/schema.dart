@@ -211,6 +211,17 @@ class Config {
   /// relógio nunca ande para trás.
   static const hlcLocal = 'hlc_local';
 
+  /// Configuração corrente do levantamento de um inventário, em JSON.
+  ///
+  /// Sobrevive ao Android encerrar o aplicativo — o que acontece com a
+  /// câmera aberta em aparelho com pouca memória. É preferência do aparelho,
+  /// não dado do inventário: não sincroniza.
+  static String configuracaoLevantamento(String inventarioId) =>
+      'levantamento.$inventarioId';
+
+  /// Inventário cujo levantamento estava aberto. O aplicativo reabre nele.
+  static const levantamentoAberto = 'levantamento_aberto';
+
   // Preferências do aparelho, gravadas como '1' ou '0'. Ausente vale o padrão.
 
   /// Manter a tela ligada no levantamento e na câmera. Padrão: sim.

@@ -73,11 +73,16 @@ class ConfiguracaoLevantamento {
   /// `before_save` do SLAP.
   final String? responsavel;
 
+  /// Desde quando esta configuração vale — quando foi definida ou, depois de
+  /// um intervalo longo, reconfirmada.
+  final DateTime? desde;
+
   const ConfiguracaoLevantamento({
     required this.sala,
     this.conservacao = EstadoConservacao.bom,
     this.situacao = SituacaoUso.ativo,
     this.responsavel,
+    this.desde,
   });
 
   ConfiguracaoLevantamento copyWith({
@@ -86,12 +91,42 @@ class ConfiguracaoLevantamento {
     SituacaoUso? situacao,
     String? responsavel,
     bool limparResponsavel = false,
+    DateTime? desde,
   }) {
     return ConfiguracaoLevantamento(
       sala: sala ?? this.sala,
       conservacao: conservacao ?? this.conservacao,
       situacao: situacao ?? this.situacao,
       responsavel: limparResponsavel ? null : (responsavel ?? this.responsavel),
+      desde: desde ?? this.desde,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'sala': sala,
+    'conservacao': conservacao.valor,
+    'situacao': situacao.valor,
+    'responsavel': responsavel,
+    'desde': desde?.millisecondsSinceEpoch,
+  };
+
+  /// Lê uma configuração gravada. Devolve `null` se o texto não for uma
+  /// configuração válida — gravação de versão antiga, por exemplo —, e aí o
+  /// levantamento simplesmente pede a sala de novo.
+  static ConfiguracaoLevantamento? fromJson(Map<String, dynamic> j) {
+    final sala = j['sala'];
+    if (sala is! String || sala.trim().isEmpty) return null;
+    final desde = j['desde'];
+    return ConfiguracaoLevantamento(
+      sala: sala,
+      conservacao:
+          EstadoConservacao.de(j['conservacao'] as String?) ??
+          EstadoConservacao.bom,
+      situacao: SituacaoUso.de(j['situacao'] as String?) ?? SituacaoUso.ativo,
+      responsavel: j['responsavel'] as String?,
+      desde: desde is num
+          ? DateTime.fromMillisecondsSinceEpoch(desde.toInt())
+          : null,
     );
   }
 }

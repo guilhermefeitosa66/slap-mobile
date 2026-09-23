@@ -1,6 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers.dart';
+import '../../data/banco.dart';
 import '../../data/repos/patrimonios.dart';
+import '../../data/schema.dart';
 import '../../domain/patrimonio.dart';
 
 /// Estado de sessão do levantamento.
@@ -10,8 +15,9 @@ import '../../domain/patrimonio.dart';
 /// classe `Notifier` escrita à mão, e um mapa resolve o mesmo problema sem
 /// depender de geração de código.
 ///
-/// Tudo aqui vive em memória. É preferência de sessão, não dado do inventário:
-/// não vai para o banco nem é sincronizado.
+/// Nada aqui é dado do inventário, e nada sincroniza. A configuração vai para
+/// a tabela `config` do aparelho, para sobreviver ao Android encerrar o
+/// aplicativo; o histórico e o modo de leitura vivem só em memória.
 
 // --------------------------------------------------------- configuração ---
 
@@ -26,13 +32,70 @@ class ControladorConfiguracoes
   @override
   Map<String, ConfiguracaoLevantamento> build() => const {};
 
+  /// Passa a valer a partir de agora, e fica gravada.
   void definir(String inventarioId, ConfiguracaoLevantamento config) {
-    state = {...state, inventarioId: config};
+    final vigente = config.copyWith(desde: DateTime.now());
+    ref
+        .read(bancoProvider)
+        .gravarConfig(
+          Config.configuracaoLevantamento(inventarioId),
+          jsonEncode(vigente.toJson()),
+        );
+    state = {...state, inventarioId: vigente};
+  }
+
+  /// A mesma configuração, reconfirmada depois de um intervalo longo.
+  void reconfirmar(String inventarioId) {
+    final atual = configuracaoGravada(ref.read(bancoProvider), inventarioId);
+    if (atual != null) definir(inventarioId, atual);
   }
 
   void limpar(String inventarioId) {
+    ref
+        .read(bancoProvider)
+        .apagarConfig(Config.configuracaoLevantamento(inventarioId));
     state = {...state}..remove(inventarioId);
   }
+}
+
+/// A configuração gravada de um inventário, se houver.
+ConfiguracaoLevantamento? configuracaoGravada(
+  Banco banco,
+  String inventarioId,
+) {
+  final texto = banco.lerConfig(Config.configuracaoLevantamento(inventarioId));
+  if (texto == null) return null;
+  try {
+    return ConfiguracaoLevantamento.fromJson(
+      jsonDecode(texto) as Map<String, dynamic>,
+    );
+  } on FormatException {
+    return null;
+  } on TypeError {
+    return null;
+  }
+}
+
+/// Depois de quanto tempo sem ler nada a sala é confirmada antes de seguir.
+///
+/// Voltar no dia seguinte e continuar gravando "Auditório" por engano é pior
+/// que uma pergunta: a sala errada contamina tudo o que for lido em seguida,
+/// e achar depois quais itens foram é trabalhoso.
+const intervaloParaConfirmarSala = Duration(hours: 4);
+
+/// Se a sala precisa ser confirmada antes da próxima leitura.
+///
+/// Conta a partir do que for mais recente: a última leitura deste aparelho
+/// neste inventário ou o momento em que a configuração passou a valer.
+bool precisaConfirmarSala({
+  required ConfiguracaoLevantamento config,
+  required DateTime? ultimaLeitura,
+  required DateTime agora,
+}) {
+  final marcos = [?ultimaLeitura, ?config.desde];
+  if (marcos.isEmpty) return false;
+  final referencia = marcos.reduce((a, b) => a.isAfter(b) ? a : b);
+  return agora.difference(referencia) > intervaloParaConfirmarSala;
 }
 
 final configuracoesProvider =
@@ -42,9 +105,13 @@ final configuracoesProvider =
     >(ControladorConfiguracoes.new);
 
 /// Configuração corrente de um inventário, ou `null` se ainda não definida.
+///
+/// A da sessão tem precedência; sem ela, vale a gravada — é o que devolve a
+/// sala a quem reabre o aplicativo no meio do levantamento.
 final configuracaoProvider = Provider.family<ConfiguracaoLevantamento?, String>(
   (ref, inventarioId) {
-    return ref.watch(configuracoesProvider)[inventarioId];
+    return ref.watch(configuracoesProvider)[inventarioId] ??
+        configuracaoGravada(ref.watch(bancoProvider), inventarioId);
   },
 );
 

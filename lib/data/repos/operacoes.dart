@@ -656,6 +656,20 @@ class RepositorioOperacoes {
     return linhas.map(Operacao.doBanco).toList();
   }
 
+  /// Quando este aparelho gravou pela última vez neste inventário.
+  ///
+  /// Serve para perceber que a pessoa voltou depois de horas — no dia
+  /// seguinte, talvez em outra sala — sem gravar nada a mais a cada leitura.
+  DateTime? ultimaEscritaLocal(String inventarioId) {
+    final r = _db.select(
+      'SELECT MAX(criado_em) AS m FROM ops '
+      'WHERE inventario_id = ? AND dispositivo = ?',
+      [inventarioId, dispositivoId],
+    );
+    final m = r.first['m'] as int?;
+    return m == null ? null : DateTime.fromMillisecondsSinceEpoch(m);
+  }
+
   /// Últimas alterações do inventário inteiro.
   List<Operacao> historicoDoInventario(
     String inventarioId, {

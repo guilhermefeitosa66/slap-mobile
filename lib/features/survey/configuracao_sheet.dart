@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../domain/valores.dart';
 import 'estado_levantamento.dart';
@@ -257,16 +258,34 @@ class BarraConfiguracao extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        config.sala,
-                        style: TextStyle(
-                          fontFamily: familiaTitulos,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: apoio.sobreFaixa,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              config.sala,
+                              style: TextStyle(
+                                fontFamily: familiaTitulos,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: apoio.sobreFaixa,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (config.desde case final desde?) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              descreverDesde(desde),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: apoio.sobreFaixaSecundario,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 1),
                       Text(

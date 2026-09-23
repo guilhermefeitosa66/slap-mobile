@@ -25,3 +25,31 @@ String descreverDuracao(Duration d) {
   }
   return '${d.inDays.abs()} dias';
 }
+
+final _hora = DateFormat('HH:mm');
+final _diaMes = DateFormat('dd/MM');
+
+/// Um momento dito em relação a hoje: `hoje às 09:10`, `ontem às 16:05`,
+/// `em 12/09 às 16:05`.
+String descreverMomento(DateTime momento, {DateTime? agora}) {
+  final hoje = _dia(agora ?? DateTime.now());
+  final dia = _dia(momento);
+  final hora = _hora.format(momento);
+  if (dia == hoje) return 'hoje às $hora';
+  if (dia == hoje.subtract(const Duration(days: 1))) return 'ontem às $hora';
+  return 'em ${_diaMes.format(momento)} às $hora';
+}
+
+/// Forma curta de "desde quando vale": `desde 14:32`, `desde ontem, 16:05`,
+/// `desde 12/09`.
+String descreverDesde(DateTime momento, {DateTime? agora}) {
+  final hoje = _dia(agora ?? DateTime.now());
+  final dia = _dia(momento);
+  if (dia == hoje) return 'desde ${_hora.format(momento)}';
+  if (dia == hoje.subtract(const Duration(days: 1))) {
+    return 'desde ontem, ${_hora.format(momento)}';
+  }
+  return 'desde ${_diaMes.format(momento)}';
+}
+
+DateTime _dia(DateTime t) => DateTime(t.year, t.month, t.day);

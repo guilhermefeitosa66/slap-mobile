@@ -6,8 +6,10 @@ import '../../app/componentes.dart';
 import '../../app/providers.dart';
 import '../../app/tema.dart';
 import '../../core/formato.dart';
+import '../../data/banco.dart';
 import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
+import '../../data/schema.dart';
 import '../../domain/patrimonio.dart';
 import 'configuracao_sheet.dart';
 import 'estado_levantamento.dart';
@@ -41,9 +43,16 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   /// informação de quem verificou antes.
   Patrimonio? _aguardandoConfirmacao;
 
+  /// Guardado na abertura: no `dispose` o `ref` já não pode ser usado.
+  late final Banco _banco;
+
   @override
   void initState() {
     super.initState();
+    // Se o Android encerrar o aplicativo com o levantamento aberto — com a
+    // câmera, em aparelho com pouca memória, é comum —, ele reabre aqui.
+    _banco = ref.read(bancoProvider)
+      ..gravarConfig(Config.levantamentoAberto, widget.inventarioId);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _garantirConfiguracao(),
     );
@@ -51,6 +60,8 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
   @override
   void dispose() {
+    // Saída normal: da próxima vez o aplicativo abre na lista.
+    _banco.apagarConfig(Config.levantamentoAberto);
     _campo.dispose();
     _foco.dispose();
     super.dispose();
@@ -58,8 +69,22 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
   /// Sem sala definida não há o que aplicar às leituras, então a configuração
   /// aparece antes da tela ficar utilizável.
+  ///
+  /// Com sala definida, mas sem leitura há horas, a sala é confirmada antes:
+  /// quem volta no dia seguinte provavelmente está em outro lugar.
   Future<void> _garantirConfiguracao() async {
-    if (ref.read(configuracaoProvider(widget.inventarioId)) != null) {
+    final atual = ref.read(configuracaoProvider(widget.inventarioId));
+    if (atual != null) {
+      final ultima = ref
+          .read(operacoesProvider)
+          .ultimaEscritaLocal(widget.inventarioId);
+      if (precisaConfirmarSala(
+        config: atual,
+        ultimaLeitura: ultima,
+        agora: DateTime.now(),
+      )) {
+        await _confirmarSala(atual, ultima);
+      }
       _devolverFoco();
       return;
     }
@@ -72,6 +97,43 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
       return;
     }
     _devolverFoco();
+  }
+
+  Future<void> _confirmarSala(
+    ConfiguracaoLevantamento config,
+    DateTime? ultima,
+  ) async {
+    final referencia = ultima ?? config.desde;
+    final continuar = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (contexto) => AlertDialog(
+        title: Text('Ainda em ${config.sala}?'),
+        content: Text(
+          '${referencia == null ? 'Faz tempo que nada é lido neste aparelho.' : 'A última leitura neste aparelho foi ${descreverMomento(referencia)}.'} '
+          'Confirme a sala antes de continuar: a sala errada vai para todos '
+          'os itens lidos em seguida.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(contexto, false),
+            child: const Text('Mudar de sala'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(contexto, true),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            child: Text('Continuar em ${config.sala}'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+
+    if (continuar == true) {
+      ref.read(configuracoesProvider.notifier).reconfirmar(widget.inventarioId);
+    } else {
+      await abrirConfiguracao(context, ref, widget.inventarioId);
+    }
   }
 
   /// Devolve o foco ao campo depois de cada leitura.

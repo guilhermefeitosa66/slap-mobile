@@ -12,6 +12,9 @@ import '../features/reports/tela_relatorios.dart';
 import '../features/survey/tela_levantamento.dart';
 import '../features/sync/tela_conflitos.dart';
 import '../features/sync/tela_sincronizacao.dart';
+import '../data/banco.dart';
+import '../data/repos/inventarios.dart';
+import '../data/schema.dart';
 import '../domain/divergencia.dart';
 import 'providers.dart';
 import 'tema.dart';
@@ -37,7 +40,10 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
     ref.read(sonsProvider).preparar();
 
     _rotas = GoRouter(
-      initialLocation: '/',
+      initialLocation: rotaInicial(
+        ref.read(bancoProvider),
+        ref.read(inventariosProvider),
+      ),
       routes: [
         GoRoute(
           path: '/',
@@ -118,4 +124,17 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
       darkTheme: temaEscuro,
     );
   }
+}
+
+/// Onde o aplicativo abre.
+///
+/// Se o Android o encerrou no meio de um levantamento, ele volta direto para
+/// a sala em que a pessoa estava, com a configuração gravada. Nos outros
+/// casos, a lista de inventários.
+String rotaInicial(Banco banco, RepositorioInventarios inventarios) {
+  final aberto = banco.lerConfig(Config.levantamentoAberto);
+  if (aberto != null && inventarios.porId(aberto) != null) {
+    return '/inventario/$aberto/levantamento';
+  }
+  return '/';
 }
