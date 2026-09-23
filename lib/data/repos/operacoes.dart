@@ -109,6 +109,26 @@ class Operacao {
   );
 }
 
+/// Trabalho deste aparelho que ainda não está em nenhum outro.
+class TrabalhoNaoEntregue {
+  /// Algum outro aparelho já sincronizou este inventário com este.
+  final bool jaSincronizou;
+
+  /// Operações deste aparelho que nenhum par confirmou ter.
+  final int operacoes;
+
+  /// Itens verificados por este aparelho cuja verificação nenhum par tem.
+  final int verificacoes;
+
+  const TrabalhoNaoEntregue({
+    required this.jaSincronizou,
+    required this.operacoes,
+    required this.verificacoes,
+  });
+
+  bool get nada => operacoes == 0;
+}
+
 /// Resultado de aplicar um lote de operações recebidas de outro aparelho.
 class ResultadoAplicacao {
   final int aplicadas;
@@ -675,6 +695,81 @@ class RepositorioOperacoes {
       [patrimonioId],
     );
     return linhas.map(Operacao.doBanco).toList();
+  }
+
+  // ------------------------------------------------------------------ pares ---
+
+  /// Registra um encontro com outro aparelho neste inventário.
+  ///
+  /// [nossoSeq] é até onde as operações *deste* aparelho estão comprovadamente
+  /// no par — o que ele declarou ter, ou o que aceitou num envio. Só cresce:
+  /// um encontro não desfaz o que o anterior entregou.
+  void registrarPar(
+    String dispositivo,
+    String inventarioId, {
+    int nossoSeq = 0,
+    String? usuarioNome,
+  }) {
+    _db.execute(
+      'INSERT INTO pares (dispositivo, inventario_id, usuario_nome, '
+      'ultima_sync, nosso_seq) VALUES (?,?,?,?,?) '
+      'ON CONFLICT(dispositivo, inventario_id) DO UPDATE SET '
+      'ultima_sync = excluded.ultima_sync, '
+      'usuario_nome = COALESCE(excluded.usuario_nome, pares.usuario_nome), '
+      'nosso_seq = MAX(pares.nosso_seq, excluded.nosso_seq)',
+      [
+        dispositivo,
+        inventarioId,
+        usuarioNome,
+        DateTime.now().millisecondsSinceEpoch,
+        nossoSeq,
+      ],
+    );
+  }
+
+  /// O que se perde apagando a réplica local: o trabalho deste aparelho que
+  /// nenhum outro recebeu.
+  ///
+  /// Conservador de propósito — conta como não entregue o que o par ainda
+  /// não confirmou ter. Avisar a mais custa uma pergunta; avisar a menos
+  /// custa o levantamento de um dia.
+  TrabalhoNaoEntregue trabalhoNaoEntregue(String inventarioId) {
+    final par = _db.select(
+      'SELECT COUNT(*) AS n, COALESCE(MAX(nosso_seq), 0) AS s FROM pares '
+      'WHERE inventario_id = ?',
+      [inventarioId],
+    ).first;
+    final entregue = par['s'] as int;
+
+    final operacoes =
+        _db.select(
+              'SELECT COUNT(*) AS n FROM ops '
+              'WHERE inventario_id = ? AND dispositivo = ? AND seq > ?',
+              [inventarioId, dispositivoId, entregue],
+            ).first['n']
+            as int;
+
+    final verificacoes =
+        _db.select(
+              'SELECT COUNT(*) AS n FROM campos_patrimonio c '
+              'JOIN patrimonios p ON p.id = c.patrimonio_id '
+              'WHERE p.inventario_id = ? AND c.campo = ? AND c.valor = ? '
+              'AND c.dispositivo = ? AND c.seq > ?',
+              [
+                inventarioId,
+                CampoPatrimonio.verificado,
+                '1',
+                dispositivoId,
+                entregue,
+              ],
+            ).first['n']
+            as int;
+
+    return TrabalhoNaoEntregue(
+      jaSincronizou: (par['n'] as int) > 0,
+      operacoes: operacoes,
+      verificacoes: verificacoes,
+    );
   }
 
   /// Quando este aparelho gravou pela última vez neste inventário.

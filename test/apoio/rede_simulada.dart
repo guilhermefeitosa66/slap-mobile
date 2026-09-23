@@ -48,12 +48,19 @@ class RedeSimulada {
       inventarioId,
       para.ops.vetorDe(inventarioId),
     );
-    if (faltantes.isEmpty) return 0;
+    if (faltantes.isNotEmpty) {
+      para.ops.aplicarRemotas(
+        faltantes,
+        contextos: de.ops.contextosDe(faltantes),
+      );
+    }
 
-    para.ops.aplicarRemotas(
-      faltantes,
-      contextos: de.ops.contextosDe(faltantes),
-    );
+    // Como o cliente e o servidor de verdade: cada lado anota até onde o
+    // trabalho dele está no outro.
+    final deEmPara = para.ops.vetorDe(inventarioId)[de.dispositivoId];
+    final paraEmDe = de.ops.vetorDe(inventarioId)[para.dispositivoId];
+    de.ops.registrarPar(para.dispositivoId, inventarioId, nossoSeq: deEmPara);
+    para.ops.registrarPar(de.dispositivoId, inventarioId, nossoSeq: paraEmDe);
     return faltantes.length;
   }
 

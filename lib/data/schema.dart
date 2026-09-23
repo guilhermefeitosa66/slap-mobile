@@ -6,7 +6,7 @@
 /// serem a mesma estrutura, em vez de três mecanismos concorrentes.
 library;
 
-const int versaoEsquema = 2;
+const int versaoEsquema = 3;
 
 /// Campos de patrimônio que o levantamento altera.
 ///
@@ -233,9 +233,21 @@ const List<String> migracaoV2 = [
   ''',
 ];
 
+/// Versão 3: até onde as operações deste aparelho chegaram a cada par.
+///
+/// Apagar a réplica local só é seguro se o trabalho feito aqui já estiver em
+/// outro aparelho. Com isto dá para dizer, na confirmação, quanto se perde.
+const List<String> migracaoV3 = [
+  'ALTER TABLE pares ADD COLUMN nosso_seq INTEGER NOT NULL DEFAULT 0',
+];
+
 /// Migrações por versão de destino. Um banco novo passa por todas, em ordem:
 /// é o mesmo caminho de quem atualiza, e por isso é o caminho testado.
-const Map<int, List<String>> migracoes = {1: ddlEsquema, 2: migracaoV2};
+const Map<int, List<String>> migracoes = {
+  1: ddlEsquema,
+  2: migracaoV2,
+  3: migracaoV3,
+};
 
 /// Chaves da tabela `config`.
 class Config {

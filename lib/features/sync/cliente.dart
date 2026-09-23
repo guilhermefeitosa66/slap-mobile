@@ -154,10 +154,22 @@ class ClienteSync {
 
     final enviadas = await _enviar(par, inventarioId, chaveSync, lote.vetor);
 
+    // Até onde o nosso trabalho está com o par: o que ele declarou ter, ou o
+    // que ele acabou de aceitar do nosso envio.
+    ops.registrarPar(
+      par.dispositivoId,
+      inventarioId,
+      usuarioNome: par.usuarioNome,
+      nossoSeq: [
+        lote.vetor[ops.dispositivoId],
+        enviadas.nossoSeq,
+      ].reduce((a, b) => a > b ? a : b),
+    );
+
     return ResultadoSync(
       par: par,
       recebidas: recebidas.aplicadas,
-      enviadas: enviadas,
+      enviadas: enviadas.quantidade,
       conflitos: recebidas.conflitos,
     );
   }
@@ -232,14 +244,19 @@ class ClienteSync {
     return LoteOperacoes.fromJson(resposta);
   }
 
-  Future<int> _enviar(
+  /// Envia o que falta ao par. Devolve quantas foram e o maior `seq` deste
+  /// aparelho entre elas, que o par agora tem.
+  Future<({int quantidade, int nossoSeq})> _enviar(
     Par par,
     String inventarioId,
     String chaveSync,
     VersionVector vetorDoPar,
   ) async {
+    // Vai mesmo sem nada a enviar: o lote leva o nosso vetor, e é assim que
+    // o par fica sabendo que já recebemos o trabalho dele. Sem isso, quem só
+    // forneceu dados nunca saberia se eles chegaram — e a confirmação de
+    // apagar o inventário lá avisaria de uma perda que não existe.
     final faltantes = ops.opsFaltantes(inventarioId, vetorDoPar);
-    if (faltantes.isEmpty) return 0;
 
     await _requisitar(
       host: par.host,
@@ -256,7 +273,13 @@ class ClienteSync {
       chaveSync: chaveSync,
     );
 
-    return faltantes.length;
+    var nossoSeq = 0;
+    for (final op in faltantes) {
+      if (op.dispositivo == ops.dispositivoId && op.seq > nossoSeq) {
+        nossoSeq = op.seq;
+      }
+    }
+    return (quantidade: faltantes.length, nossoSeq: nossoSeq);
   }
 
   /// Baixa a réplica inicial de um inventário.

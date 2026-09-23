@@ -44,10 +44,27 @@ class TelaDashboard extends ConsumerWidget {
           PopupMenuButton<_Acao>(
             tooltip: 'Mais ações',
             onSelected: (acao) => switch (acao) {
+              _Acao.editar => editarInventario(context, ref, inv),
+              _Acao.duplicar => _duplicar(context, ref, inv),
               _Acao.encerrar => encerrarInventario(context, ref, inv),
               _Acao.reabrir => reabrirInventario(context, ref, inv),
+              _Acao.apagar => _apagar(context, ref, inv),
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: _Acao.editar,
+                child: ListTile(
+                  leading: Icon(Icons.edit_outlined),
+                  title: Text('Editar nome e ano'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: _Acao.duplicar,
+                child: ListTile(
+                  leading: Icon(Icons.copy_all_outlined),
+                  title: Text('Duplicar para outro ano'),
+                ),
+              ),
               if (inv.encerrado)
                 const PopupMenuItem(
                   value: _Acao.reabrir,
@@ -64,6 +81,14 @@ class TelaDashboard extends ConsumerWidget {
                     title: Text('Encerrar inventário'),
                   ),
                 ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: _Acao.apagar,
+                child: ListTile(
+                  leading: Icon(Icons.delete_outline),
+                  title: Text('Apagar deste aparelho'),
+                ),
+              ),
             ],
           ),
         ],
@@ -346,7 +371,35 @@ class _Acoes extends StatelessWidget {
   }
 }
 
-enum _Acao { encerrar, reabrir }
+enum _Acao { editar, duplicar, encerrar, reabrir, apagar }
+
+Future<void> _duplicar(
+  BuildContext context,
+  WidgetRef ref,
+  Inventario inventario,
+) async {
+  final novo = await duplicarInventario(context, ref, inventario);
+  if (novo == null || !context.mounted) return;
+  // O novo inventário substitui o painel atual, e voltar leva à lista.
+  context.pushReplacement('/inventario/${novo.id}');
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text('Criado: ${novo.titulo}')));
+}
+
+Future<void> _apagar(
+  BuildContext context,
+  WidgetRef ref,
+  Inventario inventario,
+) async {
+  final mensageiro = ScaffoldMessenger.of(context);
+  final apagou = await apagarInventario(context, ref, inventario);
+  if (!apagou || !context.mounted) return;
+  context.go('/');
+  mensageiro.showSnackBar(
+    SnackBar(content: Text('${inventario.titulo} apagado deste aparelho')),
+  );
+}
 
 /// O inventário está encerrado: quando, por quem e como reabrir.
 class _CartaoEncerrado extends ConsumerWidget {

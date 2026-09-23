@@ -7,6 +7,7 @@ import '../../app/providers.dart';
 import '../../app/tema.dart';
 import '../../core/formato.dart';
 import '../sync/entrar_inventario.dart';
+import 'acoes_inventario.dart';
 
 /// Lista dos inventários que existem neste aparelho.
 class TelaInventarios extends ConsumerWidget {
@@ -101,7 +102,10 @@ class TelaInventarios extends ConsumerWidget {
   Future<void> _criar(BuildContext context, WidgetRef ref) async {
     final dados = await showDialog<({String nome, int ano})>(
       context: context,
-      builder: (_) => const _DialogoNovoInventario(),
+      builder: (_) => const DialogoInventario(
+        titulo: 'Novo inventário',
+        rotuloConfirmar: 'Criar',
+      ),
     );
     if (dados == null || !context.mounted) return;
 
@@ -237,85 +241,6 @@ class _Vazio extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DialogoNovoInventario extends StatefulWidget {
-  const _DialogoNovoInventario();
-
-  @override
-  State<_DialogoNovoInventario> createState() => _DialogoNovoInventarioState();
-}
-
-class _DialogoNovoInventarioState extends State<_DialogoNovoInventario> {
-  final _formulario = GlobalKey<FormState>();
-  final _nome = TextEditingController();
-  late final _ano = TextEditingController(text: '${DateTime.now().year}');
-
-  @override
-  void dispose() {
-    _nome.dispose();
-    _ano.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Novo inventário'),
-      content: Form(
-        key: _formulario,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _nome,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Nome',
-                hintText: 'Campus Picos — Biblioteca',
-                // Nome + ano não são chave única: a mesma unidade pode ter
-                // vários processos no mesmo ano.
-                helperText: 'Texto livre. Pode repetir no mesmo ano.',
-                helperMaxLines: 2,
-              ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Informe um nome' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _ano,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Ano'),
-              validator: (v) {
-                final ano = int.tryParse(v ?? '');
-                if (ano == null || ano < 1990 || ano > 2100) {
-                  return 'Ano inválido';
-                }
-                return null;
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (!_formulario.currentState!.validate()) return;
-            Navigator.pop(context, (
-              nome: _nome.text.trim(),
-              ano: int.parse(_ano.text),
-            ));
-          },
-          child: const Text('Criar'),
-        ),
-      ],
     );
   }
 }

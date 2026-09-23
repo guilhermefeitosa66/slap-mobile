@@ -131,6 +131,17 @@ class RepositorioInventarios {
     _registrar(inventarioId, {'nome': nome.trim()});
   }
 
+  /// Altera nome e ano. Só o que de fato mudou vai para o log.
+  void editar(String inventarioId, {required String nome, required int ano}) {
+    final atual = porId(inventarioId);
+    if (atual == null) return;
+    final campos = <String, String?>{
+      if (atual.nome != nome.trim()) 'nome': nome.trim(),
+      if (atual.ano != ano) 'ano': '$ano',
+    };
+    if (campos.isNotEmpty) _registrar(inventarioId, campos);
+  }
+
   /// Encerra o processo: a partir daqui, o que não foi verificado é "não
   /// localizado" de fato, e não "ninguém passou por lá ainda".
   ///
@@ -174,8 +185,15 @@ class RepositorioInventarios {
   /// Não afeta os outros aparelhos: cada um tem a sua própria cópia, e a
   /// próxima sincronização traria tudo de volta. É remoção local, não
   /// encerramento do processo.
+  ///
+  /// O que só existe aqui se perde: [RepositorioOperacoes.trabalhoNaoEntregue]
+  /// diz quanto, e a tela pergunta antes.
   void removerLocalmente(String inventarioId) {
     banco.transacao(() {
+      banco.apagarConfig(Config.configuracaoLevantamento(inventarioId));
+      if (banco.lerConfig(Config.levantamentoAberto) == inventarioId) {
+        banco.apagarConfig(Config.levantamentoAberto);
+      }
       _db.execute('DELETE FROM patrimonios WHERE inventario_id = ?', [
         inventarioId,
       ]);

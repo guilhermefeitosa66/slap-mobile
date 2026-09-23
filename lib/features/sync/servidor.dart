@@ -173,7 +173,12 @@ class ServidorSync {
     );
     final faltantes = ops.opsFaltantes(pedido.inventarioId, pedido.vetor);
 
-    _registrarPar(remoto, pedido.inventarioId);
+    // O que o par declara ter de nós é o que está comprovadamente com ele.
+    _registrarPar(
+      remoto,
+      pedido.inventarioId,
+      nossoSeq: pedido.vetor[banco.dispositivoId],
+    );
 
     await _responder(
       req,
@@ -221,7 +226,11 @@ class ServidorSync {
       );
     }
 
-    _registrarPar(remoto, lote.inventarioId);
+    _registrarPar(
+      remoto,
+      lote.inventarioId,
+      nossoSeq: lote.vetor[banco.dispositivoId],
+    );
     _eventos.add(
       EventoSync(
         inventarioId: lote.inventarioId,
@@ -254,13 +263,12 @@ class ServidorSync {
     );
   }
 
-  void _registrarPar(String dispositivo, String inventarioId) {
-    banco.db.execute(
-      'INSERT INTO pares (dispositivo, inventario_id, ultima_sync) VALUES (?,?,?) '
-      'ON CONFLICT(dispositivo, inventario_id) DO UPDATE SET '
-      'ultima_sync = excluded.ultima_sync',
-      [dispositivo, inventarioId, DateTime.now().millisecondsSinceEpoch],
-    );
+  void _registrarPar(
+    String dispositivo,
+    String inventarioId, {
+    int nossoSeq = 0,
+  }) {
+    ops.registrarPar(dispositivo, inventarioId, nossoSeq: nossoSeq);
   }
 
   Future<void> _responder(HttpRequest req, Map<String, dynamic> corpo) =>
