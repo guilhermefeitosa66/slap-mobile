@@ -7,7 +7,9 @@ O sistema atual depende de um servidor central: os usuários acessam pelo navega
 não há inventário. Aqui cada celular carrega uma cópia completa dos dados, funciona sozinho e
 sincroniza direto com os outros aparelhos pela rede local — sem servidor e sem internet.
 
-> **Estado:** em desenvolvimento. Ainda não há release publicada.
+> **Estado:** funcional ponta a ponta e compilando para Android, com 70 testes
+> automatizados. **Ainda não foi testado com vários celulares reais numa rede de
+> campus** — é o próximo passo antes de qualquer release.
 
 ---
 
@@ -56,6 +58,27 @@ O desenho completo está em [`docs/02-arquitetura.md`](docs/02-arquitetura.md).
 | [`docs/01-analise-slap.md`](docs/01-analise-slap.md) | Análise do sistema atual: modelo de dados, regras de negócio, valores de domínio e os problemas que este app corrige |
 | [`docs/02-arquitetura.md`](docs/02-arquitetura.md) | Escolha da stack, modelo de dados, protocolo de sincronização, detecção de conflitos, permissões |
 
+## O que já funciona e o que falta
+
+| Etapa | Estado |
+|---|---|
+| Análise do SLAP e arquitetura | pronto — ver `docs/` |
+| Banco local, identidade, inventários | pronto |
+| Importação XLSX/CSV, mapeamento de colunas, filtro de ED | pronto |
+| Levantamento: leitor externo, câmera contínua, sons, configuração pegajosa | pronto |
+| Divergências, classificação nos três grupos, progresso | pronto |
+| Sincronização P2P, descoberta, conflitos, resolução | pronto |
+| Relatórios XLSX e CSV | pronto |
+| **Teste em campo com vários celulares** | **pendente** |
+| Ícone próprio do aplicativo | pendente |
+| Cifrar o corpo da sincronização | pendente — ver limitação em `docs/02-arquitetura.md` |
+
+O que existe está coberto por testes automatizados, incluindo a convergência
+entre três réplicas e a sincronização sobre sockets HTTP reais. O que nenhum
+teste automatizado cobre é o comportamento do mDNS e do multicast na rede real
+de um campus — é onde a descoberta costuma falhar, e por isso existe o beacon
+UDP como segunda via.
+
 ## Desenvolvimento
 
 Requer Flutter 3.38 ou superior.
@@ -70,6 +93,22 @@ Testes:
 ```bash
 flutter test
 ```
+
+Gerar os APKs de release, um por arquitetura:
+
+```bash
+flutter build apk --release --split-per-abi
+```
+
+Os três sons de retorno são sintetizados por `tool/gerar_sons.py` e versionados
+em `assets/sons/`. Só é preciso rodar o script para alterá-los.
+
+### Nota sobre o analisador
+
+`flutter analyze` pode falhar com `Too many open files` em Linux: o analisador
+vigia o pub cache inteiro e estoura o limite de instâncias do inotify, que vem
+baixo por padrão. `flutter test` compila o projeto e serve como verificação de
+tipos enquanto isso.
 
 ## Licença
 
