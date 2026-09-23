@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:nsd/nsd.dart' as nsd;
 
 import 'cliente.dart';
@@ -194,13 +195,13 @@ class Descoberta {
       return;
     }
 
-    _adicionar(
+    adicionar(
       Par(
         dispositivoId: id,
         usuarioNome: _texto(servico.txt?['user']),
         host: host,
         porta: servico.port!,
-        origem: 'mdns',
+        origens: const {'mdns'},
       ),
     );
   }
@@ -267,13 +268,13 @@ class Descoberta {
       // a pessoa procurar defeito na rede, e a sincronização explica.
       if (id == null || id == dispositivoId || portaRemota == null) return;
 
-      _adicionar(
+      adicionar(
         Par(
           dispositivoId: id,
           usuarioNome: j['user'] as String?,
           host: pacote.address.address,
           porta: portaRemota,
-          origem: 'beacon',
+          origens: const {'beacon'},
         ),
       );
     } catch (_) {
@@ -283,18 +284,31 @@ class Descoberta {
 
   // ----------------------------------------------------------------- comum ---
 
-  void _adicionar(Par par) {
+  /// Registra um aparelho encontrado. Público só para os testes, que não têm
+  /// mDNS nem multicast de verdade.
+  @visibleForTesting
+  void adicionar(Par par) {
     final anterior = _pares[par.dispositivoId];
+    // As vias se somam: o beacon repete o anúncio a cada poucos segundos, e
+    // ficar só com a última apagaria que o mDNS também encontrou o aparelho.
+    final origens = {...?anterior?.origens, ...par.origens};
     // O mDNS resolve o nome do host, o beacon traz o IP de quem enviou.
     // Trocar a entrada a cada anúncio faria a lista piscar na tela.
     if (anterior != null &&
         anterior.host == par.host &&
         anterior.porta == par.porta &&
-        anterior.usuarioNome == par.usuarioNome) {
+        anterior.usuarioNome == par.usuarioNome &&
+        anterior.origens.length == origens.length) {
       return;
     }
 
-    _pares[par.dispositivoId] = par;
+    _pares[par.dispositivoId] = Par(
+      dispositivoId: par.dispositivoId,
+      usuarioNome: par.usuarioNome,
+      host: par.host,
+      porta: par.porta,
+      origens: origens,
+    );
     _notificar();
   }
 
@@ -318,6 +332,16 @@ class Descoberta {
       return null;
     }
   }
+}
+
+/// Por onde um aparelho foi encontrado, em palavras: `mDNS`, `anúncio na
+/// rede` ou os dois.
+String descreverOrigens(Set<String> origens) {
+  final mdns = origens.contains(ViaDescoberta.mdns.name);
+  final beacon = origens.contains(ViaDescoberta.beacon.name);
+  if (mdns && beacon) return 'mDNS e anúncio na rede';
+  if (beacon) return 'anúncio na rede';
+  return 'mDNS';
 }
 
 /// As duas formas de encontrar aparelhos.

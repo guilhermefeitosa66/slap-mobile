@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/features/sync/cliente.dart';
 import 'package:slap_mobile/features/sync/descoberta.dart';
 import 'package:slap_mobile/features/sync/multicast.dart';
 import 'package:slap_mobile/features/sync/protocolo.dart';
@@ -147,5 +148,43 @@ void main() {
 
   test('por padrão as duas vias ficam ligadas', () {
     expect(ViaDescoberta.configuradas(), ViaDescoberta.values.toSet());
+  });
+
+  group('vias de cada aparelho', () {
+    Par visto(String host, String via) => Par(
+      dispositivoId: 'outro-aparelho',
+      usuarioNome: 'Bruno',
+      host: host,
+      porta: 4100,
+      origens: {via},
+    );
+
+    test('se somam, em vez de ficar só a última', () async {
+      final descoberta = nova(TravaDeTeste(), ViaDescoberta.values.toSet());
+      addTearDown(descoberta.dispose);
+      final avisos = <List<Par>>[];
+      final escuta = descoberta.mudancas.listen(avisos.add);
+      addTearDown(escuta.cancel);
+
+      descoberta.adicionar(visto('bruno.local', 'mdns'));
+      // O beacon traz o IP e se repete a cada poucos segundos.
+      descoberta.adicionar(visto('192.168.0.20', 'beacon'));
+      descoberta.adicionar(visto('192.168.0.20', 'beacon'));
+      descoberta.adicionar(visto('192.168.0.20', 'beacon'));
+      await Future<void>.delayed(Duration.zero);
+
+      final par = descoberta.pares.single;
+      expect(par.origens, {'mdns', 'beacon'});
+      expect(par.host, '192.168.0.20');
+      expect(descreverOrigens(par.origens), 'mDNS e anúncio na rede');
+      // Um aviso por mudança de verdade: os anúncios repetidos não fazem a
+      // lista piscar.
+      expect(avisos, hasLength(2));
+    });
+
+    test('dizem por extenso por onde o aparelho apareceu', () {
+      expect(descreverOrigens({'mdns'}), 'mDNS');
+      expect(descreverOrigens({'beacon'}), 'anúncio na rede');
+    });
   });
 }

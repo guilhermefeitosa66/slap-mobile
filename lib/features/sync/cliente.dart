@@ -52,15 +52,16 @@ class Par {
   final String host;
   final int porta;
 
-  /// Como foi encontrado — útil para diagnosticar rede em que o mDNS não passa.
-  final String origem;
+  /// Todas as vias que o encontraram (`mdns`, `beacon`), não só a última: é o
+  /// que diz, no teste em campo, se cada uma funciona naquela rede.
+  final Set<String> origens;
 
   const Par({
     required this.dispositivoId,
     required this.host,
     required this.porta,
     this.usuarioNome,
-    this.origem = 'mdns',
+    this.origens = const {'mdns'},
   });
 
   String get endereco => '$host:$porta';

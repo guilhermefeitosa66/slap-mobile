@@ -113,6 +113,8 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     if (inventario == null) return;
 
     setState(() => _sincronizando.add(par.dispositivoId));
+    // O tempo aparece junto do resultado: é um dos números do teste em campo.
+    final cronometro = Stopwatch()..start();
 
     try {
       final resultado = await ref
@@ -128,10 +130,12 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
       if (!mounted) return;
       setState(() {
         _relogios.remove(par.dispositivoId);
+        final tempo = descreverTempo(cronometro.elapsed);
         _resultados[par.dispositivoId] = resultado.houveTroca
             ? 'Recebidas ${resultado.recebidas}, enviadas ${resultado.enviadas}'
                   '${resultado.conflitos > 0 ? ' · ${resultado.conflitos} conflitos' : ''}'
-            : 'Já estava tudo sincronizado';
+                  ' · $tempo'
+            : 'Já estava tudo sincronizado · $tempo';
       });
     } on RelogioDivergente catch (e) {
       if (mounted) {
@@ -225,14 +229,12 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                       color: Theme.of(context).colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    // A via vai por extenso no subtítulo; o ícone é só apoio.
                     child: Icon(
-                      par.origem == 'mdns'
+                      par.origens.contains(ViaDescoberta.mdns.name)
                           ? Icons.wifi_tethering
                           : Icons.podcasts,
                       color: Theme.of(context).colorScheme.primary,
-                      semanticLabel: par.origem == 'mdns'
-                          ? 'Encontrado por mDNS'
-                          : 'Encontrado pelo anúncio na rede',
                     ),
                   ),
                   title: Text(
@@ -240,7 +242,8 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   subtitle: Text(
-                    _resultados[par.dispositivoId] ?? par.endereco,
+                    '${_resultados[par.dispositivoId] ?? par.endereco}\n'
+                    'Encontrado por ${descreverOrigens(par.origens)}',
                   ),
                   trailing: _sincronizando.contains(par.dispositivoId)
                       ? const Padding(

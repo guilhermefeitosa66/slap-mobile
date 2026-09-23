@@ -26,6 +26,17 @@ String descreverDuracao(Duration d) {
   return '${d.inDays.abs()} dias';
 }
 
+/// Duração curta, para medir uma operação: `0,8 s`, `14 s`, `2 min 5 s`.
+String descreverTempo(Duration d) {
+  final ms = d.inMilliseconds.abs();
+  if (ms < 10000) return '${_umaCasa.format(ms / 1000)} s';
+  final segundos = (ms / 1000).round();
+  if (segundos < 60) return '$segundos s';
+  final resto = segundos % 60;
+  final minutos = segundos ~/ 60;
+  return resto == 0 ? '$minutos min' : '$minutos min $resto s';
+}
+
 final _hora = DateFormat('HH:mm');
 final _diaMes = DateFormat('dd/MM');
 
