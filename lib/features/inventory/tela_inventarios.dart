@@ -46,44 +46,23 @@ class TelaInventarios extends ConsumerWidget {
         ],
       ),
       body: inventarios.isEmpty
-          ? const _Vazio()
+          ? _Vazio(
+              aoLerQr: () => entrarEmInventario(context, ref),
+              aoImportar: () => _criar(context, ref),
+            )
           : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 160),
+              // Espaço para o botão flutuante não cobrir o último cartão.
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
               itemCount: inventarios.length,
               itemBuilder: (context, i) {
                 final inv = inventarios[i];
                 return _CartaoInventario(inventarioId: inv.id);
               },
             ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton(
-            heroTag: 'entrar',
-            tooltip: 'Entrar em um inventário lendo o QR code',
-            elevation: 1,
-            backgroundColor: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerLowest,
-            foregroundColor: Theme.of(context).colorScheme.primary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            onPressed: () => entrarEmInventario(context, ref),
-            child: const Icon(Icons.qr_code_scanner),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'novo',
-            onPressed: () => _criar(context, ref),
-            icon: const Icon(Icons.add),
-            label: const Text('Novo'),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _novo(context, ref),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo'),
       ),
       bottomNavigationBar: identidade.configurada
           ? Padding(
@@ -97,6 +76,28 @@ class TelaInventarios extends ConsumerWidget {
             )
           : null,
     );
+  }
+
+  /// "Novo" pergunta de onde vem o inventário: de outro aparelho, pelo QR
+  /// code, ou de uma planilha do SUAP.
+  ///
+  /// Antes o leitor de QR era um segundo botão flutuante, visível o tempo
+  /// todo e sem dizer o que fazia — parecia um botão de câmera.
+  Future<void> _novo(BuildContext context, WidgetRef ref) async {
+    final origem = await showModalBottomSheet<OrigemInventario>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => const _FolhaNovo(),
+    );
+    if (origem == null || !context.mounted) return;
+
+    switch (origem) {
+      case OrigemInventario.lerQr:
+        await entrarEmInventario(context, ref);
+      case OrigemInventario.importar:
+        await _criar(context, ref);
+    }
   }
 
   Future<void> _criar(BuildContext context, WidgetRef ref) async {
@@ -212,14 +213,82 @@ class _CartaoInventario extends ConsumerWidget {
   }
 }
 
+/// De onde vem um inventário novo.
+enum OrigemInventario {
+  /// Cópia de um inventário criado em outro aparelho, pela rede local.
+  lerQr,
+
+  /// Inventário novo, com a planilha do SUAP.
+  importar,
+}
+
+/// Rótulos das duas origens, os mesmos na folha e no estado vazio.
+const rotuloLerQr = 'Ler o QR code de outro aparelho';
+const rotuloImportar = 'Importar de arquivo';
+
+/// Folha aberta por "Novo". Devolve a origem escolhida, ou `null`.
+class _FolhaNovo extends StatelessWidget {
+  const _FolhaNovo();
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+            child: Text('Novo inventário', style: tema.textTheme.titleLarge),
+          ),
+          ListTile(
+            leading: const Icon(Icons.qr_code_scanner),
+            title: const Text(rotuloLerQr),
+            // A condição da rede vai aqui, antes de abrir a câmera: é a
+            // causa mais comum de "não encontrou ninguém".
+            subtitle: const Text(
+              'Recebe uma cópia pela rede local. Os dois aparelhos precisam '
+              'estar na mesma rede Wi-Fi.',
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 6,
+            ),
+            onTap: () => Navigator.pop(context, OrigemInventario.lerQr),
+          ),
+          ListTile(
+            leading: const Icon(Icons.upload_file_outlined),
+            title: const Text(rotuloImportar),
+            subtitle: const Text(
+              'Cria o inventário com nome e ano e importa a planilha do SUAP.',
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 6,
+            ),
+            onTap: () => Navigator.pop(context, OrigemInventario.importar),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+}
+
 class _Vazio extends StatelessWidget {
-  const _Vazio();
+  final VoidCallback aoLerQr;
+  final VoidCallback aoImportar;
+
+  const _Vazio({required this.aoLerQr, required this.aoImportar});
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(32, 32, 32, 112),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -236,9 +305,29 @@ class _Vazio extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Crie um inventário e importe a planilha do SUAP, ou leia o '
-              'QR code de quem já criou para receber uma cópia.',
+              'Receba uma cópia de quem já criou o inventário, ou crie um e '
+              'importe a planilha do SUAP.',
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            // As mesmas duas opções da folha do "Novo", à mão: quem abre o
+            // aplicativo pela primeira vez não tem por que procurar um botão.
+            FilledButton.icon(
+              onPressed: aoLerQr,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text(rotuloLerQr),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Os dois aparelhos precisam estar na mesma rede Wi-Fi.',
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: aoImportar,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: const Text(rotuloImportar),
             ),
           ],
         ),
