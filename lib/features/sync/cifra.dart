@@ -170,10 +170,7 @@ class AcordoEfemero {
     final gerador = ECKeyGenerator()
       ..init(ParametersWithRandom(ECKeyGeneratorParameters(curva), sorteio));
     final par = gerador.generateKeyPair();
-    return AcordoEfemero._(
-      par.privateKey as ECPrivateKey,
-      par.publicKey as ECPublicKey,
-    );
+    return AcordoEfemero._(par.privateKey, par.publicKey);
   }
 
   static final _aleatorio = Random.secure();

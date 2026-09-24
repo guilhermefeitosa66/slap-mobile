@@ -79,7 +79,7 @@ class CopiaDeSeguranca {
       'SELECT inventario_id, MAX(seq) AS s FROM ops WHERE dispositivo = ?'
       '${inventarioId == null ? '' : ' AND inventario_id = ?'} '
       'GROUP BY inventario_id',
-      [banco.dispositivoId, if (inventarioId != null) inventarioId],
+      [banco.dispositivoId, ?inventarioId],
     );
     for (final l in linhas) {
       ops.marcarEnviadoAte(l['inventario_id'] as String, l['s'] as int);

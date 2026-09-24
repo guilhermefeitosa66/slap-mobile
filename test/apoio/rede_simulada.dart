@@ -172,7 +172,7 @@ void plantarOperacoes(
       }
     });
   } finally {
-    comando.dispose();
+    comando.close();
   }
 }
 

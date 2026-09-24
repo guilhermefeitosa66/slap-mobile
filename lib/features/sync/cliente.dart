@@ -3,7 +3,6 @@ import 'dart:io';
 
 import '../../core/formato.dart';
 import '../../core/hlc.dart';
-import '../../core/version_vector.dart';
 import '../../data/repos/operacoes.dart';
 import 'cifra.dart';
 import 'protocolo.dart';

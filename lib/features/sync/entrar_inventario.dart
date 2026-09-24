@@ -33,13 +33,6 @@ class _Alvo {
   /// Aparelho que compartilhou. Só o link informa.
   final String? dispositivoOrigem;
 
-  const _Alvo({
-    required this.inventarioId,
-    required this.nome,
-    required this.ano,
-    this.dispositivoOrigem,
-  });
-
   /// Do QR code. A chave que ele carrega **não** é usada para entrar: quem
   /// autoriza é o aceite, e é dele que a chave vem. O QR continua levando a
   /// chave por compatibilidade com aparelhos que ainda não atualizaram.

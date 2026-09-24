@@ -792,9 +792,9 @@ void main() {
             ..headers.contentType = ContentType.text
             ..write(
               cifra.cifrar(
-                LoteOperacoes(
+                const LoteOperacoes(
                   inventarioId: 'outro-inventario-qualquer',
-                  ops: const [],
+                  ops: [],
                 ).toJson(),
                 contexto: CifraSync.contextoResposta('POST', req.uri.path),
               ),

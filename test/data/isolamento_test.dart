@@ -6,7 +6,6 @@ import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
 import 'package:slap_mobile/data/schema.dart';
-import 'package:slap_mobile/domain/valores.dart';
 
 import '../apoio/rede_simulada.dart';
 

@@ -84,8 +84,7 @@ class FiltroItens {
 
   /// Os campos preenchidos, na ordem de [CampoFiltro].
   Map<CampoFiltro, String> get ativos => {
-    for (final campo in CampoFiltro.values)
-      if (valorDe(campo) case final valor?) campo: valor,
+    for (final campo in CampoFiltro.values) campo: ?valorDe(campo),
   };
 
   int get quantidade => ativos.length;

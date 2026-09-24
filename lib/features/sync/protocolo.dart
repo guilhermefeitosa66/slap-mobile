@@ -634,7 +634,7 @@ class ConviteLink {
       'id': inventarioId,
       'n': nome,
       'a': '$ano',
-      if (dispositivoOrigem != null) 'd': dispositivoOrigem!,
+      'd': ?dispositivoOrigem,
     };
     return [
       for (final e in partes.entries)
