@@ -337,9 +337,13 @@ Os aparelhos da mesma rede se encontram sozinhos e aparecem na lista, com o nome
 usando cada um. Toque num aparelho para trocar com ele, ou em **Trocar com todos** para
 percorrer a lista inteira — nesse caso a tela diz em qual aparelho está ("aparelho 2 de 3").
 
-Durante a troca, uma barra mostra o que está sendo recebido e o que está sendo enviado, em
-número de alterações. Ao fim, cada aparelho mostra o resultado ("Recebidas 12, enviadas 3") e
-o horário da última troca bem-sucedida.
+Durante a troca, uma barra mostra o que está sendo recebido e o que está sendo enviado. Ao
+fim aparece um aviso com o resultado — quantos itens foram atualizados com o que chegou,
+quantas alterações suas foram para o outro aparelho, e quantos conflitos ficaram para
+conferir — que você fecha em **OK**. Com pouca coisa a trocar isso leva um instante, e o
+aviso é o que confirma que deu certo.
+
+Depois, cada aparelho na lista mostra o resultado da última troca e o horário dela.
 
 **Com que frequência trocar?** Sempre que houver oportunidade — no fim de cada bloco de
 salas, na hora do café, ao fim do dia. Enquanto o que você levantou está só no seu aparelho,

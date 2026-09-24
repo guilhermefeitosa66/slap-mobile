@@ -13,6 +13,7 @@ import '../../core/formato.dart';
 import 'cliente.dart';
 import 'compartilhar_inventario.dart';
 import 'descoberta.dart';
+import 'resumo_troca.dart';
 import 'servidor.dart';
 
 /// Sincronização com os outros aparelhos do inventário.
@@ -128,9 +129,18 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     return 'aparelho ${dispositivoId.substring(0, 6)}';
   }
 
-  Future<void> _sincronizar(Par par) async {
+  /// Troca com um aparelho.
+  ///
+  /// Com [avisar], mostra o resultado num aviso que exige confirmação. Em
+  /// "Trocar com todos" o aviso é um só, no fim, e por isso este fica
+  /// desligado: três diálogos seguidos seriam três toques sem informação
+  /// nova.
+  Future<({ResultadoSync? resultado, FalhaNaTroca? falha})> _sincronizar(
+    Par par, {
+    bool avisar = true,
+  }) async {
     final inventario = ref.read(inventarioProvider(widget.inventarioId));
-    if (inventario == null) return;
+    if (inventario == null) return (resultado: null, falha: null);
 
     setState(() {
       _sincronizando.add(par.dispositivoId);
@@ -155,7 +165,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
 
       ref.read(revisaoProvider.notifier).mudou();
 
-      if (!mounted) return;
+      if (!mounted) return (resultado: resultado, falha: null);
       setState(() {
         _relogios.remove(par.dispositivoId);
         _ultimasTrocas = {..._ultimasTrocas, par.dispositivoId: DateTime.now()};
@@ -166,6 +176,8 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                   ' · $tempo'
             : 'Já estava tudo sincronizado · $tempo';
       });
+      if (avisar) await _avisar(resumirTroca(resultado));
+      return (resultado: resultado, falha: null);
     } on RelogioDivergente catch (e) {
       if (mounted) {
         setState(() {
@@ -174,14 +186,22 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
               'Relógios diferentes — nada foi trocado';
         });
       }
+      return _falhou(
+        par,
+        'relógios diferentes, nada foi trocado',
+        e.mensagem,
+        avisar: avisar,
+      );
     } on FalhaSync catch (e) {
       if (mounted) {
         setState(() => _resultados[par.dispositivoId] = e.mensagem);
       }
+      return _falhou(par, e.mensagem, e.mensagem, avisar: avisar);
     } catch (e) {
       if (mounted) {
         setState(() => _resultados[par.dispositivoId] = 'Falhou: $e');
       }
+      return _falhou(par, 'falhou', '$e', avisar: avisar);
     } finally {
       if (mounted) {
         setState(() {
@@ -192,12 +212,73 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     }
   }
 
+  /// Registra a falha e, num par só, mostra o aviso.
+  ///
+  /// [curta] entra na lista de "Trocar com todos"; [inteira] é a explicação
+  /// de quem recusou, que não cabe numa linha de lista mas é o que resolve o
+  /// problema de quem está com o aparelho.
+  Future<({ResultadoSync? resultado, FalhaNaTroca? falha})> _falhou(
+    Par par,
+    String curta,
+    String inteira, {
+    required bool avisar,
+  }) async {
+    if (avisar) await _avisar(resumirFalha(par.rotulo, inteira));
+    return (resultado: null, falha: FalhaNaTroca(par.rotulo, curta));
+  }
+
+  /// O aviso de conclusão, com confirmação.
+  ///
+  /// Esperar o toque é o ponto: sem ele, com poucos itens a trocar, a barra
+  /// aparece e some antes de alguém ler, e fica a dúvida de ter dado certo.
+  Future<void> _avisar(ResumoTroca resumo) async {
+    if (!mounted) return;
+    final verConflitos = await showDialog<bool>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: Text(resumo.titulo),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final linha in resumo.linhas)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(linha),
+              ),
+          ],
+        ),
+        actions: [
+          if (resumo.conflitos > 0)
+            TextButton(
+              onPressed: () => Navigator.pop(contexto, true),
+              child: const Text('Ver conflitos'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(contexto, false),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+
+    if (verConflitos == true && mounted) {
+      // Sem esperar a volta: quem foi conferir conflitos decide quando sair
+      // daquela tela, e a troca já terminou.
+      unawaited(context.push('/inventario/${widget.inventarioId}/conflitos'));
+    }
+  }
+
   /// Percorre os pares em sequência, dizendo em qual está.
   ///
   /// Sem isso a tela ficava parada por vários aparelhos seguidos sem dizer de
   /// quem era a vez, e quem esperava não sabia se faltava um ou três.
   Future<void> _sincronizarTodos() async {
     final pares = _pares;
+    final resultados = <ResultadoSync>[];
+    final falhas = <FalhaNaTroca>[];
+
     for (var i = 0; i < pares.length; i++) {
       if (!mounted) return;
       setState(
@@ -207,9 +288,16 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
           rotulo: pares[i].rotulo,
         ),
       );
-      await _sincronizar(pares[i]);
+      final (:resultado, :falha) = await _sincronizar(pares[i], avisar: false);
+      if (resultado != null) resultados.add(resultado);
+      if (falha != null) falhas.add(falha);
     }
-    if (mounted) setState(() => _fila = null);
+
+    if (!mounted) return;
+    setState(() => _fila = null);
+    if (resultados.isNotEmpty || falhas.isNotEmpty) {
+      await _avisar(resumirTrocas(resultados, falhas));
+    }
   }
 
   @override

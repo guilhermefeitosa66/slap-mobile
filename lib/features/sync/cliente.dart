@@ -137,15 +137,26 @@ class Par {
 /// Resultado de uma sincronização com um par.
 class ResultadoSync {
   final Par par;
+
+  /// Alterações trocadas, na unidade do protocolo.
   final int recebidas;
   final int enviadas;
+
   final int conflitos;
+
+  /// Quantos patrimônios distintos mudaram com o que chegou.
+  ///
+  /// É o número que significa alguma coisa para quem está conduzindo o
+  /// inventário: "12 itens atualizados" se entende, "18 alterações" não —
+  /// várias alterações podem cair no mesmo item.
+  final int itensAtualizados;
 
   const ResultadoSync({
     required this.par,
     required this.recebidas,
     required this.enviadas,
     required this.conflitos,
+    this.itensAtualizados = 0,
   });
 
   bool get houveTroca => recebidas > 0 || enviadas > 0;
@@ -261,6 +272,7 @@ class ClienteSync {
       recebidas: recebidas.aplicadas,
       enviadas: enviadas.quantidade,
       conflitos: recebidas.conflitos,
+      itensAtualizados: recebidas.patrimoniosAfetados.length,
     );
   }
 
