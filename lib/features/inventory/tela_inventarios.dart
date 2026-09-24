@@ -9,6 +9,7 @@ import '../../core/formato.dart';
 import '../sync/entrar_inventario.dart';
 import 'acoes_inventario.dart';
 import 'aviso_atualizacao.dart';
+import 'estado_atualizacao.dart';
 
 /// Lista dos inventários que existem neste aparelho.
 class TelaInventarios extends ConsumerWidget {
@@ -50,29 +51,46 @@ class TelaInventarios extends ConsumerWidget {
         children: [
           const AvisoAtualizacao(),
           Expanded(
-            child: inventarios.isEmpty
-                ? _Vazio(
-                    aoLerQr: () => entrarEmInventario(context, ref),
-                    aoImportar: () => _criar(context, ref),
-                  )
-                : ListView.builder(
-                    // Espaço para o botão flutuante não cobrir o último
-                    // cartão.
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                    itemCount: inventarios.length,
-                    itemBuilder: (context, i) {
-                      final inv = inventarios[i];
-                      return _CartaoInventario(inventarioId: inv.id);
-                    },
-                  ),
+            // Puxar para atualizar relê a lista e pergunta de novo pela
+            // versão. O painel de cada inventário já fazia o primeiro; aqui
+            // é também o jeito de pedir a conferência de versão sem fechar e
+            // abrir o aplicativo.
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.read(revisaoProvider.notifier).mudou();
+                await ref.read(estadoAtualizacaoProvider.notifier).reconferir();
+              },
+              child: inventarios.isEmpty
+                  ? _Vazio(
+                      aoLerQr: () => entrarEmInventario(context, ref),
+                      aoImportar: () => _criar(context, ref),
+                    )
+                  : ListView.builder(
+                      // Espaço para o botão flutuante não cobrir o último
+                      // cartão.
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                      itemCount: inventarios.length,
+                      itemBuilder: (context, i) {
+                        final inv = inventarios[i];
+                        return _CartaoInventario(inventarioId: inv.id);
+                      },
+                    ),
+            ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _novo(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo'),
-      ),
+      // Sem inventário nenhum, o botão não aparece: o estado vazio já põe as
+      // duas origens no centro da tela, com o mesmo destino. Dois caminhos
+      // para a mesma coisa, na primeira abertura, é só uma escolha a mais
+      // para quem ainda não sabe o que o aplicativo faz — e o botão
+      // flutuante ainda cobria o texto que explica.
+      floatingActionButton: inventarios.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _novo(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Novo'),
+            ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         child: Column(
@@ -304,7 +322,10 @@ class _Vazio extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(32, 32, 32, 112),
+        // Rola mesmo cabendo na tela: sem isto, o gesto de puxar para
+        // atualizar não tem o que puxar com a lista vazia.
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(32, 32, 32, 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

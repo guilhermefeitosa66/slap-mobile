@@ -116,6 +116,20 @@ void main() {
     expect(find.byType(MobileScanner), findsOneWidget);
   });
 
+  testWidgets('sem inventário, o botão flutuante não aparece', (tester) async {
+    // O estado vazio já põe as duas origens no centro da tela, com o mesmo
+    // destino do botão. Na primeira abertura, dois caminhos para a mesma
+    // coisa é só uma escolha a mais para quem ainda não sabe o que o
+    // aplicativo faz.
+    await abrir(tester);
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    // Com o primeiro inventário, ele passa a valer.
+    criarInventario();
+    await abrir(tester);
+    expect(find.widgetWithText(FloatingActionButton, 'Novo'), findsOneWidget);
+  });
+
   testWidgets('o estado vazio oferece as mesmas duas origens', (tester) async {
     await abrir(tester);
 

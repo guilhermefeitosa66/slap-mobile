@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slap_mobile/core/atualizacao.dart';
 import 'package:slap_mobile/data/banco.dart';
@@ -101,6 +102,34 @@ void main() {
     // Outra abertura: outro container de provedores, como no aplicativo.
     await abrir(tester, fixo('{"tag_name": "v9.9.9"}'));
 
+    expect(find.textContaining('Versão 9.9.9 disponível'), findsOneWidget);
+  });
+
+  testWidgets('puxar para atualizar pergunta de novo', (tester) async {
+    // Depois de dispensar, o gesto traz a resposta de volta: quem puxou
+    // pediu para saber, e esconder seria contrariar o gesto.
+    var perguntas = 0;
+    await abrir(
+      tester,
+      VerificadorAtualizacao(
+        buscar: (_) async {
+          perguntas++;
+          return '{"tag_name": "v9.9.9"}';
+        },
+      ),
+    );
+    await tester.tap(find.text('Agora não'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('disponível'), findsNothing);
+
+    await tester.fling(
+      find.byType(Scrollable).first,
+      const Offset(0, 300),
+      1000,
+    );
+    await tester.pumpAndSettle();
+
+    expect(perguntas, 2, reason: 'consultou de novo');
     expect(find.textContaining('Versão 9.9.9 disponível'), findsOneWidget);
   });
 

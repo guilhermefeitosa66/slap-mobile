@@ -8,7 +8,7 @@ import 'dart:io';
 /// plugin, com canal de plataforma, só para saber um número que já é conhecido
 /// na compilação. Um teste confere que as duas não divergem — é o que torna a
 /// repetição segura.
-const String versaoApp = '1.2.2';
+const String versaoApp = '1.2.3';
 
 /// Onde se pergunta qual é a última versão publicada.
 ///

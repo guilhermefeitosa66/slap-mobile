@@ -53,6 +53,12 @@ class ControladorAtualizacao extends Notifier<EstadoAtualizacao> {
     return const EstadoAtualizacao();
   }
 
+  /// Confere de novo, a pedido — o gesto de puxar para atualizar.
+  ///
+  /// Uma dispensa anterior não sobrevive a isto: quem puxou para atualizar
+  /// pediu para saber, e esconder a resposta seria contrariar o gesto.
+  Future<void> reconferir() => _conferir();
+
   Future<void> _conferir() async {
     final banco = ref.read(bancoProvider);
     if (banco.lerConfig(Config.verificarAtualizacao) == '0') return;

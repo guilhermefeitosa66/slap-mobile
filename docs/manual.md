@@ -60,7 +60,9 @@ em diante; o que já foi registrado continua com o nome de quem registrou, que �
 
 ## Criar o inventário
 
-A lista de inventários é a primeira tela. O botão **Novo** oferece dois caminhos:
+A lista de inventários é a primeira tela. Na primeira abertura, sem nenhum inventário, ela
+oferece dois caminhos no centro da tela; depois do primeiro, os mesmos dois passam a ficar no
+botão **Novo**, no canto inferior:
 
 ![Lista de inventários do aparelho](imagens/inventarios.png)
 
@@ -68,6 +70,9 @@ A lista de inventários é a primeira tela. O botão **Novo** oferece dois camin
   ano e importa a planilha do SUAP.
 - **Ler o QR code de outro aparelho** — para quem vai participar de um inventário que outra
   pessoa já criou. Recebe uma cópia pela rede local.
+
+Puxando a lista de cima para baixo, ela é relida — e o aplicativo aproveita para conferir se há
+versão nova.
 
 Um aparelho pode ter vários inventários ao mesmo tempo — o do campus deste ano, o do ano
 passado, o de uma unidade específica. Cada um é independente.
