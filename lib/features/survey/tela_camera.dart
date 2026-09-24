@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import '../../app/app.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../core/codigo.dart';
 import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
 import 'estado_levantamento.dart';
+import 'linha_leitura.dart';
+import 'manter_tela_ligada.dart';
+import 'tela_levantamento.dart' show LevantamentoEncerrado;
 
 /// Leitura contínua pela câmera.
 ///
@@ -52,7 +56,7 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
         BarcodeFormat.code39,
         BarcodeFormat.ean13,
         BarcodeFormat.ean8,
-        BarcodeFormat.itf,
+        BarcodeFormat.itf14,
         BarcodeFormat.codabar,
         BarcodeFormat.qrCode,
       ],
@@ -67,6 +71,9 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
 
   Future<void> _aoDetectar(BarcodeCapture captura) async {
     if (_ocupado) return;
+    if (ref.read(inventarioProvider(widget.inventarioId))?.encerrado ?? false) {
+      return;
+    }
 
     final config = ref.read(configuracaoProvider(widget.inventarioId));
     if (config == null) return;
@@ -128,127 +135,113 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
     ref
         .read(historicosProvider.notifier)
         .registrar(widget.inventarioId, registro);
-    if (mounted) setState(() => _lidos.insert(0, registro));
+    if (mounted) {
+      anunciarLeitura(context, registro);
+      setState(() => _lidos.insert(0, registro));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (ref.watch(inventarioProvider(widget.inventarioId))?.encerrado ??
+        false) {
+      return const LevantamentoEncerrado();
+    }
+
     final config = ref.watch(configuracaoProvider(widget.inventarioId));
     final sucessos = _lidos
         .where((l) => l.resultado == ResultadoLeitura.sucesso)
         .length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Lidos: $sucessos'),
-        actions: [
-          IconButton(
-            tooltip: 'Lanterna',
-            icon: const Icon(Icons.flashlight_on),
-            onPressed: () => _controlador.toggleTorch(),
-          ),
-          IconButton(
-            tooltip: 'Trocar câmera',
-            icon: const Icon(Icons.cameraswitch),
-            onPressed: () => _controlador.switchCamera(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (config != null)
-            Container(
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.primaryContainer,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                '${config.sala} · ${config.conservacao.rotulo} · '
-                '${config.situacao.rotulo}',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+    final apoio = CoresApoio.of(context);
+
+    return ManterTelaLigada(
+      child: Scaffold(
+        appBar: AppBar(
+          // A câmera fica escura nos dois temas: um cabeçalho claro sobre o
+          // quadro da câmera ofusca quem está mirando a etiqueta.
+          backgroundColor: PaletaClara.tinta,
+          foregroundColor: Colors.white,
+          title: Text('Lidos: ${formatarInteiro(sucessos)}'),
+          actions: [
+            IconButton(
+              tooltip: 'Lanterna',
+              icon: const Icon(Icons.flashlight_on),
+              onPressed: () => _controlador.toggleTorch(),
+            ),
+            IconButton(
+              tooltip: 'Trocar câmera',
+              icon: const Icon(Icons.cameraswitch),
+              onPressed: () => _controlador.switchCamera(),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            if (config != null)
+              Container(
+                width: double.infinity,
+                color: apoio.faixa,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 9,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                child: Text(
+                  '${config.sala} · ${config.conservacao.rotulo} · '
+                  '${config.situacao.rotulo}',
+                  style: TextStyle(color: apoio.sobreFaixa, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            Expanded(
+              flex: 3,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  MobileScanner(
+                    controller: _controlador,
+                    onDetect: (captura) => _aoDetectar(captura),
+                    errorBuilder: (context, erro) => _ErroCamera(erro: erro),
+                  ),
+                  const _Mira(),
+                ],
               ),
             ),
-          Expanded(
-            flex: 3,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                MobileScanner(
-                  controller: _controlador,
-                  onDetect: (captura) => _aoDetectar(captura),
-                  errorBuilder: (context, erro) => _ErroCamera(erro: erro),
-                ),
-                const _Mira(),
-              ],
+            Expanded(
+              flex: 2,
+              child: _lidos.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'Aponte para as etiquetas. A câmera continua aberta '
+                          'entre um patrimônio e outro.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: _lidos.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, indent: 50),
+                      itemBuilder: (_, i) => LinhaLeitura(registro: _lidos[i]),
+                    ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.check),
+            label: Text(
+              sucessos == 0
+                  ? 'Concluir'
+                  : 'Concluir (${formatarInteiro(sucessos)} registrados)',
             ),
           ),
-          Expanded(
-            flex: 2,
-            child: _lidos.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Aponte para as etiquetas. A câmera continua aberta '
-                        'entre um patrimônio e outro.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: _lidos.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) => _LinhaCamera(registro: _lidos[i]),
-                  ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(12),
-        child: FilledButton.icon(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.check),
-          label: Text(
-            sucessos == 0 ? 'Concluir' : 'Concluir ($sucessos registrados)',
-          ),
         ),
-      ),
-    );
-  }
-}
-
-class _LinhaCamera extends StatelessWidget {
-  final LeituraRegistrada registro;
-
-  const _LinhaCamera({required this.registro});
-
-  @override
-  Widget build(BuildContext context) {
-    final (cor, icone) = switch (registro.resultado) {
-      ResultadoLeitura.sucesso => (CoresResultado.sucesso, Icons.check_circle),
-      ResultadoLeitura.jaVerificado => (
-        CoresResultado.alerta,
-        Icons.replay_circle_filled,
-      ),
-      ResultadoLeitura.naoLocalizado => (CoresResultado.erro, Icons.error),
-    };
-
-    return ListTile(
-      dense: true,
-      leading: Icon(icone, color: cor),
-      title: Text(
-        registro.patrimonio?.descricao ?? 'Código ${registro.codigoLido}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        registro.patrimonio == null
-            ? 'Não localizado neste inventário'
-            : 'Tombo ${registro.patrimonio!.tombo}',
-        style: TextStyle(color: cor),
       ),
     );
   }
@@ -265,8 +258,8 @@ class _Mira extends StatelessWidget {
           width: 260,
           height: 120,
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.white70, width: 3),
-            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white, width: 3),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),

@@ -16,6 +16,16 @@ class Aparelho {
   late final RepositorioInventarios inventarios;
 
   Aparelho(this.apelido) : banco = Banco.emMemoria() {
+    _ligar();
+  }
+
+  /// Aparelho que abre um banco já existente, identidade incluída.
+  Aparelho.deArquivo(this.apelido, String caminho)
+    : banco = Banco.abrirSincrono(caminho) {
+    _ligar();
+  }
+
+  void _ligar() {
     ops = RepositorioOperacoes(banco);
     patrimonios = RepositorioPatrimonios(banco, ops);
     inventarios = RepositorioInventarios(banco, ops);
@@ -44,16 +54,27 @@ class RedeSimulada {
     required Aparelho para,
     required String inventarioId,
   }) {
+    // Cada lado confere as cabeças do outro, como na rede de verdade.
+    de.ops.conferirCabecas(inventarioId, para.ops.cabecas(inventarioId));
+    para.ops.conferirCabecas(inventarioId, de.ops.cabecas(inventarioId));
+
     final faltantes = de.ops.opsFaltantes(
       inventarioId,
-      para.ops.vetorDe(inventarioId),
+      para.ops.vetorParaPedido(inventarioId),
     );
-    if (faltantes.isEmpty) return 0;
+    if (faltantes.isNotEmpty) {
+      para.ops.aplicarRemotas(
+        faltantes,
+        contextos: de.ops.contextosDe(faltantes),
+      );
+    }
 
-    para.ops.aplicarRemotas(
-      faltantes,
-      contextos: de.ops.contextosDe(faltantes),
-    );
+    // Como o cliente e o servidor de verdade: cada lado anota até onde o
+    // trabalho dele está no outro.
+    final deEmPara = para.ops.vetorDe(inventarioId)[de.dispositivoId];
+    final paraEmDe = de.ops.vetorDe(inventarioId)[para.dispositivoId];
+    de.ops.registrarPar(para.dispositivoId, inventarioId, nossoSeq: deEmPara);
+    para.ops.registrarPar(de.dispositivoId, inventarioId, nossoSeq: paraEmDe);
     return faltantes.length;
   }
 

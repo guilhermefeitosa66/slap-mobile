@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:nsd/nsd.dart' as nsd;
 
 import 'cliente.dart';
+import 'multicast.dart';
 import 'protocolo.dart';
 
 /// Encontra os outros aparelhos na rede local.
@@ -21,6 +24,9 @@ import 'protocolo.dart';
 /// Nenhuma das duas atravessa isolamento de cliente ("AP isolation"): quando a
 /// rede separa os aparelhos entre si, não há solução em software. Nesse caso a
 /// lista fica vazia e cabe à interface orientar o uso de um hotspot próprio.
+///
+/// O beacon depende da [TravaMulticast] no Android: ela é adquirida ao iniciar
+/// e liberada ao parar — e também logo no início, se nenhuma via subir.
 class Descoberta {
   final String dispositivoId;
   final String? Function() usuarioNome;
@@ -28,11 +34,21 @@ class Descoberta {
   /// Porta do servidor local, anunciada aos outros.
   final int porta;
 
+  /// Vias ligadas. Permite testar o beacon sozinho, com o mDNS desligado, sem
+  /// mexer no código (ver [ViaDescoberta.configuradas]).
+  final Set<ViaDescoberta> vias;
+
+  final TravaMulticast _trava;
+  bool _travaAdquirida = false;
+
   Descoberta({
     required this.dispositivoId,
     required this.usuarioNome,
     required this.porta,
-  });
+    Set<ViaDescoberta>? vias,
+    TravaMulticast? trava,
+  }) : vias = vias ?? ViaDescoberta.configuradas(),
+       _trava = trava ?? TravaMulticast.doSistema();
 
   final _pares = <String, Par>{};
   final _mudancas = StreamController<List<Par>>.broadcast();
@@ -53,14 +69,62 @@ class Descoberta {
 
   bool get ativa => _busca != null || _socket != null;
 
+  /// A trava de multicast está segura agora.
+  bool get travaAdquirida => _travaAdquirida;
+
   Future<void> iniciar() async {
-    // As duas vias sobem de forma independente: o mDNS falhar não pode
-    // impedir o beacon de funcionar, e é exatamente na rede em que um falha
-    // que o outro salva a sincronização.
-    await Future.wait([_iniciarMdns(), _iniciarBeacon()]);
+    if (vias.contains(ViaDescoberta.beacon)) await _adquirirTrava();
+
+    try {
+      // As duas vias sobem de forma independente: o mDNS falhar não pode
+      // impedir o beacon de funcionar, e é exatamente na rede em que um falha
+      // que o outro salva a sincronização.
+      await Future.wait([
+        if (vias.contains(ViaDescoberta.mdns)) _iniciarMdns(),
+        if (vias.contains(ViaDescoberta.beacon)) _iniciarBeacon(),
+      ]);
+    } finally {
+      // Descoberta que não subiu não vai ser parada por ninguém: a trava
+      // não pode ficar presa esperando.
+      if (!ativa) await _liberarTrava();
+    }
+  }
+
+  Future<void> _adquirirTrava() async {
+    final falha = await _trava.adquirir();
+    if (falha == null) {
+      _travaAdquirida = true;
+      return;
+    }
+
+    // Registrado em vez de engolido: sem a trava o beacon não recebe nada, e
+    // é isso que explica um aparelho que não aparece na lista.
+    developer.log(
+      'MulticastLock não adquirido: $falha',
+      name: 'slap.descoberta',
+      level: 900,
+    );
+    avisos.add(
+      'O Android não liberou a recepção de anúncios na rede ($falha). A busca '
+      'continua, mas pode não encontrar todos os aparelhos.',
+    );
+  }
+
+  Future<void> _liberarTrava() async {
+    if (!_travaAdquirida) return;
+    _travaAdquirida = false;
+    await _trava.liberar();
   }
 
   Future<void> parar() async {
+    try {
+      await _pararVias();
+    } finally {
+      await _liberarTrava();
+    }
+  }
+
+  Future<void> _pararVias() async {
     _pulso?.cancel();
     _pulso = null;
 
@@ -131,13 +195,13 @@ class Descoberta {
       return;
     }
 
-    _adicionar(
+    adicionar(
       Par(
         dispositivoId: id,
         usuarioNome: _texto(servico.txt?['user']),
         host: host,
         porta: servico.port!,
-        origem: 'mdns',
+        origens: const {'mdns'},
       ),
     );
   }
@@ -200,16 +264,17 @@ class Descoberta {
       final id = j['disp'] as String?;
       final portaRemota = (j['porta'] as num?)?.toInt();
 
+      // Aparelho de outra versão aparece na lista mesmo assim: esconder faria
+      // a pessoa procurar defeito na rede, e a sincronização explica.
       if (id == null || id == dispositivoId || portaRemota == null) return;
-      if (j['v'] != versaoProtocolo) return;
 
-      _adicionar(
+      adicionar(
         Par(
           dispositivoId: id,
           usuarioNome: j['user'] as String?,
           host: pacote.address.address,
           porta: portaRemota,
-          origem: 'beacon',
+          origens: const {'beacon'},
         ),
       );
     } catch (_) {
@@ -219,18 +284,31 @@ class Descoberta {
 
   // ----------------------------------------------------------------- comum ---
 
-  void _adicionar(Par par) {
+  /// Registra um aparelho encontrado. Público só para os testes, que não têm
+  /// mDNS nem multicast de verdade.
+  @visibleForTesting
+  void adicionar(Par par) {
     final anterior = _pares[par.dispositivoId];
+    // As vias se somam: o beacon repete o anúncio a cada poucos segundos, e
+    // ficar só com a última apagaria que o mDNS também encontrou o aparelho.
+    final origens = {...?anterior?.origens, ...par.origens};
     // O mDNS resolve o nome do host, o beacon traz o IP de quem enviou.
     // Trocar a entrada a cada anúncio faria a lista piscar na tela.
     if (anterior != null &&
         anterior.host == par.host &&
         anterior.porta == par.porta &&
-        anterior.usuarioNome == par.usuarioNome) {
+        anterior.usuarioNome == par.usuarioNome &&
+        anterior.origens.length == origens.length) {
       return;
     }
 
-    _pares[par.dispositivoId] = par;
+    _pares[par.dispositivoId] = Par(
+      dispositivoId: par.dispositivoId,
+      usuarioNome: par.usuarioNome,
+      host: par.host,
+      porta: par.porta,
+      origens: origens,
+    );
     _notificar();
   }
 
@@ -253,6 +331,41 @@ class Descoberta {
     } catch (_) {
       return null;
     }
+  }
+}
+
+/// Por onde um aparelho foi encontrado, em palavras: `mDNS`, `anúncio na
+/// rede` ou os dois.
+String descreverOrigens(Set<String> origens) {
+  final mdns = origens.contains(ViaDescoberta.mdns.name);
+  final beacon = origens.contains(ViaDescoberta.beacon.name);
+  if (mdns && beacon) return 'mDNS e anúncio na rede';
+  if (beacon) return 'anúncio na rede';
+  return 'mDNS';
+}
+
+/// As duas formas de encontrar aparelhos.
+enum ViaDescoberta {
+  mdns,
+  beacon;
+
+  /// Vias escolhidas na compilação, todas por padrão.
+  ///
+  /// Para conferir que o beacon funciona sozinho — o plano B das redes em que
+  /// o mDNS não passa —, gere o APK com o mDNS desligado:
+  ///
+  ///     flutter build apk --dart-define=SLAP_DESCOBERTA=beacon
+  static Set<ViaDescoberta> configuradas() {
+    const texto = String.fromEnvironment(
+      'SLAP_DESCOBERTA',
+      defaultValue: 'mdns,beacon',
+    );
+    final escolhidas = {
+      for (final nome in texto.split(','))
+        for (final via in values)
+          if (via.name == nome.trim()) via,
+    };
+    return escolhidas.isEmpty ? values.toSet() : escolhidas;
   }
 }
 

@@ -7,6 +7,7 @@ import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';
 import '../../domain/patrimonio.dart';
 import '../../domain/valores.dart';
+import 'cifra.dart';
 
 /// Tipo de serviço anunciado por mDNS. O primeiro rótulo precisa ter no
 /// máximo 15 caracteres, por especificação (RFC 6335).
@@ -18,7 +19,20 @@ const int portaMulticast = 47771;
 
 /// Versão do protocolo. Aparelhos com versões diferentes se recusam a
 /// sincronizar, em vez de trocarem dados que um dos lados interpreta errado.
-const int versaoProtocolo = 1;
+///
+/// 2: corpo cifrado (AES-GCM), chaves derivadas por HKDF, inventário na query
+/// e cabeças nos pedidos.
+const int versaoProtocolo = 2;
+
+/// Cabeçalho com a versão do protocolo de quem pede.
+const String cabecalhoVersao = 'x-slap-versao';
+
+/// Explicação para quando as versões do protocolo não batem.
+String mensagemVersaoDiferente({required String quem, required int versao}) =>
+    '$quem usa uma versão '
+    '${versao < versaoProtocolo ? 'anterior' : 'mais nova'} do aplicativo '
+    '(protocolo $versao; este usa $versaoProtocolo). Atualize os dois '
+    'aparelhos para a mesma versão e sincronize de novo.';
 
 /// Janela de tolerância da assinatura. Limita a repetição de uma requisição
 /// capturada na rede.
@@ -38,10 +52,9 @@ class Rotas {
 /// escreve, e uma requisição capturada não pode ser alterada nem repetida fora
 /// da janela de tempo.
 ///
-/// **Limite assumido:** o corpo trafega em claro. Na rede local, quem estiver
-/// autenticado nela e capturando pacotes consegue ler dados patrimoniais.
-/// Não há credencial no tráfego, e o alcance é o segmento local. Cifrar o
-/// corpo está no roteiro; ver `docs/02-arquitetura.md`, seção 5.9.
+/// A assinatura cobre o corpo como ele trafega — cifrado (ver [CifraSync]) —,
+/// e usa uma chave derivada da `chave_sync`, e não ela mesma. Ver
+/// `docs/02-arquitetura.md`, seção 5.9.
 class Assinatura {
   static const _prefixo = 'SLAP';
 
@@ -68,25 +81,69 @@ class Assinatura {
     required String corpo,
     DateTime? agora,
   }) {
-    if (cabecalho == null || !cabecalho.startsWith('$_prefixo ')) return null;
+    final conferencia = conferir(
+      cabecalho: cabecalho,
+      chaveSync: chaveSync,
+      metodo: metodo,
+      caminho: caminho,
+      corpo: corpo,
+      agora: agora,
+    );
+    return conferencia.valida ? conferencia.dispositivoId : null;
+  }
+
+  /// Confere o cabeçalho distinguindo assinatura errada de relógio errado.
+  ///
+  /// A distinção importa porque os dois casos pedem coisas diferentes a quem
+  /// está com o celular na mão. Com a chave certa e o horário fora da janela,
+  /// o problema é o relógio de um dos aparelhos — e dizer "o aparelho recusou
+  /// a conexão" mandaria a pessoa procurar defeito no QR code.
+  ///
+  /// O HMAC é conferido antes do horário: só quem tem a chave fica sabendo que
+  /// o problema é o relógio.
+  static ConferenciaAssinatura conferir({
+    required String? cabecalho,
+    required String chaveSync,
+    required String metodo,
+    required String caminho,
+    required String corpo,
+    DateTime? agora,
+  }) {
+    const invalida = ConferenciaAssinatura._(SituacaoAssinatura.invalida);
+
+    if (cabecalho == null || !cabecalho.startsWith('$_prefixo ')) {
+      return invalida;
+    }
 
     final partes = cabecalho.substring(_prefixo.length + 1).split(':');
-    if (partes.length != 3) return null;
+    if (partes.length != 3) return invalida;
 
     final dispositivoId = partes[0];
     final momento = int.tryParse(partes[1]);
     final recebido = partes[2];
-    if (momento == null) return null;
-
-    final diferenca =
-        ((agora ?? DateTime.now()).millisecondsSinceEpoch - momento).abs();
-    if (diferenca > janelaAssinatura.inMilliseconds) return null;
+    if (momento == null) return invalida;
 
     final esperado = _calcular(chaveSync, metodo, caminho, corpo, momento);
 
     // Comparação de tempo constante: comparar com `==` vazaria, pelo tempo de
     // resposta, quantos bytes iniciais do HMAC um atacante acertou.
-    return _iguaisEmTempoConstante(esperado, recebido) ? dispositivoId : null;
+    if (!_iguaisEmTempoConstante(esperado, recebido)) return invalida;
+
+    final diferenca =
+        ((agora ?? DateTime.now()).millisecondsSinceEpoch - momento).abs();
+    if (diferenca > janelaAssinatura.inMilliseconds) {
+      return ConferenciaAssinatura._(
+        SituacaoAssinatura.foraDaJanela,
+        dispositivoId: dispositivoId,
+        momento: momento,
+      );
+    }
+
+    return ConferenciaAssinatura._(
+      SituacaoAssinatura.valida,
+      dispositivoId: dispositivoId,
+      momento: momento,
+    );
   }
 
   static String _calcular(
@@ -98,7 +155,11 @@ class Assinatura {
   ) {
     final resumoCorpo = sha256.convert(utf8.encode(corpo)).toString();
     final mensagem = '$metodo\n$caminho\n$momento\n$resumoCorpo';
-    final hmac = Hmac(sha256, base64Url.decode(chaveSync));
+    final chave = hkdfSha256(
+      base64Url.decode(chaveSync),
+      info: utf8.encode(CifraSync.infoAssinatura),
+    );
+    final hmac = Hmac(sha256, chave);
     return base64Url.encode(hmac.convert(utf8.encode(mensagem)).bytes);
   }
 
@@ -109,6 +170,68 @@ class Assinatura {
       diferenca |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
     }
     return diferenca == 0;
+  }
+}
+
+enum SituacaoAssinatura {
+  valida,
+  invalida,
+
+  /// Assinada com a chave certa, mas com horário longe demais do deste
+  /// aparelho: um dos relógios está errado (ou é uma requisição repetida).
+  foraDaJanela,
+}
+
+class ConferenciaAssinatura {
+  final SituacaoAssinatura situacao;
+  final String? dispositivoId;
+
+  /// Horário que o remetente pôs na assinatura, em milissegundos.
+  final int? momento;
+
+  const ConferenciaAssinatura._(
+    this.situacao, {
+    this.dispositivoId,
+    this.momento,
+  });
+
+  bool get valida => situacao == SituacaoAssinatura.valida;
+}
+
+/// Resposta de erro para relógio fora de sincronia, em qualquer rota.
+///
+/// Leva o horário de quem responde, para que o outro lado saiba de quanto é a
+/// diferença e qual aparelho mostrar como adiantado ou atrasado.
+class ErroRelogio {
+  static const codigo = 'relogio';
+
+  /// Horário de quem respondeu, em milissegundos.
+  final int agora;
+
+  /// Aparelho cujas operações vieram com relógio no futuro, quando o problema
+  /// foi detectado no conteúdo, e não na assinatura. Pode ser um terceiro,
+  /// cujas operações chegaram por intermédio do par.
+  final String? dispositivo;
+
+  /// Quanto o relógio de [dispositivo] está à frente, em milissegundos.
+  final int? diferencaMs;
+
+  const ErroRelogio({required this.agora, this.dispositivo, this.diferencaMs});
+
+  Map<String, dynamic> toJson() => {
+    'erro': codigo,
+    'agora': agora,
+    'dispositivo': ?dispositivo,
+    'diferenca_ms': ?diferencaMs,
+  };
+
+  static ErroRelogio? fromJson(Map<String, dynamic> j) {
+    if (j['erro'] != codigo || j['agora'] is! num) return null;
+    return ErroRelogio(
+      agora: (j['agora'] as num).toInt(),
+      dispositivo: j['dispositivo'] as String?,
+      diferencaMs: (j['diferenca_ms'] as num?)?.toInt(),
+    );
   }
 }
 
@@ -123,40 +246,79 @@ class Apresentacao {
   final String? usuarioNome;
   final int versao;
 
+  /// Relógio de quem se apresenta, em milissegundos. Permite conferir os
+  /// relógios antes de trocar qualquer operação. `null` em aparelho antigo,
+  /// que não informava.
+  final int? agora;
+
   const Apresentacao({
     required this.dispositivoId,
     this.usuarioNome,
     this.versao = versaoProtocolo,
+    this.agora,
   });
 
   Map<String, dynamic> toJson() => {
     'dispositivo': dispositivoId,
     'usuario': usuarioNome,
     'versao': versao,
+    'agora': ?agora,
   };
 
   factory Apresentacao.fromJson(Map<String, dynamic> j) => Apresentacao(
     dispositivoId: j['dispositivo'] as String,
     usuarioNome: j['usuario'] as String?,
     versao: (j['versao'] as num?)?.toInt() ?? 0,
+    agora: (j['agora'] as num?)?.toInt(),
   );
+}
+
+/// Última operação conhecida de cada aparelho: `{aparelho: (seq, op_id)}`.
+///
+/// Permite ao outro lado conferir que a mesma posição tem a mesma operação —
+/// é como se percebe dois aparelhos escrevendo com a mesma identidade.
+typedef Cabecas = Map<String, ({int seq, String opId})>;
+
+Map<String, dynamic> _cabecasParaJson(Cabecas cabecas) => {
+  for (final e in cabecas.entries) e.key: '${e.value.seq}:${e.value.opId}',
+};
+
+Cabecas _cabecasDeJson(Object? j) {
+  if (j is! Map) return const {};
+  final cabecas = <String, ({int seq, String opId})>{};
+  for (final e in j.entries) {
+    final texto = e.value;
+    if (texto is! String) continue;
+    final corte = texto.indexOf(':');
+    final seq = corte < 0 ? null : int.tryParse(texto.substring(0, corte));
+    if (seq == null) continue;
+    cabecas[e.key as String] = (seq: seq, opId: texto.substring(corte + 1));
+  }
+  return cabecas;
 }
 
 /// Pedido de operações que faltam.
 class PedidoPull {
   final String inventarioId;
   final VersionVector vetor;
+  final Cabecas cabecas;
 
-  const PedidoPull({required this.inventarioId, required this.vetor});
+  const PedidoPull({
+    required this.inventarioId,
+    required this.vetor,
+    this.cabecas = const {},
+  });
 
   Map<String, dynamic> toJson() => {
     'inventario': inventarioId,
     'vetor': vetor.codificar(),
+    'cabecas': _cabecasParaJson(cabecas),
   };
 
   factory PedidoPull.fromJson(Map<String, dynamic> j) => PedidoPull(
     inventarioId: j['inventario'] as String,
     vetor: VersionVector.decodificar(j['vetor'] as String?),
+    cabecas: _cabecasDeJson(j['cabecas']),
   );
 }
 
@@ -177,11 +339,15 @@ class LoteOperacoes {
   /// outro lado já tem, podendo enviar só a diferença em seguida.
   final VersionVector vetor;
 
+  /// Última operação que quem envia tem de cada aparelho (ver [Cabecas]).
+  final Cabecas cabecas;
+
   const LoteOperacoes({
     required this.inventarioId,
     required this.ops,
     this.contextos = const {},
     this.vetor = VersionVector.vazia,
+    this.cabecas = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -191,6 +357,7 @@ class LoteOperacoes {
       for (final e in contextos.entries) e.key: e.value.codificar(),
     },
     'vetor': vetor.codificar(),
+    'cabecas': _cabecasParaJson(cabecas),
   };
 
   factory LoteOperacoes.fromJson(Map<String, dynamic> j) => LoteOperacoes(
@@ -204,6 +371,7 @@ class LoteOperacoes {
         e.key as String: VersionVector.decodificar(e.value as String),
     },
     vetor: VersionVector.decodificar(j['vetor'] as String?),
+    cabecas: _cabecasDeJson(j['cabecas']),
   );
 }
 

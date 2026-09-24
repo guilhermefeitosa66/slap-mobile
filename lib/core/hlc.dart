@@ -130,6 +130,8 @@ class Hlc implements Comparable<Hlc> {
 
   bool operator >(Hlc outro) => compareTo(outro) > 0;
   bool operator <(Hlc outro) => compareTo(outro) < 0;
+  bool operator >=(Hlc outro) => compareTo(outro) >= 0;
+  bool operator <=(Hlc outro) => compareTo(outro) <= 0;
 
   @override
   bool operator ==(Object outro) =>

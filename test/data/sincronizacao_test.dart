@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/data/repos/conflitos.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
 import 'package:slap_mobile/domain/valores.dart';
@@ -278,6 +279,59 @@ void main() {
         expect(impressaoDe(c, idItem1), impressaoDe(a, idItem1));
       },
     );
+
+    test('resolver num aparelho encerra o conflito em todos', () {
+      verificar(a, idItem1, config('Biblioteca'));
+      verificar(b, idItem1, config('Auditório'));
+      RedeSimulada.sincronizar(a, b, inventario.id);
+      RedeSimulada.sincronizar(b, c, inventario.id);
+
+      final conflitosDe = {
+        for (final x in [a, b, c]) x: RepositorioConflitos(x.banco, x.ops),
+      };
+      for (final x in [a, b, c]) {
+        expect(
+          conflitosDe[x]!.contarPendentes(inventario.id),
+          1,
+          reason: x.apelido,
+        );
+      }
+
+      final conflito = conflitosDe[b]!.listar(inventario.id).single;
+      conflitosDe[b]!.resolver(
+        conflito: conflito,
+        valorEscolhido: 'Biblioteca',
+        usuarioNome: 'Bruno',
+      );
+      RedeSimulada.sincronizar(a, b, inventario.id);
+      RedeSimulada.sincronizar(b, c, inventario.id);
+
+      for (final x in [a, b, c]) {
+        expect(
+          conflitosDe[x]!.contarPendentes(inventario.id),
+          0,
+          reason: x.apelido,
+        );
+        expect(x.patrimonios.porId(idItem1)!.salaAtual, 'Biblioteca');
+      }
+    });
+
+    test('reler o item sabendo das duas escritas também encerra', () {
+      verificar(a, idItem1, config('Biblioteca'));
+      verificar(b, idItem1, config('Auditório'));
+      RedeSimulada.sincronizar(a, b, inventario.id);
+      final conflitosDeA = RepositorioConflitos(a.banco, a.ops);
+      expect(conflitosDeA.contarPendentes(inventario.id), 1);
+
+      // Ana volta à sala e confere de novo: a leitura nova decide.
+      verificar(a, idItem1, config('Laboratório'));
+      expect(conflitosDeA.contarPendentes(inventario.id), 0);
+      RedeSimulada.sincronizar(a, b, inventario.id);
+      expect(
+        RepositorioConflitos(b.banco, b.ops).contarPendentes(inventario.id),
+        0,
+      );
+    });
   });
 
   group('auditoria', () {

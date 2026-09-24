@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Motivo do código de barras, a mesma geometria de tool/gerar_icones.py e de
+     IconeCodigoBarras: grade de 24 unidades a 2,2 dp cada, centrada no quadro
+     de 108 dp do ícone adaptativo. Cabe folgado no círculo seguro de 66 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.4"
+        android:strokeLineCap="round"
+        android:pathData="M36.4,38.6 L36.4,69.4 M45.2,38.6 L45.2,69.4 M54,38.6 L54,69.4 M62.8,38.6 L62.8,60.6 M71.6,38.6 L71.6,69.4" />
+</vector>

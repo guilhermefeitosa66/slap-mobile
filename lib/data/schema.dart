@@ -6,7 +6,7 @@
 /// serem a mesma estrutura, em vez de três mecanismos concorrentes.
 library;
 
-const int versaoEsquema = 1;
+const int versaoEsquema = 3;
 
 /// Campos de patrimônio que o levantamento altera.
 ///
@@ -28,6 +28,7 @@ class CampoPatrimonio {
   ];
 }
 
+/// Versão 1: o esquema inicial.
 const List<String> ddlEsquema = [
   '''
   CREATE TABLE inventarios (
@@ -198,6 +199,56 @@ const List<String> ddlEsquema = [
   ''',
 ];
 
+/// Versão 2: valor vencedor de cada campo do inventário.
+///
+/// Até a v1, operação sobre o inventário era aplicada sem comparar com o
+/// valor em vigor: uma operação antiga chegando depois — de um aparelho que
+/// sincronizou tarde — desfazia uma mais nova. Com o encerramento, isso
+/// reabriria um inventário encerrado. Aqui fica o HLC do vencedor, e só
+/// operação mais nova altera o campo (last-writer-wins, como nos patrimônios,
+/// mas sem registro de conflito: não há o que a pessoa decidir).
+const List<String> migracaoV2 = [
+  '''
+  CREATE TABLE campos_inventario (
+    inventario_id TEXT NOT NULL,
+    campo         TEXT NOT NULL,
+    valor         TEXT,
+    hlc           TEXT NOT NULL,
+    op_id         TEXT NOT NULL,
+    PRIMARY KEY (inventario_id, campo)
+  ) WITHOUT ROWID
+  ''',
+  // O vencedor de cada campo já está no log: é a operação de maior HLC.
+  '''
+  INSERT INTO campos_inventario (inventario_id, campo, valor, hlc, op_id)
+  SELECT o.entidade_id, o.campo, o.valor, o.hlc, o.op_id
+  FROM ops o
+  WHERE o.entidade = 'inventario'
+    AND o.hlc = (
+      SELECT MAX(o2.hlc) FROM ops o2
+      WHERE o2.entidade = 'inventario'
+        AND o2.entidade_id = o.entidade_id
+        AND o2.campo = o.campo
+    )
+  ''',
+];
+
+/// Versão 3: até onde as operações deste aparelho chegaram a cada par.
+///
+/// Apagar a réplica local só é seguro se o trabalho feito aqui já estiver em
+/// outro aparelho. Com isto dá para dizer, na confirmação, quanto se perde.
+const List<String> migracaoV3 = [
+  'ALTER TABLE pares ADD COLUMN nosso_seq INTEGER NOT NULL DEFAULT 0',
+];
+
+/// Migrações por versão de destino. Um banco novo passa por todas, em ordem:
+/// é o mesmo caminho de quem atualiza, e por isso é o caminho testado.
+const Map<int, List<String>> migracoes = {
+  1: ddlEsquema,
+  2: migracaoV2,
+  3: migracaoV3,
+};
+
 /// Chaves da tabela `config`.
 class Config {
   /// UUID gerado na primeira execução. Imutável: é a identidade do aparelho
@@ -210,4 +261,30 @@ class Config {
   /// Último HLC emitido. Global ao aparelho, e não por inventário, para que o
   /// relógio nunca ande para trás.
   static const hlcLocal = 'hlc_local';
+
+  /// Configuração corrente do levantamento de um inventário, em JSON.
+  ///
+  /// Sobrevive ao Android encerrar o aplicativo — o que acontece com a
+  /// câmera aberta em aparelho com pouca memória. É preferência do aparelho,
+  /// não dado do inventário: não sincroniza.
+  static String configuracaoLevantamento(String inventarioId) =>
+      'levantamento.$inventarioId';
+
+  /// Maior número de operação deste aparelho num inventário cuja réplica foi
+  /// apagada. A numeração continua daí se o inventário voltar.
+  static String seqMinimo(String inventarioId) => 'seq_minimo.$inventarioId';
+
+  /// Inventário cujo levantamento estava aberto. O aplicativo reabre nele.
+  static const levantamentoAberto = 'levantamento_aberto';
+
+  // Preferências do aparelho, gravadas como '1' ou '0'. Ausente vale o padrão.
+
+  /// Manter a tela ligada no levantamento e na câmera. Padrão: sim.
+  static const manterTelaLigada = 'pref_tela_ligada';
+
+  /// Som de retorno das leituras. Padrão: sim.
+  static const sons = 'pref_sons';
+
+  /// Vibração de retorno das leituras. Padrão: sim.
+  static const vibracao = 'pref_vibracao';
 }

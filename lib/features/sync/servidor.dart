@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../core/version_vector.dart';
+import '../../core/hlc.dart';
 import '../../data/banco.dart';
 import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../data/schema.dart';
+import 'cifra.dart';
 import 'protocolo.dart';
 
 /// O lado servidor de cada aparelho.
@@ -23,6 +24,10 @@ class ServidorSync {
 
   HttpServer? _servidor;
 
+  /// Relógio deste aparelho. Substituível nos testes, para simular aparelho
+  /// com data errada.
+  final DateTime Function() relogio;
+
   /// Última sincronização recebida, para a interface reagir sem consultar o
   /// banco em laço.
   final _eventos = StreamController<EventoSync>.broadcast();
@@ -32,7 +37,8 @@ class ServidorSync {
     required this.ops,
     required this.inventarios,
     required this.patrimonios,
-  });
+    DateTime Function()? relogio,
+  }) : relogio = relogio ?? DateTime.now;
 
   Stream<EventoSync> get eventos => _eventos.stream;
 
@@ -79,15 +85,30 @@ class ServidorSync {
           ...Apresentacao(
             dispositivoId: banco.dispositivoId,
             usuarioNome: banco.lerConfig(Config.usuarioNome),
+            agora: relogio().millisecondsSinceEpoch,
           ).toJson(),
         });
       }
 
-      // O resto exige a chave do inventário. O identificador vem no corpo ou
-      // na query, porque é preciso saber qual chave usar para conferir a
-      // assinatura antes de confiar em qualquer coisa.
-      final inventarioId = _inventarioDaRequisicao(req, corpo);
-      if (inventarioId == null) {
+      // Versão diferente é recusada antes de qualquer coisa, com a nossa
+      // versão na resposta para o outro lado explicar a quem está com ele.
+      final versao = int.tryParse(req.headers.value(cabecalhoVersao) ?? '');
+      if (versao != versaoProtocolo) {
+        return _responderJson(req, HttpStatus.upgradeRequired, {
+          'erro': 'versao',
+          'versao': versaoProtocolo,
+          'mensagem': mensagemVersaoDiferente(
+            quem: 'O aparelho que pediu',
+            versao: versao ?? 1,
+          ),
+        });
+      }
+
+      // O resto exige a chave do inventário. O identificador vem na query,
+      // em claro — o corpo está cifrado, e é preciso saber qual chave usar
+      // para conferir a assinatura antes de confiar em qualquer coisa.
+      final inventarioId = req.uri.queryParameters['inventario'];
+      if (inventarioId == null || inventarioId.isEmpty) {
         return _erro(req, HttpStatus.badRequest, 'Inventário não informado.');
       }
 
@@ -98,24 +119,58 @@ class ServidorSync {
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
       }
 
-      final remoto = Assinatura.verificar(
+      final conferencia = Assinatura.conferir(
         cabecalho: req.headers.value(HttpHeaders.authorizationHeader),
         chaveSync: inventario.chaveSync,
         metodo: req.method,
         caminho: caminho,
         corpo: corpo,
+        agora: relogio(),
       );
-      if (remoto == null) {
+      if (conferencia.situacao == SituacaoAssinatura.foraDaJanela) {
+        // Chave certa, horário errado: é o relógio de um dos dois aparelhos.
+        // Nada é aplicado, e o outro lado recebe o nosso horário para dizer
+        // ao usuário de quanto é a diferença.
+        _avisarRelogio(
+          inventarioId: inventario.id,
+          remoto: conferencia.dispositivoId!,
+          diferenca: Duration(
+            milliseconds:
+                conferencia.momento! - relogio().millisecondsSinceEpoch,
+          ),
+        );
+        return _responderJson(
+          req,
+          HttpStatus.conflict,
+          ErroRelogio(agora: relogio().millisecondsSinceEpoch).toJson(),
+        );
+      }
+      final remoto = conferencia.dispositivoId;
+      if (!conferencia.valida || remoto == null) {
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
       }
 
+      final cifra = CifraSync(inventario.chaveSync);
+      final Map<String, dynamic> conteudo;
+      try {
+        conteudo = corpo.isEmpty
+            ? const {}
+            : cifra.decifrar(
+                corpo,
+                contexto: CifraSync.contextoPedido(req.method, caminho),
+              );
+      } on CorpoIlegivel {
+        return _erro(req, HttpStatus.badRequest, 'Corpo ilegível.');
+      }
+      final canal = _Canal(req, cifra, caminho);
+
       switch (caminho) {
         case Rotas.pull:
-          return _atenderPull(req, corpo, remoto);
+          return _atenderPull(canal, conteudo, remoto);
         case Rotas.push:
-          return _atenderPush(req, corpo, remoto);
+          return _atenderPush(canal, conteudo, remoto);
         case Rotas.pacote:
-          return _atenderPacote(req, inventario, remoto);
+          return _atenderPacote(canal, inventario, remoto);
         default:
           return _erro(req, HttpStatus.notFound, 'Rota desconhecida.');
       }
@@ -124,33 +179,28 @@ class ServidorSync {
     }
   }
 
-  String? _inventarioDaRequisicao(HttpRequest req, String corpo) {
-    final daQuery = req.uri.queryParameters['inventario'];
-    if (daQuery != null && daQuery.isNotEmpty) return daQuery;
-
-    if (corpo.isEmpty) return null;
-    try {
-      return (jsonDecode(corpo) as Map<String, dynamic>)['inventario']
-          as String?;
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _atenderPull(
-    HttpRequest req,
-    String corpo,
+    _Canal canal,
+    Map<String, dynamic> conteudo,
     String remoto,
   ) async {
-    final pedido = PedidoPull.fromJson(
-      jsonDecode(corpo) as Map<String, dynamic>,
-    );
+    final req = canal.req;
+    final pedido = PedidoPull.fromJson(conteudo);
+    try {
+      ops.conferirCabecas(pedido.inventarioId, pedido.cabecas);
+    } on IdentidadeDuplicada catch (e) {
+      return _erro(req, HttpStatus.conflict, '$e');
+    }
     final faltantes = ops.opsFaltantes(pedido.inventarioId, pedido.vetor);
 
-    _registrarPar(remoto, pedido.inventarioId);
+    // O que o par declara ter de nós é o que está comprovadamente com ele.
+    _registrarPar(
+      remoto,
+      pedido.inventarioId,
+      nossoSeq: pedido.vetor[banco.dispositivoId],
+    );
 
-    await _responder(
-      req,
+    await canal.responder(
       LoteOperacoes(
         inventarioId: pedido.inventarioId,
         ops: faltantes,
@@ -158,21 +208,52 @@ class ServidorSync {
         // A nossa vector vai junto: com ela o solicitante já sabe o que nos
         // enviar em seguida, sem precisar de outra viagem para perguntar.
         vetor: ops.vetorDe(pedido.inventarioId),
+        cabecas: ops.cabecas(pedido.inventarioId),
       ).toJson(),
     );
   }
 
   Future<void> _atenderPush(
-    HttpRequest req,
-    String corpo,
+    _Canal canal,
+    Map<String, dynamic> conteudo,
     String remoto,
   ) async {
-    final lote = LoteOperacoes.fromJson(
-      jsonDecode(corpo) as Map<String, dynamic>,
-    );
-    final resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+    final req = canal.req;
+    final lote = LoteOperacoes.fromJson(conteudo);
 
-    _registrarPar(remoto, lote.inventarioId);
+    final ResultadoAplicacao resultado;
+    try {
+      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
+      resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+    } on IdentidadeDuplicada catch (e) {
+      // Nada do lote entrou. O outro lado recebe a explicação.
+      return _erro(req, HttpStatus.conflict, '$e');
+    } on RelogioForaDeSincronia catch (e) {
+      // Operações com horário no futuro. A transação já foi desfeita: nada
+      // do lote entrou. Aceitar arrastaria o relógio deste aparelho, e depois
+      // o de todos, para o futuro.
+      final diferenca = e.recebido.millis - e.agoraLocal;
+      _avisarRelogio(
+        inventarioId: lote.inventarioId,
+        remoto: e.recebido.nodeId,
+        diferenca: Duration(milliseconds: diferenca),
+      );
+      return _responderJson(
+        req,
+        HttpStatus.conflict,
+        ErroRelogio(
+          agora: relogio().millisecondsSinceEpoch,
+          dispositivo: e.recebido.nodeId,
+          diferencaMs: diferenca,
+        ).toJson(),
+      );
+    }
+
+    _registrarPar(
+      remoto,
+      lote.inventarioId,
+      nossoSeq: lote.vetor[banco.dispositivoId],
+    );
     _eventos.add(
       EventoSync(
         inventarioId: lote.inventarioId,
@@ -182,7 +263,7 @@ class ServidorSync {
       ),
     );
 
-    await _responder(req, {
+    await canal.responder({
       'aplicadas': resultado.aplicadas,
       'ignoradas': resultado.ignoradas,
       'conflitos': resultado.conflitos,
@@ -190,14 +271,13 @@ class ServidorSync {
   }
 
   Future<void> _atenderPacote(
-    HttpRequest req,
+    _Canal canal,
     Inventario inventario,
     String remoto,
   ) async {
     _registrarPar(remoto, inventario.id);
 
-    await _responder(
-      req,
+    await canal.responder(
       PacoteInventario(
         inventario: inventario,
         patrimonios: patrimonios.todos(inventario.id, incluirIgnorados: true),
@@ -205,21 +285,44 @@ class ServidorSync {
     );
   }
 
-  void _registrarPar(String dispositivo, String inventarioId) {
-    banco.db.execute(
-      'INSERT INTO pares (dispositivo, inventario_id, ultima_sync) VALUES (?,?,?) '
-      'ON CONFLICT(dispositivo, inventario_id) DO UPDATE SET '
-      'ultima_sync = excluded.ultima_sync',
-      [dispositivo, inventarioId, DateTime.now().millisecondsSinceEpoch],
-    );
+  void _registrarPar(
+    String dispositivo,
+    String inventarioId, {
+    int nossoSeq = 0,
+  }) {
+    ops.registrarPar(dispositivo, inventarioId, nossoSeq: nossoSeq);
   }
 
-  Future<void> _responder(HttpRequest req, Map<String, dynamic> corpo) async {
+  Future<void> _responder(HttpRequest req, Map<String, dynamic> corpo) =>
+      _responderJson(req, HttpStatus.ok, corpo);
+
+  Future<void> _responderJson(
+    HttpRequest req,
+    int status,
+    Map<String, dynamic> corpo,
+  ) async {
     req.response
-      ..statusCode = HttpStatus.ok
+      ..statusCode = status
       ..headers.contentType = ContentType.json
       ..write(jsonEncode(corpo));
     await req.response.close();
+  }
+
+  void _avisarRelogio({
+    required String inventarioId,
+    required String remoto,
+    required Duration diferenca,
+  }) {
+    if (_eventos.isClosed) return;
+    _eventos.add(
+      EventoSync(
+        inventarioId: inventarioId,
+        dispositivoRemoto: remoto,
+        recebidas: 0,
+        conflitos: 0,
+        diferencaRelogio: diferenca,
+      ),
+    );
   }
 
   Future<void> _erro(HttpRequest req, int status, String mensagem) async {
@@ -238,10 +341,39 @@ class EventoSync {
   final int recebidas;
   final int conflitos;
 
+  /// Preenchido quando a sincronização foi recusada por relógio: quanto o
+  /// relógio do outro aparelho está à frente deste (negativo se atrás).
+  final Duration? diferencaRelogio;
+
   const EventoSync({
     required this.inventarioId,
     required this.dispositivoRemoto,
     required this.recebidas,
     required this.conflitos,
+    this.diferencaRelogio,
   });
+
+  bool get recusadoPorRelogio => diferencaRelogio != null;
+}
+
+/// A resposta a um pedido autenticado, cifrada com a chave do inventário.
+class _Canal {
+  final HttpRequest req;
+  final CifraSync cifra;
+  final String caminho;
+
+  _Canal(this.req, this.cifra, this.caminho);
+
+  Future<void> responder(Map<String, dynamic> corpo) async {
+    req.response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.text
+      ..write(
+        cifra.cifrar(
+          corpo,
+          contexto: CifraSync.contextoResposta(req.method, caminho),
+        ),
+      );
+    await req.response.close();
+  }
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../domain/valores.dart';
 import 'estado_levantamento.dart';
@@ -89,8 +91,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -99,7 +100,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
           children: [
             Text(
               'Aplicar às próximas leituras',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 4),
             Text(
@@ -141,9 +142,11 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            _Rotulo('Estado de conservação'),
+            const _Rotulo('Estado de conservação'),
             const SizedBox(height: 8),
             SegmentedButton<EstadoConservacao>(
+              showSelectedIcon: false,
+              expandedInsets: EdgeInsets.zero,
               segments: [
                 for (final e in EstadoConservacao.values)
                   ButtonSegment(value: e, label: Text(e.rotulo)),
@@ -153,9 +156,11 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            _Rotulo('Situação de uso'),
+            const _Rotulo('Situação de uso'),
             const SizedBox(height: 8),
             SegmentedButton<SituacaoUso>(
+              showSelectedIcon: false,
+              expandedInsets: EdgeInsets.zero,
               segments: [
                 for (final s in SituacaoUso.values)
                   ButtonSegment(value: s, label: Text(s.rotulo)),
@@ -165,7 +170,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            _Rotulo('Responsável'),
+            const _Rotulo('Responsável'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
               initialValue: _responsavel,
@@ -228,47 +233,88 @@ class BarraConfiguracao extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cores = Theme.of(context).colorScheme;
+    final apoio = CoresApoio.of(context);
+    final detalhe =
+        '${config.conservacao.rotulo} · ${config.situacao.rotulo} · '
+        '${config.responsavel ?? 'responsável não alterado'}';
 
-    return Material(
-      color: cores.primaryContainer,
-      child: InkWell(
-        onTap: aoTocar,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              Icon(Icons.room, color: cores.onPrimaryContainer),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      config.sala,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: cores.onPrimaryContainer,
+    return Semantics(
+      button: true,
+      label:
+          'Configuração das leituras: sala ${config.sala}, $detalhe. '
+          'Toque para alterar.',
+      excludeSemantics: true,
+      child: Material(
+        color: apoio.faixa,
+        child: InkWell(
+          onTap: aoTocar,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Icon(Icons.place_outlined, color: apoio.sobreFaixa),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Flexible(
+                            flex: 3,
+                            child: Text(
+                              config.sala,
+                              style: TextStyle(
+                                fontFamily: familiaTitulos,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: apoio.sobreFaixa,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (config.desde case final desde?) ...[
+                            const SizedBox(width: 8),
+                            // A sala tem prioridade: com fonte grande, o
+                            // "desde" encolhe antes dela.
+                            Flexible(
+                              flex: 2,
+                              child: Text(
+                                descreverDesde(desde),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: apoio.sobreFaixaSecundario,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${config.conservacao.rotulo} · ${config.situacao.rotulo}'
-                      '${config.responsavel == null ? '' : ' · ${config.responsavel}'}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: cores.onPrimaryContainer,
+                      const SizedBox(height: 1),
+                      Text(
+                        detalhe,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: apoio.sobreFaixaSecundario,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.edit, size: 20, color: cores.onPrimaryContainer),
-            ],
+                Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: apoio.sobreFaixaSecundario,
+                ),
+              ],
+            ),
           ),
         ),
       ),

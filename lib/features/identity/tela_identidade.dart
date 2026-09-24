@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
 
 /// Identificação do usuário deste aparelho.
 ///
@@ -59,26 +61,52 @@ class _TelaIdentidadeState extends ConsumerState<TelaIdentidade> {
     final dispositivo = ref.watch(bancoProvider).dispositivoId;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.primeiraVez ? 'Bem-vindo' : 'Meus dados'),
-        automaticallyImplyLeading: !widget.primeiraVez,
-      ),
+      appBar: widget.primeiraVez
+          ? null
+          : AppBar(title: const Text('Meus dados')),
       body: Form(
         key: _formulario,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            widget.primeiraVez ? MediaQuery.paddingOf(context).top + 40 : 8,
+            24,
+            24,
+          ),
           children: [
             if (widget.primeiraVez) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  alignment: Alignment.center,
+                  child: IconeCodigoBarras(
+                    tamanho: 28,
+                    cor: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
               Text(
-                'Inventário patrimonial',
-                style: Theme.of(context).textTheme.headlineSmall,
+                'Inventário\npatrimonial',
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineLarge?.copyWith(fontSize: 30, height: 1.15),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Seu nome fica gravado neste aparelho e acompanha cada '
                 'patrimônio que você verificar. Não há senha.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
             ],
             TextFormField(
               controller: _nome,
@@ -135,7 +163,10 @@ class _Rodape extends StatelessWidget {
         const SizedBox(height: 4),
         SelectableText(
           dispositivo,
-          style: estilo?.copyWith(fontFamily: 'monospace'),
+          style: estiloCodigo(
+            context,
+            tamanho: 12.5,
+          ).copyWith(color: estilo?.color, fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 8),
         Text(

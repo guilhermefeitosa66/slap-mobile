@@ -10,7 +10,10 @@ analyzer:
 
 linter:
   rules:
-    - prefer_const_constructors
-    - prefer_final_locals
-    - avoid_print
-    - unawaited_futures
+    prefer_const_constructors: true
+    prefer_final_locals: true
+    avoid_print: true
+    unawaited_futures: true
+    # Os nomes do projeto são em português, inclusive os parâmetros de
+    # `operator ==` (`outro`, e não `other`).
+    avoid_renaming_method_parameters: false
