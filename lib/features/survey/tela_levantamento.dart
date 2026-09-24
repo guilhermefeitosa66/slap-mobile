@@ -10,6 +10,7 @@ import '../../data/banco.dart';
 import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../data/schema.dart';
+import '../../domain/divergencia.dart';
 import '../../domain/patrimonio.dart';
 import 'configuracao_sheet.dart';
 import 'estado_levantamento.dart';
@@ -335,43 +336,20 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     final config = ref.watch(configuracaoProvider(widget.inventarioId));
     final modo = ref.watch(modoLeituraProvider);
     final historico = ref.watch(historicoProvider(widget.inventarioId));
-    final progresso = ref.watch(progressoProvider(widget.inventarioId));
+    final progresso = ref.watch(
+      progressoSalaProvider((
+        inventarioId: widget.inventarioId,
+        sala: config?.sala,
+      )),
+    );
 
     return ManterTelaLigada(
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Levantamento'),
           actions: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Semantics(
-                  label:
-                      '${progresso.verificados} de ${progresso.total} verificados',
-                  excludeSemantics: true,
-                  child: Text.rich(
-                    TextSpan(
-                      text: formatarInteiro(progresso.verificados),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: '/${formatarInteiro(progresso.total)}',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ),
-            ),
+            if (config != null)
+              ContadorSala(sala: config.sala, progresso: progresso),
           ],
         ),
         body: Column(
@@ -477,6 +455,89 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                     ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// O contador do alto da tela: o progresso da sala em que se está.
+///
+/// Mostra o inventário da sala, não o do campus — `12/40` diz quanto falta
+/// procurar ali e se move a cada leitura; o `5/4.708` do inventário inteiro
+/// ficava parado a tarde toda e vive no painel, que é onde ele responde
+/// alguma pergunta.
+///
+/// Numa sala que não está na planilha não há denominador, e `0/40` seria
+/// mentira tanto quanto `0/0`: sobra a contagem do que foi lido ali.
+///
+/// O que foi lido aqui mas a planilha aponta para outra sala aparece à parte,
+/// em tom secundário, e só quando existe. Sem isso, uma sala que recebeu
+/// muita coisa fica com o contador parado enquanto se lê item após item, o
+/// que passa a impressão de que as leituras não estão entrando.
+class ContadorSala extends StatelessWidget {
+  final String sala;
+  final ProgressoSala progresso;
+
+  const ContadorSala({super.key, required this.sala, required this.progresso});
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = Theme.of(context).colorScheme;
+    final estilo = Theme.of(context).textTheme.titleMedium;
+    final principal = TextStyle(color: cores.primary);
+    final secundario = TextStyle(
+      color: cores.onSurfaceVariant,
+      fontWeight: FontWeight.w500,
+    );
+    // Menor e sem destaque: é anotação ao lado do contador, não outra parcela
+    // da conta.
+    final anotacao = TextStyle(
+      color: cores.onSurfaceVariant,
+      fontSize: (estilo?.fontSize ?? 16) * 0.72,
+    );
+
+    final lidos = progresso.deOutrasSalas;
+    final TextSpan texto;
+    final String rotulo;
+
+    if (progresso.semBase) {
+      texto = TextSpan(
+        text: formatarInteiro(lidos),
+        style: principal,
+        children: [
+          TextSpan(text: lidos == 1 ? ' lido' : ' lidos', style: anotacao),
+        ],
+      );
+      rotulo =
+          'Sala $sala, fora da planilha: '
+          '$lidos ${lidos == 1 ? 'item lido' : 'itens lidos'}';
+    } else {
+      texto = TextSpan(
+        text: formatarInteiro(progresso.verificados),
+        style: principal,
+        children: [
+          TextSpan(
+            text: '/${formatarInteiro(progresso.total)}',
+            style: secundario,
+          ),
+          if (lidos > 0)
+            TextSpan(text: ' +${formatarInteiro(lidos)}', style: anotacao),
+        ],
+      );
+      rotulo =
+          'Sala $sala: ${progresso.verificados} de ${progresso.total} '
+          'verificados'
+          '${lidos > 0 ? ', mais $lidos ${lidos == 1 ? 'item de outra sala' : 'itens de outras salas'}' : ''}';
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: Semantics(
+          label: rotulo,
+          excludeSemantics: true,
+          child: Text.rich(texto, style: estilo, maxLines: 1),
         ),
       ),
     );
