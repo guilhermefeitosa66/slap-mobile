@@ -4,14 +4,15 @@
 O site apresenta o aplicativo — o que é, como se parece, como se usa e como
 instalar — e publica a política de privacidade numa URL estável, que as lojas
 exigem. A fonte da verdade dos textos longos continua no repositório: a
-política vem de docs/privacidade.md, as capturas de docs/imagens/ e a
-logomarca de docs/marca/. Este script só monta as páginas, com a paleta e as
+política vem de docs/privacidade.md, o manual de docs/manual.md, as capturas
+de docs/imagens/ e a logomarca de docs/marca/. Este script só monta as páginas, com a paleta e as
 fontes do aplicativo, para o site nunca divergir do que está versionado.
 
     python3 tool/gerar_site.py [pasta de saída, padrão _site]
 
 Saída:
     index.html                   apresentação, como usar, capturas, instalação
+    manual/index.html            o manual completo, de docs/manual.md
     privacidade/index.html       a política
     entrar/index.html            reserva do link de entrada num inventário
     .well-known/assetlinks.json  verificação do App Link (ver abaixo)
@@ -48,6 +49,10 @@ PACOTE_ANDROID = "io.github.guilhermefeitosa66.slap_mobile"
 
 # docs/privacidade.md e o que ele cita por caminho relativo.
 FONTE_POLITICA = RAIZ / "docs" / "privacidade.md"
+# O manual completo, também escrito em Markdown no repositório: assim ele é
+# lido e revisado ao lado do código, em vez de virar string dentro deste
+# gerador.
+FONTE_MANUAL = RAIZ / "docs" / "manual.md"
 PASTA_IMAGENS = RAIZ / "docs" / "imagens"
 PASTA_MARCA = RAIZ / "docs" / "marca"
 
@@ -276,7 +281,7 @@ footer { border-top: 1px solid var(--borda); padding: 2.5rem 0 3rem;
 footer .navegacao { min-height: 0; align-items: flex-start; }
 footer nav a:not(.botao) { color: var(--tinta-secundaria); margin-left: 1.25rem; }
 
-/* Páginas de texto (política, reserva do link). */
+/* Páginas de texto (política, manual, reserva do link). */
 .texto { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
 .texto h1 { font-size: 2rem; margin: 0 0 0.5rem; }
 .texto h2 { font-size: 1.35rem; margin: 2.25rem 0 0.5rem; padding-top: 1.25rem;
@@ -291,6 +296,45 @@ footer nav a:not(.botao) { color: var(--tinta-secundaria); margin-left: 1.25rem;
   font-weight: 600; }
 .texto .topo img { width: 40px; height: 40px; border-radius: 10px; }
 .texto footer { border: 0; padding: 3rem 0 0; }
+.trilha { font-size: 0.9rem; color: var(--tinta-secundaria); margin-bottom: 1.5rem; }
+.trilha a { color: var(--tinta-secundaria); }
+
+/* O manual é longo e consultado em campo: o índice fica no alto, e as
+   capturas entram no tamanho de um celular, ampliáveis como na inicial. */
+.manual { max-width: 46rem; }
+.manual .toc { background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: var(--raio); padding: 1.25rem 1.5rem; margin: 2rem 0 2.5rem; }
+.manual .toc > ul { margin: 0; padding-left: 1.1rem; }
+.manual .toc ul { list-style: none; padding-left: 0.9rem; }
+.manual .toc > ul > li { margin: 0.35rem 0; }
+.manual .toc a { text-decoration: none; }
+.manual .toc a:hover { text-decoration: underline; }
+.manual .toc ul ul a { color: var(--tinta-secundaria); font-size: 0.95rem; }
+.manual .toc::before { content: "Neste manual"; display: block;
+  font-family: "Archivo", sans-serif; font-weight: 600; font-size: 0.85rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--teal);
+  margin-bottom: 0.75rem; }
+.manual h2 { scroll-margin-top: 1rem; }
+.manual h3 { margin: 2rem 0 0.25rem; }
+.manual table { border-collapse: collapse; width: 100%; margin: 1.25rem 0;
+  font-size: 0.95rem; }
+.manual th, .manual td { text-align: left; vertical-align: top;
+  padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--borda); }
+.manual th { font-family: "Archivo", sans-serif; font-weight: 600;
+  font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--tinta-secundaria); }
+.manual blockquote { margin: 1.5rem 0; padding: 1rem 1.25rem;
+  background: var(--teal-claro); color: var(--sobre-teal-claro);
+  border-radius: var(--raio); }
+.manual blockquote p { margin: 0.4rem 0 0; }
+.manual blockquote p:first-child { margin-top: 0; }
+.manual button.celular { max-width: 260px; margin: 1.75rem auto; }
+.manual hr { border: 0; border-top: 1px solid var(--borda); margin: 3rem 0 2rem; }
+@media (max-width: 560px) {
+  .manual table { font-size: 0.9rem; }
+  .manual th, .manual td { padding: 0.5rem 0.4rem; }
+  .manual button.celular { max-width: 220px; }
+}
 """
 
 # Ícones das características, em linha para não depender de arquivo externo.
@@ -445,18 +489,57 @@ def pagina(titulo: str, descricao: str, corpo: str, prefixo: str = "") -> str:
 """
 
 
-def converter(texto: str) -> str:
+def converter(
+    texto: str,
+    locais: dict[str, str] | None = None,
+    profundidade: str = "2-6",
+) -> str:
+    """Markdown para HTML, com tabelas e índice.
+
+    `locais` traduz links para documentos que **também** existem no site
+    (`privacidade.md` → `../privacidade/`). O que não estiver ali aponta para o
+    arquivo no GitHub: é onde ele existe.
+
+    `profundidade` limita o que entra no índice. O título da página fica de
+    fora sempre — um índice cujo primeiro item é o nome do documento aninha
+    tudo um nível sem dizer nada.
+    """
     corpo = markdown.markdown(
         texto,
         extensions=["tables", "toc"],
-        extension_configs={"toc": {"slugify": slugify_unicode}},
+        extension_configs={
+            "toc": {"slugify": slugify_unicode, "toc_depth": profundidade}
+        },
         output_format="html",
     )
-    # Links relativos para outros documentos do repositório apontam para o
-    # GitHub: no site só existe a política.
+    traducao = locais or {}
     return re.sub(
         r'href="(?!https?:|#|mailto:)([^"]+\.md)(#[^"]*)?"',
-        lambda m: f'href="{REPOSITORIO}/blob/main/docs/{m.group(1)}{m.group(2) or ""}"',
+        lambda m: 'href="{}{}"'.format(
+            traducao.get(
+                m.group(1), f"{REPOSITORIO}/blob/main/docs/{m.group(1)}"
+            ),
+            m.group(2) or "",
+        ),
+        corpo,
+    )
+
+
+def capturas_ampliaveis(corpo: str, prefixo: str) -> str:
+    """Transforma as imagens de um texto convertido em capturas ampliáveis.
+
+    O manual é consultado em campo, muitas vezes no mesmo celular que está
+    levantando: ver a tela em tamanho maior é a diferença entre reconhecer o
+    botão e não reconhecer. Usa a mesma peça da página inicial.
+    """
+    return re.sub(
+        r'<p><img alt="([^"]*)" src="imagens/([^"]+)"\s*/?></p>',
+        lambda m: (
+            f'<button type="button" class="celular ampliar" data-grupo="manual" '
+            f'aria-label="Ampliar: {m.group(1)}">'
+            f'<img src="{prefixo}imagens/{m.group(2)}" alt="{m.group(1)}" '
+            f'width="720" height="1603" loading="lazy"></button>'
+        ),
         corpo,
     )
 
@@ -490,6 +573,7 @@ def cabecalho(logo: str) -> str:
 <a class="discreto" href="#por-que">Por quê</a>
 <a class="discreto" href="#como-usar">Como usar</a>
 <a class="discreto" href="#capturas">Capturas</a>
+<a href="manual/">Manual</a>
 <a href="#instalar">Instalar</a>
 <a class="discreto" href="{REPOSITORIO}">GitHub</a>
 <a class="botao botao-cheio botao-pequeno" href="{RELEASE}">Baixar o APK</a>
@@ -611,6 +695,11 @@ levanta uma sala. No fim, os relatórios são os mesmos em todos os aparelhos.</
 <ol class="passos">
 {lista}
 </ol>
+<p class="centro" style="margin-top:2rem">
+<a class="botao botao-vazado" href="manual/">Ler o manual completo</a>
+</p>
+<p class="centro secundario">Cada tela em detalhe, com o que fazer em cada caso — inclusive
+quando algo dá errado.</p>
 </div>
 </section>"""
 
@@ -732,6 +821,44 @@ def pagina_politica() -> str:
     )
 
 
+def pagina_manual() -> str:
+    """O manual completo, de docs/manual.md.
+
+    Página própria, e não mais uma seção da inicial: a inicial serve para
+    decidir se vale usar o aplicativo; o manual, para conduzir o inventário.
+    """
+    texto = FONTE_MANUAL.read_text(encoding="utf-8")
+    titulo = re.search(r"^# (.+)$", texto, re.MULTILINE).group(1).strip()
+    trilha = (
+        '<nav class="trilha" aria-label="Você está em">'
+        '<a href="../">Início</a> <span aria-hidden="true">›</span> '
+        "<span>Manual</span></nav>"
+    )
+    topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
+    corpo = capturas_ampliaveis(
+        converter(
+            texto,
+            locais={"privacidade.md": "../privacidade/"},
+            profundidade="2-3",
+        ),
+        prefixo="../",
+    )
+    rodape_manual = (
+        f'<footer>Fonte: <a href="{REPOSITORIO}/blob/main/docs/manual.md">'
+        "docs/manual.md</a> no repositório. Encontrou algo errado ou faltando? "
+        f'<a href="{REPOSITORIO}/issues">Abra uma issue</a>.</footer>'
+    )
+    return pagina(
+        f"{titulo} — SLAP Mobile",
+        "Como conduzir um inventário patrimonial com o SLAP Mobile, tela a "
+        "tela: importar a planilha, levantar, trocar dados e exportar os "
+        "relatórios.",
+        f'<main class="texto manual">{topo}{trilha}{corpo}{rodape_manual}</main>'
+        + SCRIPT_LUPA,
+        prefixo="../",
+    )
+
+
 def pagina_entrar() -> str:
     """Reserva do link de entrada num inventário.
 
@@ -845,7 +972,7 @@ def gravar_assetlinks(saida: Path) -> bool:
 def gerar(saida: Path) -> None:
     if saida.exists():
         shutil.rmtree(saida)
-    for pasta in ("privacidade", "entrar", "fontes", "imagens", "marca"):
+    for pasta in ("privacidade", "manual", "entrar", "fontes", "imagens", "marca"):
         (saida / pasta).mkdir(parents=True)
 
     for arquivo in FONTES:
@@ -869,6 +996,7 @@ def gerar(saida: Path) -> None:
 
     (saida / "index.html").write_text(pagina_inicial(logo), encoding="utf-8")
     (saida / "privacidade" / "index.html").write_text(pagina_politica(), encoding="utf-8")
+    (saida / "manual" / "index.html").write_text(pagina_manual(), encoding="utf-8")
     (saida / "entrar" / "index.html").write_text(pagina_entrar(), encoding="utf-8")
 
     if not gravar_assetlinks(saida):

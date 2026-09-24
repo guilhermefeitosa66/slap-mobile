@@ -50,10 +50,13 @@ sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md).
 3. Chame os colegas por **Compartilhar**: QR code ou link. Eles entram por **Novo → Ler o QR code**, na mesma rede Wi-Fi.
 4. Diga em que sala está e quem é o responsável; a configuração vale para as próximas leituras.
 5. Leia os códigos pela câmera, por um leitor externo ou digitando o tombo. Verde, laranja e vermelho têm som e vibração próprios.
-6. Sincronize quando quiser. Conflitos aparecem para alguém decidir.
+6. Troque dados quando quiser: a troca é nos dois sentidos, e nada é apagado. Conflitos aparecem para alguém decidir.
 7. Exporte os três grupos em XLSX ou CSV.
 
-A versão ilustrada está no [site do projeto](https://guilhermefeitosa66.github.io/slap-mobile/#como-usar).
+A versão ilustrada está no [site do projeto](https://guilhermefeitosa66.github.io/slap-mobile/#como-usar),
+e o passo a passo completo — cada tela, e o que fazer quando algo dá errado — no
+[manual](https://guilhermefeitosa66.github.io/slap-mobile/manual/)
+([docs/manual.md](docs/manual.md)).
 
 ## Desenvolvimento
 
