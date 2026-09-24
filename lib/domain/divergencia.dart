@@ -2,11 +2,13 @@ import 'patrimonio.dart';
 import 'valores.dart';
 
 /// Campo em que o inventário encontrou valor diferente do cadastro do SUAP.
+///
+/// Só sala e responsável: são os únicos campos do levantamento que também
+/// vêm na planilha. Estado de conservação e situação de uso não têm valor
+/// anterior com que comparar.
 enum CampoDivergente {
   sala('Sala'),
-  responsavel('Responsável'),
-  conservacao('Estado de conservação'),
-  situacao('Situação de uso');
+  responsavel('Responsável');
 
   final String rotulo;
   const CampoDivergente(this.rotulo);
@@ -45,11 +47,14 @@ enum Classificacao {
 /// Só faz sentido para item verificado: um item não encontrado não tem valor
 /// levantado com que comparar.
 ///
-/// Estado de conservação e situação de uso só entram quando a planilha
-/// importada trouxe o valor de origem. A exportação padrão do SUAP não traz
-/// esses campos, e sem valor anterior não existe divergência — existe apenas
-/// informação nova. Inventar uma divergência aí encheria o relatório de linhas
-/// em que a coluna "valor SUAP" viria vazia, sem nada para conferir.
+/// Estado de conservação e situação de uso ficam de fora de propósito. Eles
+/// nunca vêm da planilha — a exportação do SUAP traz uma coluna com esse nome,
+/// mas com outro vocabulário, e a importação a ignora —, então não existe
+/// valor anterior: o levantado é informação nova, não divergência. Inventar
+/// uma divergência aí encheria o relatório de linhas em que a coluna "valor
+/// SUAP" viria vazia, sem nada para conferir. O que precisa de providência
+/// nesses campos (`ruim`, `inserv.`) sai pela marca de atenção de
+/// [Patrimonio.exigeAtencao], que não depende de base.
 List<Divergencia> divergenciasDe(Patrimonio p) {
   if (!p.verificado || p.ignorado) return const [];
 
@@ -67,30 +72,6 @@ List<Divergencia> divergenciasDe(Patrimonio p) {
         CampoDivergente.responsavel,
         p.responsavelOriginal,
         p.responsavelEfetivo,
-      ),
-    );
-  }
-
-  if (p.conservacaoOriginal != null &&
-      p.conservacao != null &&
-      p.conservacaoOriginal != p.conservacao) {
-    divergencias.add(
-      Divergencia(
-        CampoDivergente.conservacao,
-        p.conservacaoOriginal!.rotulo,
-        p.conservacao!.rotulo,
-      ),
-    );
-  }
-
-  if (p.situacaoOriginal != null &&
-      p.situacao != null &&
-      p.situacaoOriginal != p.situacao) {
-    divergencias.add(
-      Divergencia(
-        CampoDivergente.situacao,
-        p.situacaoOriginal!.rotulo,
-        p.situacao!.rotulo,
       ),
     );
   }

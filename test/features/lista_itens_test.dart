@@ -65,8 +65,6 @@ void main() {
             tombo: '$i',
             sala: sorteio(salas),
             responsavel: sorteio(responsaveis),
-            conservacao: sorteio([null, ...EstadoConservacao.values]),
-            situacao: sorteio([null, ...SituacaoUso.values]),
           ),
       ]);
 

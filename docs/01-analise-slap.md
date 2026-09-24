@@ -235,8 +235,10 @@ são gravados mas **nunca comparados** com nada — o SUAP original não traz es
 planilha, então não há valor anterior com que comparar.
 
 > Consequência para o app novo: a spec §29 pede divergência de conservação e situação de uso.
-> Isso **não existe no SLAP** e não pode existir do mesmo jeito, porque a planilha do SUAP não
-> exporta esses campos. Ver a decisão em `02-arquitetura.md`.
+> Isso **não existe no SLAP** e não existe no app novo: os dois campos são levantados em campo, e
+> a importação não os lê. A exportação atual do SUAP até traz uma coluna `ESTADO DE CONSERVAÇÃO`,
+> mas com outro vocabulário, e ela é ignorada. Ver a decisão em `02-arquitetura.md`.
+
 
 O relatório só considera itens `verified: true`.
 

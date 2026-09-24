@@ -141,8 +141,6 @@ class PatrimonioImportado {
   final String? responsavel;
   final String? sala;
   final String? valor;
-  final EstadoConservacao? conservacao;
-  final SituacaoUso? situacao;
 
   const PatrimonioImportado({
     required this.tombo,
@@ -153,8 +151,6 @@ class PatrimonioImportado {
     this.responsavel,
     this.sala,
     this.valor,
-    this.conservacao,
-    this.situacao,
   });
 }
 
@@ -162,17 +158,13 @@ class PatrimonioImportado {
 ///
 /// É a regra de [divergenciasDe], escrita para o banco: sala e responsável
 /// comparados pela forma comparável (a função `forma_comparavel` que o
-/// [Banco] registra), estado e situação só quando a planilha trouxe o valor
-/// de origem. Um teste confere que as duas dão sempre o mesmo resultado.
+/// [Banco] registra). Um teste confere que as duas dão sempre o mesmo
+/// resultado.
 const sqlDivergente =
     '(forma_comparavel(sala_original) <> '
     'forma_comparavel(COALESCE(sala_atual, sala_original)) '
     'OR forma_comparavel(responsavel_original) <> '
-    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)) '
-    'OR (conservacao_original IS NOT NULL AND conservacao IS NOT NULL '
-    'AND conservacao_original <> conservacao) '
-    'OR (situacao_original IS NOT NULL AND situacao IS NOT NULL '
-    'AND situacao_original <> situacao))';
+    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)))';
 
 class RepositorioPatrimonios {
   /// De quantos em quantos itens a importação informa o progresso.
@@ -348,8 +340,8 @@ class RepositorioPatrimonios {
       final stmt = _db.prepare(
         'INSERT INTO patrimonios (id, inventario_id, ordem, tombo, codigo_barras, '
         'ed, descricao, responsavel_original, sala_original, valor, '
-        'conservacao_original, situacao_original, tombo_chave, codigo_barras_chave) '
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'tombo_chave, codigo_barras_chave) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -366,8 +358,6 @@ class RepositorioPatrimonios {
             i.responsavel,
             i.sala,
             i.valor,
-            i.conservacao?.valor,
-            i.situacao?.valor,
             chaveBusca(i.tombo),
             i.codigoBarras == null ? null : chaveBusca(i.codigoBarras),
           ]);
@@ -399,8 +389,8 @@ class RepositorioPatrimonios {
       final stmt = _db.prepare(
         'INSERT OR IGNORE INTO patrimonios (id, inventario_id, ordem, tombo, '
         'codigo_barras, ed, descricao, responsavel_original, sala_original, '
-        'valor, conservacao_original, situacao_original, tombo_chave, '
-        'codigo_barras_chave, ignorado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'valor, tombo_chave, codigo_barras_chave, ignorado) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -416,8 +406,6 @@ class RepositorioPatrimonios {
             p.responsavelOriginal,
             p.salaOriginal,
             p.valor,
-            p.conservacaoOriginal?.valor,
-            p.situacaoOriginal?.valor,
             chaveBusca(p.tombo),
             p.codigoBarras == null ? null : chaveBusca(p.codigoBarras),
             p.ignorado ? 1 : 0,
@@ -645,11 +633,8 @@ class RepositorioPatrimonios {
     responsavelOriginal: r['responsavel_original'] as String?,
     salaOriginal: r['sala_original'] as String?,
     valor: r['valor'] as String?,
-    conservacaoOriginal: EstadoConservacao.de(
-      r['conservacao_original'] as String?,
-    ),
-    situacaoOriginal: SituacaoUso.de(r['situacao_original'] as String?),
     ignorado: (r['ignorado'] as int) == 1,
+
     verificado: (r['verificado'] as int) == 1,
     salaAtual: r['sala_atual'] as String?,
     responsavelAtual: r['responsavel_atual'] as String?,

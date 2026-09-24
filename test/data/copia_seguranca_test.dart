@@ -8,6 +8,7 @@ import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
 import 'package:slap_mobile/data/schema.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 import '../apoio/rede_simulada.dart';
 
@@ -186,6 +187,32 @@ void main() {
       novo.patrimonios.todos(inventario.id, incluirIgnorados: true),
       hasLength(6),
     );
+  });
+
+  test('cópia feita antes da versão 4 do esquema continua restaurável', () {
+    // Até a versão 3, `patrimonios` tinha `conservacao_original` e
+    // `situacao_original`. Uma cópia guardada naquela época tem as colunas a
+    // mais, e a restauração não pode tropeçar nelas.
+    verificar(a, 'item-1', 'Auditório');
+    CopiaDeSeguranca.exportar(a.banco, arquivo('antiga'));
+    final antiga = sqlite3.open(arquivo('antiga'));
+    antiga.execute(
+      'ALTER TABLE patrimonios ADD COLUMN conservacao_original TEXT',
+    );
+    antiga.execute('ALTER TABLE patrimonios ADD COLUMN situacao_original TEXT');
+    antiga.execute(
+      "UPDATE patrimonios SET conservacao_original = 'bom', "
+      "situacao_original = 'ativo'",
+    );
+    antiga.execute('PRAGMA user_version = 3');
+    antiga.close();
+
+    final novo = Aparelho('Novo');
+    addTearDown(novo.fechar);
+    final resultado = CopiaDeSeguranca.restaurar(novo.banco, arquivo('antiga'));
+    expect(resultado.inventariosNovos, 1);
+    expect(estado(novo), estado(a));
+    expect(novo.patrimonios.porId('item-2')!.salaOriginal, 'Sala 2');
   });
 
   test('restaurar no próprio aparelho devolve o que foi apagado', () {

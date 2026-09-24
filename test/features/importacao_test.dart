@@ -7,7 +7,6 @@ import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
-import 'package:slap_mobile/domain/valores.dart';
 import 'package:slap_mobile/features/import/importador.dart';
 import 'package:slap_mobile/features/import/leitor_planilha.dart';
 import 'package:slap_mobile/features/import/mapeamento.dart';
@@ -352,19 +351,6 @@ void main() {
       );
       expect(depois.patrimonio!.verificado, isTrue);
       expect(depois.patrimonio!.salaAtual, 'Auditório');
-    });
-
-    test('estado e situação são reconhecidos quando a planilha os traz', () {
-      final previa = prever([
-        ['TOMBO', 'ESTADO DE CONSERVAÇÃO', 'SITUAÇÃO DE USO'],
-        ['1', 'Bom', 'Ativo'],
-        ['2', 'RUIM', 'inserv.'],
-      ]);
-
-      expect(previa.itens[0].conservacao, EstadoConservacao.bom);
-      expect(previa.itens[0].situacao, SituacaoUso.ativo);
-      expect(previa.itens[1].conservacao, EstadoConservacao.ruim);
-      expect(previa.itens[1].situacao, SituacaoUso.inservivel);
     });
 
     test('o código de barras negativo da base real fica encontrável', () {

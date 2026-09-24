@@ -33,13 +33,10 @@ class Patrimonio {
   final String? salaOriginal;
   final String? valor;
 
-  /// Estado e situação de origem, quando a planilha os traz.
-  ///
-  /// A exportação padrão do SUAP **não** traz esses campos — por isso o SLAP
-  /// os grava mas nunca os compara com nada. Quando ausentes, o valor
-  /// levantado é informação nova, não divergência.
-  final EstadoConservacao? conservacaoOriginal;
-  final SituacaoUso? situacaoOriginal;
+  // Estado de conservação e situação de uso não têm versão "original": são
+  // levantados em campo e nunca vêm da planilha. Sem valor anterior não há
+  // divergência possível nesses campos — só a marca de atenção de
+  // [exigeAtencao], que não depende de base.
 
   /// Item cujo ED foi excluído do inventário. Fica fora dos relatórios e fora
   /// do denominador do progresso — não é pendência de ninguém.
@@ -68,8 +65,6 @@ class Patrimonio {
     this.responsavelOriginal,
     this.salaOriginal,
     this.valor,
-    this.conservacaoOriginal,
-    this.situacaoOriginal,
     this.ignorado = false,
     this.verificado = false,
     this.salaAtual,
@@ -119,9 +114,8 @@ class Patrimonio {
       responsavelOriginal: responsavelOriginal,
       salaOriginal: salaOriginal,
       valor: valor,
-      conservacaoOriginal: conservacaoOriginal,
-      situacaoOriginal: situacaoOriginal,
       ignorado: ignorado ?? this.ignorado,
+
       verificado: verificado ?? this.verificado,
       salaAtual: salaAtual ?? this.salaAtual,
       responsavelAtual: responsavelAtual ?? this.responsavelAtual,

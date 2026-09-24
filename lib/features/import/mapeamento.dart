@@ -1,6 +1,12 @@
 import '../../core/codigo.dart';
 
 /// Campo do patrimônio que uma coluna da planilha alimenta.
+///
+/// Só o que vem do SUAP. Estado de conservação e situação de uso são
+/// levantados em campo, nunca importados: a exportação real traz uma coluna
+/// `ESTADO DE CONSERVAÇÃO` e uma `STATUS`, mas com outro vocabulário (Bom /
+/// Antieconômico / Recuperável; Ativo / Baixado / Pendente), e o valor que
+/// vale é o que a comissão encontra na sala.
 enum CampoImportacao {
   tombo('Tombo', obrigatorio: true),
   codigoBarras('Código de barras'),
@@ -9,9 +15,7 @@ enum CampoImportacao {
   responsavel('Responsável'),
   sala('Sala'),
   ordem('Ordem'),
-  valor('Valor'),
-  conservacao('Estado de conservação'),
-  situacao('Situação de uso');
+  valor('Valor');
 
   final String rotulo;
 
@@ -129,22 +133,6 @@ const Map<CampoImportacao, List<String>> sinonimos = {
     'vlr',
     'preco',
     'custo',
-  ],
-  CampoImportacao.conservacao: [
-    'estadodeconservacao',
-    'estadoconservacao',
-    'conservacao',
-    'estado',
-    'estadodobem',
-    'estadofisico',
-  ],
-  CampoImportacao.situacao: [
-    'situacaodeuso',
-    'situacaouso',
-    'situacao',
-    'uso',
-    'statusdeuso',
-    'status',
   ],
 };
 
