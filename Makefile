@@ -9,7 +9,11 @@
 #                     ARGS=--dart-define=SLAP_DESCOBERTA=beacon
 
 FLUTTER ?= flutter
-DART ?= dart
+# O `dart` avulso pode existir no PATH e mesmo assim não rodar (um shim do asdf
+# sem versão escolhida, por exemplo). Quando não roda, usa-se o que vem junto
+# com o Flutter, que sempre existe.
+DART ?= $(shell if dart --version >/dev/null 2>&1; then echo dart; \
+	else echo "$$(dirname "$$(command -v flutter)")/dart"; fi)
 DISPOSITIVO ?=
 ARGS ?=
 
