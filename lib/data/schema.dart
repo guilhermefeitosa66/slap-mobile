@@ -291,6 +291,16 @@ class Config {
   /// apagada. A numeração continua daí se o inventário voltar.
   static String seqMinimo(String inventarioId) => 'seq_minimo.$inventarioId';
 
+  /// Maior número de operação deste aparelho que já saiu daqui num inventário
+  /// — entregue a um par ou gravado numa cópia de segurança.
+  ///
+  /// É o limite do que ainda pode ser re-estampado quando o relógio estava
+  /// errado (ver `RepositorioOperacoes.reestamparOperacoesDoFuturo`). Conta
+  /// o que saiu, e não o que o par confirmou ter: a confirmação vem uma
+  /// sincronização atrasada, e reescrever uma operação que já está na mão de
+  /// outro aparelho criaria duas versões da mesma operação.
+  static String seqEnviado(String inventarioId) => 'seq_enviado.$inventarioId';
+
   /// Momento da última leitura gravada por este aparelho num inventário, em
   /// milissegundos. Só leitura conta: reabrir o inventário, resolver conflito
   /// ou desfazer uma verificação não mostram que a pessoa está na sala.

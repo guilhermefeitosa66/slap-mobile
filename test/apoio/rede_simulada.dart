@@ -1,3 +1,4 @@
+import 'package:slap_mobile/core/hlc.dart';
 import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
@@ -58,31 +59,52 @@ class RedeSimulada {
     de.ops.conferirCabecas(inventarioId, para.ops.cabecas(inventarioId));
     para.ops.conferirCabecas(inventarioId, de.ops.cabecas(inventarioId));
 
+    // O pedido leva o vetor e as lacunas, como na rede de verdade.
     final faltantes = de.ops.opsFaltantes(
       inventarioId,
-      para.ops.vetorParaPedido(inventarioId),
+      para.ops.vetorDe(inventarioId),
+      lacunas: para.ops.lacunasDe(inventarioId),
     );
     if (faltantes.isNotEmpty) {
       para.ops.aplicarRemotas(
         faltantes,
+        inventarioId: inventarioId,
         contextos: de.ops.contextosDe(faltantes),
       );
     }
 
     // Como o cliente e o servidor de verdade: cada lado anota até onde o
-    // trabalho dele está no outro.
-    final deEmPara = para.ops.vetorDe(inventarioId)[de.dispositivoId];
-    final paraEmDe = de.ops.vetorDe(inventarioId)[para.dispositivoId];
-    de.ops.registrarPar(para.dispositivoId, inventarioId, nossoSeq: deEmPara);
-    para.ops.registrarPar(de.dispositivoId, inventarioId, nossoSeq: paraEmDe);
+    // trabalho dele está inteiro no outro — sem passar da primeira lacuna.
+    de.ops.registrarPar(
+      para.dispositivoId,
+      inventarioId,
+      nossoSeq: _entregueA(para, de, inventarioId),
+    );
+    para.ops.registrarPar(
+      de.dispositivoId,
+      inventarioId,
+      nossoSeq: _entregueA(de, para, inventarioId),
+    );
     return faltantes.length;
   }
+
+  /// Até onde a sequência de [autor] está inteira em [quem].
+  static int _entregueA(Aparelho quem, Aparelho autor, String inventarioId) =>
+      autor.ops.seqEntregueA(
+        inventarioId,
+        maximoDoPar: quem.ops.vetorDe(inventarioId)[autor.dispositivoId],
+        lacunasDoPar: quem.ops.lacunasDe(inventarioId)[autor.dispositivoId],
+      );
 
   /// Quantas operações seriam transferidas, sem transferir nada. Usado para
   /// verificar que a sincronização é mesmo incremental.
   static int pendentesEntre(Aparelho de, Aparelho para, String inventarioId) {
     return de.ops
-        .opsFaltantes(inventarioId, para.ops.vetorDe(inventarioId))
+        .opsFaltantes(
+          inventarioId,
+          para.ops.vetorDe(inventarioId),
+          lacunas: para.ops.lacunasDe(inventarioId),
+        )
         .length;
   }
 
@@ -101,6 +123,56 @@ class RedeSimulada {
       destino.inventarios.registrarRecebido(inventario);
       destino.patrimonios.inserirRecebidos(itens);
     }
+  }
+}
+
+/// Escreve no log de [aparelho] uma faixa de operações atribuídas a
+/// [dispositivo], como se elas tivessem chegado dele.
+///
+/// Serve aos casos de volume — milhares de operações acima de um buraco na
+/// numeração —, em que simular leitura a leitura só tornaria o teste lento
+/// sem tornar o cenário mais fiel. O identificador e o relógio saem do par
+/// (aparelho, número), então a mesma operação plantada em dois aparelhos é
+/// idêntica nos dois, como seria se tivesse viajado pela rede.
+void plantarOperacoes(
+  Aparelho aparelho, {
+  required String inventarioId,
+  required String dispositivo,
+  required String patrimonioId,
+  required int de,
+  required int ate,
+  String campo = 'sala_atual',
+  String valor = 'Almoxarifado',
+  String usuario = 'Plantada',
+  int baseMillis = 1700000000000,
+}) {
+  final comando = aparelho.banco.db.prepare(
+    'INSERT OR IGNORE INTO ops (op_id, inventario_id, entidade, entidade_id, '
+    'campo, valor, hlc, dispositivo, seq, ctx_id, usuario_nome, '
+    'usuario_matricula, criado_em) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+  );
+  try {
+    aparelho.banco.transacao(() {
+      for (var seq = de; seq <= ate; seq++) {
+        comando.execute([
+          '$dispositivo-$seq',
+          inventarioId,
+          'patrimonio',
+          patrimonioId,
+          campo,
+          valor,
+          Hlc(baseMillis + seq, 0, dispositivo).codificar(),
+          dispositivo,
+          seq,
+          null,
+          usuario,
+          null,
+          baseMillis + seq,
+        ]);
+      }
+    });
+  } finally {
+    comando.dispose();
   }
 }
 

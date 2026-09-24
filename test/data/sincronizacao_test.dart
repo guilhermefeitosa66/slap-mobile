@@ -158,8 +158,16 @@ void main() {
       );
       final contextos = a.ops.contextosDe(faltantes);
 
-      final primeira = b.ops.aplicarRemotas(faltantes, contextos: contextos);
-      final segunda = b.ops.aplicarRemotas(faltantes, contextos: contextos);
+      final primeira = b.ops.aplicarRemotas(
+        faltantes,
+        inventarioId: inventario.id,
+        contextos: contextos,
+      );
+      final segunda = b.ops.aplicarRemotas(
+        faltantes,
+        inventarioId: inventario.id,
+        contextos: contextos,
+      );
 
       expect(primeira.aplicadas, greaterThan(0));
       expect(segunda.aplicadas, 0, reason: 'idempotente');

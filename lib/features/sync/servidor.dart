@@ -190,6 +190,12 @@ class ServidorSync {
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
       }
 
+      // Assinatura com a chave certa e horário dentro da janela: o relógio do
+      // outro aparelho concorda com o deste. É a evidência de fora que
+      // autoriza reparar as operações que ficaram no futuro por causa de uma
+      // data errada já corrigida.
+      ops.reestamparOperacoesDoFuturo(agora: relogio());
+
       final cifra = CifraSync(inventario.chaveSync);
       final Map<String, dynamic> conteudo;
       try {
@@ -206,9 +212,9 @@ class ServidorSync {
 
       switch (caminho) {
         case Rotas.pull:
-          return _atenderPull(canal, conteudo, remoto);
+          return _atenderPull(canal, conteudo, remoto, inventario.id);
         case Rotas.push:
-          return _atenderPush(canal, conteudo, remoto);
+          return _atenderPush(canal, conteudo, remoto, inventario.id);
         case Rotas.pacote:
           return _atenderPacote(canal, inventario, remoto);
         default:
@@ -227,32 +233,48 @@ class ServidorSync {
     _Canal canal,
     Map<String, dynamic> conteudo,
     String remoto,
+    String inventarioId,
   ) async {
     final req = canal.req;
     final pedido = PedidoPull.fromJson(conteudo);
-    try {
-      ops.conferirCabecas(pedido.inventarioId, pedido.cabecas);
-    } on IdentidadeDuplicada catch (e) {
-      return _erro(req, HttpStatus.conflict, '$e');
+    if (pedido.inventarioId != inventarioId) {
+      return _erroDeInventario(req);
     }
-    final faltantes = ops.opsFaltantes(pedido.inventarioId, pedido.vetor);
+    try {
+      ops.conferirCabecas(inventarioId, pedido.cabecas);
+    } on IdentidadeDuplicada catch (e) {
+      return _erroDeIdentidade(req, e);
+    }
+    final faltantes = ops.opsFaltantes(
+      inventarioId,
+      pedido.vetor,
+      lacunas: pedido.lacunas,
+    );
+    ops.registrarEnvio(inventarioId, faltantes);
 
-    // O que o par declara ter de nós é o que está comprovadamente com ele.
+    // O que o par declara ter de nós é o que está comprovadamente com ele —
+    // até o começo da primeira lacuna que ele declarou na nossa sequência.
     _registrarPar(
       remoto,
-      pedido.inventarioId,
-      nossoSeq: pedido.vetor[banco.dispositivoId],
+      inventarioId,
+      nossoSeq: ops.seqEntregueA(
+        inventarioId,
+        maximoDoPar: pedido.vetor[banco.dispositivoId],
+        lacunasDoPar: pedido.lacunas[banco.dispositivoId],
+      ),
     );
 
     await canal.responder(
       LoteOperacoes(
-        inventarioId: pedido.inventarioId,
+        inventarioId: inventarioId,
         ops: faltantes,
         contextos: ops.contextosDe(faltantes),
         // A nossa vector vai junto: com ela o solicitante já sabe o que nos
-        // enviar em seguida, sem precisar de outra viagem para perguntar.
-        vetor: ops.vetorDe(pedido.inventarioId),
-        cabecas: ops.cabecas(pedido.inventarioId),
+        // enviar em seguida, sem precisar de outra viagem para perguntar. As
+        // lacunas completam o quadro: o que falta a nós no meio da sequência.
+        vetor: ops.vetorDe(inventarioId),
+        lacunas: ops.lacunasDe(inventarioId),
+        cabecas: ops.cabecas(inventarioId),
       ).toJson(),
     );
   }
@@ -261,24 +283,35 @@ class ServidorSync {
     _Canal canal,
     Map<String, dynamic> conteudo,
     String remoto,
+    String inventarioId,
   ) async {
     final req = canal.req;
     final lote = LoteOperacoes.fromJson(conteudo);
+    if (lote.inventarioId != inventarioId) {
+      return _erroDeInventario(req);
+    }
 
     final ResultadoAplicacao resultado;
     try {
-      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
-      resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+      ops.conferirCabecas(inventarioId, lote.cabecas);
+      resultado = ops.aplicarRemotas(
+        lote.ops,
+        inventarioId: inventarioId,
+        contextos: lote.contextos,
+      );
+    } on LoteDeOutroInventario {
+      // Assinado com a chave deste inventário, mas escrevendo em outro.
+      return _erroDeInventario(req);
     } on IdentidadeDuplicada catch (e) {
       // Nada do lote entrou. O outro lado recebe a explicação.
-      return _erro(req, HttpStatus.conflict, '$e');
+      return _erroDeIdentidade(req, e);
     } on RelogioForaDeSincronia catch (e) {
       // Operações com horário no futuro. A transação já foi desfeita: nada
       // do lote entrou. Aceitar arrastaria o relógio deste aparelho, e depois
       // o de todos, para o futuro.
       final diferenca = e.recebido.millis - e.agoraLocal;
       _avisarRelogio(
-        inventarioId: lote.inventarioId,
+        inventarioId: inventarioId,
         remoto: e.recebido.nodeId,
         diferenca: Duration(milliseconds: diferenca),
       );
@@ -295,12 +328,16 @@ class ServidorSync {
 
     _registrarPar(
       remoto,
-      lote.inventarioId,
-      nossoSeq: lote.vetor[banco.dispositivoId],
+      inventarioId,
+      nossoSeq: ops.seqEntregueA(
+        inventarioId,
+        maximoDoPar: lote.vetor[banco.dispositivoId],
+        lacunasDoPar: lote.lacunas[banco.dispositivoId],
+      ),
     );
     _eventos.add(
       EventoSync(
-        inventarioId: lote.inventarioId,
+        inventarioId: inventarioId,
         dispositivoRemoto: remoto,
         recebidas: resultado.aplicadas,
         conflitos: resultado.conflitos,
@@ -500,6 +537,30 @@ class ServidorSync {
       ),
     );
   }
+
+  /// Dois aparelhos escrevendo com a mesma identidade.
+  ///
+  /// A resposta leva o identificador do aparelho duplicado, e não só a frase:
+  /// do lado de cá, "outro aparelho está usando a identidade deste" fala da
+  /// identidade *daqui*, e repetida tal e qual no outro lado mandaria um
+  /// aparelho honesto se apagar. Em `erro` fica um texto neutro, que é o que
+  /// uma versão anterior do aplicativo mostra.
+  Future<void> _erroDeIdentidade(HttpRequest req, IdentidadeDuplicada e) =>
+      _responderJson(
+        req,
+        HttpStatus.conflict,
+        ErroIdentidade(e.dispositivo).toJson(),
+      );
+
+  /// O corpo fala de um inventário e a requisição foi autenticada com a chave
+  /// de outro.
+  ///
+  /// Nenhum cliente honesto faz isso: quem monta o pedido põe o mesmo
+  /// identificador nos dois lugares. A resposta não distingue os casos e não
+  /// diz nada sobre o outro inventário — quem tentou não fica sabendo sequer
+  /// se ele existe aqui.
+  Future<void> _erroDeInventario(HttpRequest req) =>
+      _erro(req, HttpStatus.badRequest, 'O corpo não é deste inventário.');
 
   Future<void> _erro(HttpRequest req, int status, String mensagem) async {
     req.response

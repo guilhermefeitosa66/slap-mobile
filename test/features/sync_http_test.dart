@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/core/hlc.dart';
+import 'package:slap_mobile/core/version_vector.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
+import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
+import 'package:slap_mobile/data/schema.dart';
 import 'package:slap_mobile/features/sync/cifra.dart';
 import 'package:slap_mobile/features/sync/cliente.dart';
 import 'package:slap_mobile/features/sync/protocolo.dart';
@@ -125,6 +129,64 @@ void main() {
         'status': resposta.statusCode,
         if (texto.isNotEmpty) ...jsonDecode(texto) as Map<String, dynamic>,
       };
+    } finally {
+      cliente.close(force: true);
+    }
+  }
+
+  /// Uma requisição autenticada montada à mão: é o que um aparelho hostil
+  /// faria com a chave de um inventário para falar de outro.
+  Future<({int status, Map<String, dynamic> corpo})> requisitarBruto({
+    required String caminho,
+    required String inventarioNaQuery,
+    required String chaveSync,
+    required Map<String, dynamic> corpo,
+  }) async {
+    final cifra = CifraSync(chaveSync);
+    final texto = cifra.cifrar(
+      corpo,
+      contexto: CifraSync.contextoPedido('POST', caminho),
+    );
+    final cliente = HttpClient();
+    try {
+      final req = await cliente.postUrl(
+        Uri(
+          scheme: 'http',
+          host: paraA.host,
+          port: paraA.porta,
+          path: caminho,
+          queryParameters: {'inventario': inventarioNaQuery},
+        ),
+      );
+      req.headers.set(cabecalhoVersao, '$versaoProtocolo');
+      req.headers.set(
+        HttpHeaders.authorizationHeader,
+        Assinatura.gerar(
+          chaveSync: chaveSync,
+          dispositivoId: b.dispositivoId,
+          metodo: 'POST',
+          caminho: caminho,
+          corpo: texto,
+        ),
+      );
+      req.headers.contentType = ContentType.text;
+      req.write(texto);
+
+      final resposta = await req.close();
+      final retorno = await utf8.decoder.bind(resposta).join();
+      if (resposta.statusCode != HttpStatus.ok) {
+        return (
+          status: resposta.statusCode,
+          corpo: jsonDecode(retorno) as Map<String, dynamic>,
+        );
+      }
+      return (
+        status: resposta.statusCode,
+        corpo: cifra.decifrar(
+          retorno,
+          contexto: CifraSync.contextoResposta('POST', caminho),
+        ),
+      );
     } finally {
       cliente.close(force: true);
     }
@@ -541,6 +603,323 @@ void main() {
 
       expect(resposta['aceito'], isFalse);
       expect(resposta['motivo'], MotivoRecusa.invalido.name);
+    });
+  });
+
+  test('a lacuna declarada atravessa a rede e é preenchida', () async {
+    // O que falta no meio da sequência de um terceiro só volta se o pedido
+    // souber dizer qual intervalo é.
+    await entrarNoInventario(b, clienteB, paraA);
+    const carla = 'aparelho-da-carla';
+
+    plantarOperacoes(
+      a,
+      inventarioId: inventario.id,
+      dispositivo: carla,
+      patrimonioId: 'item-1',
+      de: 1,
+      ate: 5,
+    );
+    for (final aparelho in [a, b]) {
+      plantarOperacoes(
+        aparelho,
+        inventarioId: inventario.id,
+        dispositivo: carla,
+        patrimonioId: 'item-1',
+        de: 6,
+        ate: 10,
+      );
+    }
+
+    expect(b.ops.lacunasDe(inventario.id)[carla], isNotEmpty);
+
+    await clienteB.sincronizar(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+    );
+
+    expect(b.ops.lacunasDe(inventario.id)[carla], isEmpty);
+    expect(b.ops.vetorDe(inventario.id)[carla], 10);
+  });
+
+  group('isolamento entre inventários', () {
+    /// Um segundo inventário no aparelho da Ana, de cuja chave o Bruno não
+    /// sabe nada. É o alvo da invasão.
+    late Inventario segredo;
+
+    setUp(() {
+      segredo = a.inventarios.criar(nome: 'Campus Teresina', ano: 2026);
+      a.patrimonios.inserirRecebidos([
+        patrimonioDeTeste(
+          id: 'item-secreto',
+          inventarioId: segredo.id,
+          tombo: '99999',
+          sala: 'Reitoria',
+        ),
+      ]);
+      a.patrimonios.registrarVerificacao(
+        patrimonio: a.patrimonios.porId('item-secreto')!,
+        config: const ConfiguracaoLevantamento(sala: 'Almoxarifado'),
+        usuarioNome: 'Ana',
+      );
+    });
+
+    test('a chave de um inventário não puxa o log de outro', () async {
+      final resposta = await requisitarBruto(
+        caminho: Rotas.pull,
+        inventarioNaQuery: inventario.id,
+        chaveSync: inventario.chaveSync,
+        corpo: PedidoPull(
+          inventarioId: segredo.id,
+          vetor: VersionVector.vazia,
+        ).toJson(),
+      );
+
+      expect(resposta.status, HttpStatus.badRequest);
+      expect(
+        jsonEncode(resposta.corpo),
+        isNot(contains('Almoxarifado')),
+        reason: 'nada do inventário alheio volta na resposta',
+      );
+    });
+
+    test('a chave de um inventário não escreve noutro', () async {
+      final resposta = await requisitarBruto(
+        caminho: Rotas.push,
+        inventarioNaQuery: inventario.id,
+        chaveSync: inventario.chaveSync,
+        corpo: LoteOperacoes(
+          inventarioId: segredo.id,
+          ops: [
+            Operacao(
+              opId: 'forjada-1',
+              inventarioId: segredo.id,
+              entidade: 'inventario',
+              entidadeId: segredo.id,
+              campo: 'nome',
+              valor: 'Tomado',
+              hlc: Hlc(
+                DateTime.now()
+                    .add(const Duration(minutes: 1))
+                    .millisecondsSinceEpoch,
+                0,
+                b.dispositivoId,
+              ),
+              dispositivo: b.dispositivoId,
+              seq: 1,
+              ctxId: null,
+              usuarioNome: 'Bruno',
+              usuarioMatricula: null,
+              criadoEm: DateTime.now().millisecondsSinceEpoch,
+            ),
+          ],
+        ).toJson(),
+      );
+
+      expect(resposta.status, HttpStatus.badRequest);
+      expect(a.inventarios.porId(segredo.id)!.nome, 'Campus Teresina');
+    });
+
+    test(
+      'operação de outro inventário dentro do lote certo é recusada',
+      () async {
+        // Aqui o corpo declara o inventário da query, e são as operações que
+        // apontam para outro lugar.
+        final resposta = await requisitarBruto(
+          caminho: Rotas.push,
+          inventarioNaQuery: inventario.id,
+          chaveSync: inventario.chaveSync,
+          corpo: LoteOperacoes(
+            inventarioId: inventario.id,
+            ops: [
+              Operacao(
+                opId: 'forjada-2',
+                inventarioId: segredo.id,
+                entidade: 'patrimonio',
+                entidadeId: 'item-secreto',
+                campo: CampoPatrimonio.salaAtual,
+                valor: 'Invadida',
+                hlc: Hlc(
+                  DateTime.now()
+                      .add(const Duration(minutes: 1))
+                      .millisecondsSinceEpoch,
+                  0,
+                  b.dispositivoId,
+                ),
+                dispositivo: b.dispositivoId,
+                seq: 1,
+                ctxId: null,
+                usuarioNome: 'Bruno',
+                usuarioMatricula: null,
+                criadoEm: DateTime.now().millisecondsSinceEpoch,
+              ),
+            ],
+          ).toJson(),
+        );
+
+        expect(resposta.status, HttpStatus.badRequest);
+        expect(a.patrimonios.porId('item-secreto')!.salaAtual, 'Almoxarifado');
+      },
+    );
+
+    test('o cliente recusa uma resposta de outro inventário', () async {
+      // O mesmo buraco do lado de quem pede: sem conferir, um par responderia
+      // com o log de outro inventário a quem tem a chave deste.
+      await entrarNoInventario(b, clienteB, paraA);
+      final hostil = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => hostil.close(force: true));
+
+      final cifra = CifraSync(inventario.chaveSync);
+      unawaited(
+        hostil.forEach((req) async {
+          if (req.uri.path == Rotas.hello) {
+            req.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode(
+                  Apresentacao(
+                    dispositivoId: 'aparelho-hostil',
+                    agora: DateTime.now().millisecondsSinceEpoch,
+                  ).toJson(),
+                ),
+              );
+            await req.response.close();
+            return;
+          }
+          await utf8.decoder.bind(req).join();
+          req.response
+            ..headers.contentType = ContentType.text
+            ..write(
+              cifra.cifrar(
+                LoteOperacoes(
+                  inventarioId: 'outro-inventario-qualquer',
+                  ops: const [],
+                ).toJson(),
+                contexto: CifraSync.contextoResposta('POST', req.uri.path),
+              ),
+            );
+          await req.response.close();
+        }),
+      );
+
+      await expectLater(
+        clienteB.sincronizar(
+          par: Par(
+            dispositivoId: 'aparelho-hostil',
+            host: '127.0.0.1',
+            porta: hostil.port,
+          ),
+          inventarioId: inventario.id,
+          chaveSync: inventario.chaveSync,
+        ),
+        throwsA(
+          isA<FalhaSync>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            contains('outro inventário'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('identidade duplicada', () {
+    /// Faz o aparelho da Ana e o do Bruno discordarem sobre qual operação
+    /// ocupa uma posição da sequência de [dono] — que é o que acontece quando
+    /// os dados do aplicativo são copiados de um celular para outro.
+    Future<void> duasHistoriasPara(Aparelho dono) async {
+      await entrarNoInventario(b, clienteB, paraA);
+      dono.patrimonios.registrarVerificacao(
+        patrimonio: dono.patrimonios.porId('item-1')!,
+        config: const ConfiguracaoLevantamento(sala: 'Auditório'),
+        usuarioNome: dono.apelido,
+      );
+      // O outro aparelho tem, nas mesmas posições, operações diferentes.
+      plantarOperacoes(
+        dono == a ? b : a,
+        inventarioId: inventario.id,
+        dispositivo: dono.dispositivoId,
+        patrimonioId: 'item-2',
+        de: 1,
+        ate: dono.ops.vetorDe(inventario.id)[dono.dispositivoId],
+      );
+    }
+
+    test('a identidade do par não vira ordem para este se apagar', () async {
+      // O caso do defeito: a identidade duplicada é a da Ana, e ela recusa
+      // dizendo "outro aparelho está usando a identidade deste" — dela. O
+      // Bruno, que não tem nada a ver com isso, era levado a "Gerar nova
+      // identidade" e a perder o trabalho ainda não entregue.
+      await duasHistoriasPara(a);
+
+      await expectLater(
+        clienteB.sincronizar(
+          par: paraA,
+          inventarioId: inventario.id,
+          chaveSync: inventario.chaveSync,
+        ),
+        throwsA(
+          isA<IdentidadeEmConflito>()
+              .having((e) => e.dispositivo, 'aparelho', a.dispositivoId)
+              .having((e) => e.esteAparelho, 'é o deste aparelho', isFalse)
+              .having((e) => e.mensagem, 'mensagem', contains('Dois aparelhos'))
+              .having(
+                (e) => e.mensagem,
+                'mensagem',
+                isNot(contains('identidade deste')),
+              ),
+        ),
+      );
+    });
+
+    test('quando a identidade é a deste, a mensagem diz isso', () async {
+      await duasHistoriasPara(b);
+
+      await expectLater(
+        clienteB.sincronizar(
+          par: paraA,
+          inventarioId: inventario.id,
+          chaveSync: inventario.chaveSync,
+        ),
+        throwsA(
+          isA<IdentidadeEmConflito>()
+              .having((e) => e.esteAparelho, 'é o deste aparelho', isTrue)
+              .having(
+                (e) => e.mensagem,
+                'mensagem',
+                startsWith('Outro aparelho está usando a identidade deste'),
+              ),
+        ),
+      );
+    });
+
+    test('a recusa vai estruturada, com um texto neutro em erro', () async {
+      await duasHistoriasPara(a);
+
+      final resposta = await requisitarBruto(
+        caminho: Rotas.pull,
+        inventarioNaQuery: inventario.id,
+        chaveSync: inventario.chaveSync,
+        corpo: PedidoPull(
+          inventarioId: inventario.id,
+          vetor: b.ops.vetorDe(inventario.id),
+          cabecas: b.ops.cabecas(inventario.id),
+        ).toJson(),
+      );
+
+      expect(resposta.status, HttpStatus.conflict);
+      expect(resposta.corpo['tipo'], ErroIdentidade.codigo);
+      expect(resposta.corpo['dispositivo'], a.dispositivoId);
+      expect(
+        resposta.corpo['erro'],
+        allOf(
+          isA<String>(),
+          contains('Dois aparelhos'),
+          isNot(contains('identidade deste')),
+        ),
+        reason: 'uma versão anterior mostra este texto, e ele serve aos dois',
+      );
     });
   });
 

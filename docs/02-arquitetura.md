@@ -216,6 +216,38 @@ de ativar data e hora automáticas. Três pontos detectam o problema:
 
 Nenhuma operação daquele par é aplicada até a diferença sumir.
 
+**Depois de corrigir a data.** Recusar operação do futuro resolve quem recebe e abandona quem
+escreveu: as operações gravadas com a data adiantada ficam com HLC no futuro, o `hlc_local` vai
+junto, e corrigir a data do celular não conserta nada. Cada envio continuava recusado inteiro até
+o tempo real alcançar a data errada — com o ano errado, nunca —, a mensagem culpava um relógio que
+já estava certo, e a única saída oferecida pelo aplicativo ("Gerar nova identidade") apagava
+justamente o trabalho que ainda não tinha saído dali.
+
+Com **evidência de fora** de que o relógio de parede está certo, o aparelho re-estampa as próprias
+operações do futuro. A evidência vem de duas portas, e as duas são o outro lado concordando com a
+nossa hora: o cliente, depois que a conferência de relógios com o par passa; o servidor, depois de
+uma assinatura válida dentro da janela de tempo. As estampas novas saem do relógio de agora,
+acima de tudo que já está no log e na mesma ordem em que estavam.
+
+Três limites, e cada um evita um estrago diferente:
+
+- **Nunca na geração do HLC.** Um relógio que só voltou para trás faria toda operação correta do
+  passado parecer do futuro, e o reparo reescreveria trabalho legítimo. Sem evidência de fora, o
+  aparelho não tem como distinguir "a minha data estava errada" de "a minha data está errada
+  agora".
+- **Só o que nunca saiu daqui.** O limite é o maior `seq` próprio já entregue a alguém — anotado
+  em `sent_seq` a cada `pull` respondido, a cada `push` e a cada cópia de segurança exportada —, e
+  não o `our_seq` que o par confirmou, que chega uma sincronização atrasada.
+- **Ou tudo, ou nada.** Se alguma operação do futuro já saiu, nada é reparado. Os campos do
+  inventário são last-writer-wins puro, e um reparo parcial faria as escritas novas perderem para
+  as antigas que ficaram lá fora com a estampa adiantada.
+
+É a única coisa no sistema que altera uma linha de `ops` depois de gravada, e o log continua sendo
+imutável no que importa: nenhuma réplica jamais viu aquelas linhas, então reescrevê-las aqui
+equivale a tê-las escrito agora. O que sobra recusado é o que este aparelho não pode consertar —
+operação de terceiro que ele apenas repassa, e operação própria que já saiu. Nesses casos a recusa
+é a resposta certa, e continua sendo dada.
+
 ### 5.3 Version vector e contexto causal
 
 Cada dispositivo numera suas próprias operações com um `seq` monotônico. O estado de
@@ -232,6 +264,37 @@ operação enquanto as componentes remotas só mudam quando ocorre uma sincroniz
 
 Na prática isso gera **uma linha de contexto por sincronização**, não por operação. Uma sessão
 inteira de levantamento compartilha o mesmo `ctx_id`.
+
+**Lacunas: o que a vector não sabe dizer.** `{B: 100}` tanto pode ser "tenho as cem primeiras de
+B" quanto "tenho da 51 à 100" — e a diferença decide se um intervalo perdido volta ou some para
+sempre. Acontece de verdade: B sincroniza só com A, apaga o inventário do aparelho e entra de novo
+por C, que nunca recebeu as operações antigas dele; C passa a anunciar `B: MAX` e ninguém lhe
+manda o que falta no começo.
+
+Por isso todo pedido e todo lote levam, **junto** da vector, as **lacunas** de quem os envia:
+faixas `[de, até]` que faltam abaixo do máximo de cada aparelho. O que sai na resposta é o que
+está acima da vector *ou* dentro dessas faixas, em ordem de `seq` — o buraco fecha antes do que
+está acima dele, mesmo quando o que está acima não cabe num lote só.
+
+Anunciar só o prefixo contíguo, que é a alternativa óbvia, não resolve: o par reenvia tudo acima
+do buraco a cada encontro, e quando isso passa do limite de 5.000 operações de um lote a
+sincronização reenvia as mesmas 5.000 para sempre, sem nunca alcançar o resto. Vetores e contexto
+causal seguem por MAX; só o pedido ganhou as lacunas.
+
+**Limitações aceitas.** Um intervalo que se perdeu em todo lugar — "Apagar mesmo assim", celular
+perdido — continua sendo pedido a cada encontro, e simplesmente não chega: é uma lista curta no
+pedido, não uma retransmissão. Viajam no máximo 64 faixas por aparelho; o que passar disso fica
+para o encontro seguinte, e como as faixas vão das mais antigas para as mais novas, cada encontro
+fecha as primeiras e descobre as próximas. E `peers.our_seq` — até onde o nosso trabalho está no
+par — nunca passa do começo da primeira lacuna que o par tenha na nossa sequência **e que este
+aparelho ainda possa preencher**: prometer o contrário faria a confirmação de apagar a réplica
+dizer que não se perde nada, e contar o que se perdeu em todo lugar avisaria de uma perda que
+ninguém consegue evitar.
+
+Aparelho com uma versão anterior do aplicativo não declara lacunas nem as lê. A sincronização
+continua funcionando entre os dois, com o comportamento antigo: o buraco não é preenchido por
+aquele par. Basta que um dos lados seja atualizado para o intervalo voltar a ser pedido — e
+qualquer outro par atualizado o preenche.
 
 ### 5.4 Detecção de concorrência
 
@@ -271,8 +334,8 @@ servidor: um `HttpServer` do `dart:io` numa porta efêmera.
 
 ```
 GET  /hello                          → identidade, versão e horário do aparelho (em claro)
-POST /sync/pull?inventario={id}      → {vetor, cabeças} → operações que o solicitante não tem
-POST /sync/push?inventario={id}      → {ops[], contextos, vetor, cabeças} → aplica
+POST /sync/pull?inventario={id}      → {vetor, lacunas, cabeças} → o que o solicitante não tem
+POST /sync/push?inventario={id}      → {ops[], contextos, vetor, lacunas, cabeças} → aplica
 GET  /inventario/pacote?inventario={id} → réplica inicial: inventário e dados do SUAP
 ```
 
@@ -280,8 +343,26 @@ Uma sincronização entre A e B é `pull` seguido de `push`, nos dois sentidos. 
 **repassa operações de terceiros**, A↔B propaga o trabalho de C sem que A e C se encontrem —
 o que faz a topologia em malha da spec §43 funcionar de verdade.
 
-O `pull` envia a version vector do solicitante e recebe só o que falta: é a sincronização
-incremental do §40, sem retransmitir o inventário inteiro.
+As **cabeças** — a última operação que cada lado tem de cada aparelho — viajam junto para
+detectar dois aparelhos escrevendo com a mesma identidade: se a mesma posição da sequência de um
+aparelho tem operações diferentes nos dois lados, os dados do aplicativo foram copiados de um
+celular para outro (ver `copia-de-seguranca.md`), e a sincronização é recusada em vez de misturar
+as duas histórias.
+
+**A recusa vai estruturada, não como frase pronta**, porque a frase depende de quem lê. Quem
+recusa fala da identidade *dele*: "outro aparelho está usando a identidade deste". Repetida tal e
+qual do outro lado, ela manda o aparelho honesto — que só estava passando por ali — tocar em
+"Gerar nova identidade" e apagar o trabalho que ainda não entregou. A resposta leva `tipo` e
+`device_id`, e cada lado monta a frase do ponto de vista dele; quem descobre que a identidade
+duplicada é a própria recebe a orientação de gerar identidade nova, e quem não tem nada com isso
+lê que dois aparelhos, nomeados, estão em conflito. O campo `erro` continua existindo com um texto
+neutro que serve aos dois casos, para uma versão anterior do aplicativo mostrar algo que faça
+sentido.
+
+O `pull` envia a version vector do solicitante e as lacunas dele, e recebe só o que falta: é a
+sincronização incremental do §40, sem retransmitir o inventário inteiro. A resposta traz a vector
+e as lacunas de quem respondeu, e é com elas que o `push` seguinte manda exatamente o que falta ao
+outro — inclusive no meio da sequência (ver §5.3).
 
 ### 5.7 Descoberta
 
@@ -336,6 +417,23 @@ Três camadas, todas derivadas da `sync_key` que o QR code entrega:
   Na rede vai `base64url(nonce ‖ cifrado ‖ etiqueta)`, e a assinatura cobre esse texto.
 - **Separação de chaves.** A `sync_key` não é usada direto: HKDF-SHA256 deriva dela uma chave para
   a cifra (`slap/sync/cifra`) e outra para a assinatura (`slap/sync/assinatura`).
+- **Isolamento entre inventários.** A chave vale por inventário, e o alcance dela termina no
+  inventário que a query identificou — aquele cuja chave conferiu a assinatura. O corpo que
+  declarar outro é recusado antes de qualquer leitura, nos dois lados da conversa: sem isso,
+  bastava pedir um inventário na query e falar de outro no corpo para ler o log alheio ou
+  renomeá-lo, e o identificador do alvo aparece em claro na query de qualquer outra sincronização.
+  A recusa não para no envelope. Antes de aplicar, o lote inteiro cai se alguma operação é de fora
+  do inventário, e são três jeitos de ser: o `inventory_id` da operação, a operação sobre a
+  entidade `inventario` apontando para outro id e a operação sobre patrimônio que esta réplica
+  sabe ser de outro. Patrimônio desconhecido continua entrando — uma importação feita noutro
+  aparelho depois da entrada cria itens que este nunca recebeu.
+- **Contextos causais são endereçados pelo conteúdo.** A tabela `causal_contexts` é global, sem
+  coluna de inventário. Aceitar o `ctx_id` que o remetente escolhesse permitiria plantar, sob o
+  identificador que uma operação alheia vai citar, um vetor que mente conhecer a escrita do outro
+  — e duas leituras concorrentes viram "atualização", com o conflito sumindo sem ninguém ver. O
+  identificador é recalculado do vetor ao receber, e só entram os contextos que alguma operação do
+  próprio lote cita. Como o identificador é o hash do vetor, quem quisesse plantar teria de já
+  conhecer o que está plantando.
 
 Em claro ficam só a apresentação (`/hello`: identidade do aparelho, nome do usuário, versão e
 horário — o mesmo que o beacon já anuncia) e o identificador do inventário na query, necessário

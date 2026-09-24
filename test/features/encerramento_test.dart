@@ -76,8 +76,8 @@ void main() {
 
     // B recebe primeiro a reabertura e só depois, noutro lote, o
     // encerramento — como aconteceria vindo por caminhos diferentes.
-    b.ops.aplicarRemotas([reabertura]);
-    b.ops.aplicarRemotas([encerramento]);
+    b.ops.aplicarRemotas([reabertura], inventarioId: inventario.id);
+    b.ops.aplicarRemotas([encerramento], inventarioId: inventario.id);
 
     expect(encerradoEm(b), isFalse, reason: 'vale o de maior HLC');
     expect(encerradoEm(a), isFalse);

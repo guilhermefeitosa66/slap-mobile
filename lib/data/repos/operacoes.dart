@@ -124,15 +124,42 @@ class IdentidadeDuplicada implements Exception {
 
   IdentidadeDuplicada(this.dispositivo, {required this.esteAparelho});
 
+  /// Como o aparelho duplicado aparece na mensagem. O identificador pode vir
+  /// da rede, então nem se supõe que ele tenha seis caracteres.
+  String get apelido =>
+      dispositivo.length > 6 ? dispositivo.substring(0, 6) : dispositivo;
+
   @override
   String toString() => esteAparelho
       ? 'Outro aparelho está usando a identidade deste. Isso acontece quando '
             'os dados do aplicativo são copiados de um celular para outro. A '
             'sincronização foi recusada para não misturar o trabalho dos dois.'
       : 'Dois aparelhos estão usando a mesma identidade '
-            '(${dispositivo.substring(0, 6)}). Isso acontece quando os dados '
+            '($apelido). Isso acontece quando os dados '
             'do aplicativo são copiados de um celular para outro. A '
             'sincronização foi recusada para não misturar o trabalho dos dois.';
+}
+
+/// Um lote trouxe operação que não é do inventário sincronizado.
+///
+/// A chave de sincronização vale **por inventário**: quem tem a de A não lê
+/// nem escreve em B. Sem esta conferência, bastaria pedir um inventário na
+/// query — que é o que escolhe a chave — e mandar no corpo operações de
+/// outro. Nada do lote entra quando isto acontece: um lote misturado não é
+/// engano de versão, é tentativa de escrever onde não se tem chave.
+class LoteDeOutroInventario implements Exception {
+  /// Inventário que a requisição autenticou.
+  final String esperado;
+
+  /// Inventário a que a operação recusada pertence.
+  final String recebido;
+
+  LoteDeOutroInventario({required this.esperado, required this.recebido});
+
+  @override
+  String toString() =>
+      'O lote trouxe operação de outro inventário ($recebido, e não '
+      '$esperado). Nada foi aplicado.';
 }
 
 /// Trabalho deste aparelho que ainda não está em nenhum outro.
@@ -186,23 +213,184 @@ class RepositorioOperacoes {
   /// O relógio é global ao aparelho, e não por inventário, para que nunca ande
   /// para trás ao alternar entre inventários.
   Hlc _proximoHlc() {
-    final guardado = banco.lerConfig(Config.hlcLocal);
-    final ultimo = guardado == null
-        ? Hlc.zero(dispositivoId)
-        : Hlc.decodificar(guardado);
-    final novo = Hlc.enviar(ultimo);
+    final novo = Hlc.enviar(_hlcLocal);
     banco.gravarConfig(Config.hlcLocal, novo.codificar());
     return novo;
   }
 
   /// Puxa o relógio local para frente ao receber operações de outro aparelho.
   void _absorverHlc(Hlc remoto) {
+    final novo = Hlc.receber(_hlcLocal, remoto);
+    banco.gravarConfig(Config.hlcLocal, novo.codificar());
+  }
+
+  Hlc get _hlcLocal {
     final guardado = banco.lerConfig(Config.hlcLocal);
-    final local = guardado == null
+    return guardado == null
         ? Hlc.zero(dispositivoId)
         : Hlc.decodificar(guardado);
-    final novo = Hlc.receber(local, remoto);
-    banco.gravarConfig(Config.hlcLocal, novo.codificar());
+  }
+
+  /// Anota até onde as operações deste aparelho já saíram daqui.
+  ///
+  /// Chamado de todo lugar por onde elas saem: a resposta do `pull`, o `push`
+  /// e a cópia de segurança. É o limite do reparo de relógio — ver
+  /// [reestamparOperacoesDoFuturo].
+  void registrarEnvio(String inventarioId, Iterable<Operacao> enviadas) {
+    var maior = 0;
+    for (final op in enviadas) {
+      if (op.dispositivo == dispositivoId && op.seq > maior) maior = op.seq;
+    }
+    marcarEnviadoAte(inventarioId, maior);
+  }
+
+  /// Como [registrarEnvio], quando já se sabe o número.
+  void marcarEnviadoAte(String inventarioId, int seq) {
+    if (seq <= 0) return;
+    final chave = Config.seqEnviado(inventarioId);
+    final atual = int.tryParse(banco.lerConfig(chave) ?? '') ?? 0;
+    if (seq > atual) banco.gravarConfig(chave, '$seq');
+  }
+
+  /// Maior operação deste aparelho que comprovadamente já saiu daqui.
+  ///
+  /// O que um par declarou ter também conta, e por isso entra o `nosso_seq`
+  /// dos pares: ele é conservador, mas nunca aponta operação que não saiu.
+  int _maiorSeqEnviado(String inventarioId) {
+    final anotado =
+        int.tryParse(banco.lerConfig(Config.seqEnviado(inventarioId)) ?? '') ??
+        0;
+    final pares =
+        _db.select(
+              'SELECT COALESCE(MAX(nosso_seq), 0) AS s FROM pares '
+              'WHERE inventario_id = ?',
+              [inventarioId],
+            ).first['s']
+            as int;
+    return anotado > pares ? anotado : pares;
+  }
+
+  /// Re-estampa as operações deste aparelho que ficaram no futuro.
+  ///
+  /// Um celular com a data adiantada grava operações com HLC no futuro, e o
+  /// `hlc_local` vai junto. Corrigida a data, cada envio continuava recusado
+  /// inteiro até o tempo real alcançar a data errada — com o ano errado, nunca
+  /// —, a mensagem culpava um relógio que já estava certo e a única saída
+  /// oferecida pelo aplicativo apagava o trabalho ainda não entregue.
+  ///
+  /// **Só com evidência de fora de que o relógio de parede está certo.** Ela
+  /// vem de duas portas: o cliente, depois de a conferência de relógios com o
+  /// par passar, e o servidor, depois de uma assinatura válida dentro da
+  /// janela de tempo. Fazer isto na geração do HLC seria errado: um relógio
+  /// que só voltou para trás reescreveria operações corretas do passado.
+  ///
+  /// **Só o que nunca saiu daqui.** O limite é o maior `seq` próprio já
+  /// enviado a alguém — não o `nosso_seq` confirmado, que chega uma
+  /// sincronização atrasada. E se alguma operação do futuro já saiu, nada é
+  /// reparado: os campos do inventário são last-writer-wins puro, e um reparo
+  /// parcial faria as escritas novas perderem para as antigas que ficaram lá
+  /// fora com a estampa adiantada.
+  ///
+  /// É a única coisa no sistema que altera uma linha de `ops` depois de
+  /// gravada. Vale porque nenhuma réplica jamais viu aquelas linhas: reescrevê-las
+  /// aqui equivale a tê-las escrito agora.
+  ///
+  /// Devolve quantas operações foram re-estampadas.
+  int reestamparOperacoesDoFuturo({DateTime? agora}) {
+    final agoraMs = (agora ?? DateTime.now()).millisecondsSinceEpoch;
+    // A tolerância é a mesma da sincronização: abaixo dela nada é recusado,
+    // e o que está dentro dela é diferença normal entre celulares.
+    final limite = agoraMs + deslocamentoMaximoRelogio.inMilliseconds;
+
+    // Guarda de O(1) para o caminho comum: toda operação local avança o
+    // relógio guardado, então sem ele no futuro não há o que reparar.
+    if (_hlcLocal.millis <= limite) return 0;
+
+    final piso = '${(limite + 1).toString().padLeft(15, '0')}-';
+
+    return banco.transacao(() {
+      final futuras = [
+        for (final l in _db.select(
+          'SELECT * FROM ops WHERE dispositivo = ? AND hlc > ? ORDER BY hlc',
+          [dispositivoId, piso],
+        ))
+          Operacao.doBanco(l),
+      ];
+
+      if (futuras.isEmpty) {
+        // Relógio guardado no futuro sem nenhuma operação lá: sobrou de uma
+        // réplica apagada. Trazê-lo de volta evita que a próxima escrita
+        // nasça no futuro de novo.
+        banco.gravarConfig(
+          Config.hlcLocal,
+          _maiorHlcAte(piso, agoraMs).codificar(),
+        );
+        return 0;
+      }
+
+      // Uma só que já tenha saído daqui basta para não reparar nada.
+      final enviadoPorInventario = <String, int>{};
+      for (final op in futuras) {
+        final enviado = enviadoPorInventario.putIfAbsent(
+          op.inventarioId,
+          () => _maiorSeqEnviado(op.inventarioId),
+        );
+        if (op.seq <= enviado) return 0;
+      }
+
+      var ultimo = _maiorHlcAte(piso, 0);
+      final afetados = <String>{};
+      for (final op in futuras) {
+        ultimo = Hlc.enviar(ultimo, agora: agoraMs);
+        // O `criado_em` vai junto: ele também saiu do relógio errado, e
+        // deixá-lo no futuro faria a marca de "a pessoa voltou depois de
+        // horas" contar a partir de uma data que não existiu.
+        _db.execute('UPDATE ops SET hlc = ?, criado_em = ? WHERE op_id = ?', [
+          ultimo.codificar(),
+          ultimo.millis,
+          op.opId,
+        ]);
+        if (op.entidade == 'patrimonio') afetados.add(op.entidadeId);
+      }
+
+      // Os vencedores de cada campo guardam o HLC junto: sem atualizá-los, a
+      // comparação seguinte usaria a estampa antiga.
+      _reestamparVencedores(futuras.map((o) => o.opId).toList());
+      for (final id in afetados) {
+        _materializar(id);
+      }
+
+      banco.gravarConfig(Config.hlcLocal, ultimo.codificar());
+      return futuras.length;
+    });
+  }
+
+  /// Maior HLC do log abaixo de [piso], ou o relógio de parede se for maior.
+  Hlc _maiorHlcAte(String piso, int agoraMs) {
+    final r = _db.select('SELECT MAX(hlc) AS m FROM ops WHERE hlc < ?', [piso]);
+    final texto = r.isEmpty ? null : r.first['m'] as String?;
+    final doLog = texto == null
+        ? Hlc.zero(dispositivoId)
+        : Hlc.decodificar(texto);
+    final daParede = Hlc(agoraMs, 0, dispositivoId);
+    return doLog.millis >= daParede.millis
+        ? Hlc(doLog.millis, doLog.counter, dispositivoId)
+        : daParede;
+  }
+
+  void _reestamparVencedores(List<String> opIds) {
+    for (var i = 0; i < opIds.length; i += 500) {
+      final bloco = opIds.sublist(i, (i + 500).clamp(0, opIds.length));
+      final marcadores = List.filled(bloco.length, '?').join(',');
+      for (final tabela in ['campos_patrimonio', 'campos_inventario']) {
+        _db.execute(
+          'UPDATE $tabela SET hlc = '
+          '(SELECT hlc FROM ops WHERE ops.op_id = $tabela.op_id) '
+          'WHERE op_id IN ($marcadores)',
+          bloco,
+        );
+      }
+    }
   }
 
   // ------------------------------------------------------ version vectors ---
@@ -280,39 +468,99 @@ class RepositorioOperacoes {
     }
   }
 
-  /// O que este aparelho tem do inventário, para pedir a um par o que falta.
+  /// O que falta abaixo do máximo de cada aparelho.
   ///
-  /// Igual a [vetorDe], exceto pela entrada deste aparelho, que só conta a
-  /// parte contígua da sequência. Depois de apagar a réplica e voltar a
-  /// escrever, as operações antigas deste aparelho faltam no começo; pedir
-  /// pelo máximo faria o par achar que já temos tudo, e elas nunca voltariam.
-  VersionVector vetorParaPedido(String inventarioId) {
-    final vetor = vetorDe(inventarioId);
-    final maximo = vetor[dispositivoId];
-    if (maximo == 0) return vetor;
+  /// Acompanha [vetorDe] em todo pedido e em todo lote: o vetor diz até onde
+  /// sabemos, e as lacunas dizem o que ficou faltando no meio do caminho. Sem
+  /// elas, um intervalo perdido — réplica apagada, aparelho que entrou por um
+  /// par que não tinha o começo — nunca é pedido a ninguém, e a divergência
+  /// fica permanente. Ver `docs/02-arquitetura.md`, §5.3.
+  ///
+  /// Custa uma agregação por inventário, e só percorre a sequência do aparelho
+  /// que de fato tem buraco: com a numeração inteira, contar e comparar com o
+  /// máximo já responde.
+  Lacunas lacunasDe(String inventarioId) {
+    final linhas = _db.select(
+      'SELECT dispositivo, COUNT(*) AS n, MAX(seq) AS m FROM ops '
+      'WHERE inventario_id = ? GROUP BY dispositivo',
+      [inventarioId],
+    );
 
-    final quantas =
-        _db.select(
-              'SELECT COUNT(*) AS n FROM ops '
-              'WHERE inventario_id = ? AND dispositivo = ?',
-              [inventarioId, dispositivoId],
-            ).first['n']
-            as int;
-    if (quantas == maximo) return vetor;
+    final faixas = <String, List<Faixa>>{};
+    for (final l in linhas) {
+      // A numeração começa em 1 e não repete (índice único por inventário e
+      // aparelho): tantas operações quanto o maior número é sequência inteira.
+      if (l['n'] as int == l['m'] as int) continue;
+      final dispositivo = l['dispositivo'] as String;
+      faixas[dispositivo] = _faixasQueFaltam(
+        inventarioId,
+        dispositivo,
+        l['m'] as int,
+      );
+    }
+    return Lacunas(faixas);
+  }
 
-    var contiguo = 0;
+  List<Faixa> _faixasQueFaltam(
+    String inventarioId,
+    String dispositivo,
+    int maximo,
+  ) {
+    final faixas = <Faixa>[];
+    var esperado = 1;
     for (final l in _db.select(
       'SELECT seq FROM ops WHERE inventario_id = ? AND dispositivo = ? '
       'ORDER BY seq',
-      [inventarioId, dispositivoId],
+      [inventarioId, dispositivo],
     )) {
-      if (l['seq'] != contiguo + 1) break;
-      contiguo++;
+      final seq = l['seq'] as int;
+      if (seq > esperado) {
+        faixas.add(Faixa(esperado, seq - 1));
+        if (faixas.length >= maximoFaixasPorAparelho) return faixas;
+      }
+      esperado = seq + 1;
     }
-    return VersionVector({
-      for (final d in vetor.dispositivos) d: vetor[d],
-      dispositivoId: contiguo,
-    });
+    if (esperado <= maximo) faixas.add(Faixa(esperado, maximo));
+    return faixas;
+  }
+
+  /// Até onde a nossa sequência está **inteira** num par.
+  ///
+  /// É o que `pares.nosso_seq` pode registrar, e não o número que o par
+  /// declara conhecer: se falta a operação dez no meio, as que vêm depois
+  /// ainda não estão entregues, e prometer o contrário faria a confirmação de
+  /// apagar a réplica dizer que não se perde nada.
+  ///
+  /// Faixa que falta ao par e falta aqui também é intervalo perdido em todo
+  /// lugar, e não conta contra ninguém: não há nada neste aparelho esperando
+  /// para sair. É o que evita um aviso de perda que ninguém consegue resolver.
+  ///
+  /// [enviadasAgora] são os `seq` nossos que acabaram de ir no lote — eles já
+  /// contam como entregues.
+  int seqEntregueA(
+    String inventarioId, {
+    required int maximoDoPar,
+    required List<Faixa> lacunasDoPar,
+    Set<int> enviadasAgora = const {},
+  }) {
+    for (final faixa in lacunasDoPar) {
+      for (final l in _db.select(
+        'SELECT seq FROM ops WHERE inventario_id = ? AND dispositivo = ? '
+        'AND seq >= ? AND seq <= ? ORDER BY seq',
+        [inventarioId, dispositivoId, faixa.de, faixa.ate],
+      )) {
+        final seq = l['seq'] as int;
+        if (!enviadasAgora.contains(seq)) return seq - 1;
+      }
+    }
+
+    // Nada nosso falta no meio. O que mandamos agora estende o que o par já
+    // declarava ter.
+    var entregue = maximoDoPar;
+    while (enviadasAgora.contains(entregue + 1)) {
+      entregue++;
+    }
+    return entregue;
   }
 
   /// Contexto causal corrente: o que sabemos dos **outros** aparelhos.
@@ -354,16 +602,25 @@ class RepositorioOperacoes {
   /// precisa ser transferido uma vez.
   String registrarContexto(VersionVector vetor) {
     final texto = vetor.codificar();
-    final ctxId = sha256
-        .convert(utf8.encode(texto))
-        .toString()
-        .substring(0, 16);
+    final ctxId = idDeContexto(vetor);
     _db.execute(
       'INSERT OR IGNORE INTO contextos (ctx_id, vetor) VALUES (?, ?)',
       [ctxId, texto],
     );
     return ctxId;
   }
+
+  /// O identificador de um contexto, calculado do conteúdo.
+  ///
+  /// A tabela `contextos` é global — não tem coluna de inventário —, então
+  /// aceitar o `ctx_id` que o remetente disser deixaria plantar um vetor
+  /// qualquer sob o identificador de um contexto de outro inventário, e com
+  /// ele suprimir conflito alheio. Sendo o identificador o hash do vetor,
+  /// quem quisesse plantar teria de já conhecer o vetor que está plantando.
+  static String idDeContexto(VersionVector vetor) => sha256
+      .convert(utf8.encode(vetor.codificar()))
+      .toString()
+      .substring(0, 16);
 
   VersionVector contexto(String? ctxId) {
     if (ctxId == null) return VersionVector.vazia;
@@ -454,8 +711,12 @@ class RepositorioOperacoes {
   /// Detecta concorrência real, registra conflito quando há, e mesmo assim
   /// aplica o vencedor: o banco nunca fica num estado indefinido esperando
   /// alguém decidir.
+  ///
+  /// [inventarioId] é o inventário cuja chave autenticou a troca. Tudo que o
+  /// lote trouxer de fora dele é recusado, e o lote inteiro cai junto.
   ResultadoAplicacao aplicarRemotas(
     List<Operacao> ops, {
+    required String inventarioId,
     Map<String, VersionVector> contextos = const {},
   }) {
     if (ops.isEmpty) {
@@ -468,12 +729,8 @@ class RepositorioOperacoes {
     }
 
     return banco.transacao(() {
-      for (final entrada in contextos.entries) {
-        _db.execute(
-          'INSERT OR IGNORE INTO contextos (ctx_id, vetor) VALUES (?, ?)',
-          [entrada.key, entrada.value.codificar()],
-        );
-      }
+      _conferirInventario(ops, inventarioId);
+      _guardarContextosDoLote(ops, contextos);
 
       var aplicadas = 0;
       var ignoradas = 0;
@@ -531,6 +788,76 @@ class RepositorioOperacoes {
         patrimoniosAfetados: afetados,
       );
     });
+  }
+
+  /// Recusa o lote inteiro se alguma operação é de outro inventário.
+  ///
+  /// São três jeitos de a operação não ser daqui, e os três importam: o
+  /// `inventario_id` da própria operação, a operação que altera os campos de
+  /// **outro** inventário e a que altera um patrimônio que este aparelho sabe
+  /// ser de outro.
+  ///
+  /// Patrimônio desconhecido é aceito: uma importação feita noutro aparelho
+  /// depois da entrada cria itens que este ainda não recebeu, e recusá-los
+  /// impediria o inventário de crescer.
+  void _conferirInventario(List<Operacao> ops, String inventarioId) {
+    final patrimonios = <String>{};
+
+    for (final op in ops) {
+      if (op.inventarioId != inventarioId) {
+        throw LoteDeOutroInventario(
+          esperado: inventarioId,
+          recebido: op.inventarioId,
+        );
+      }
+      if (op.entidade == 'inventario' && op.entidadeId != inventarioId) {
+        throw LoteDeOutroInventario(
+          esperado: inventarioId,
+          recebido: op.entidadeId,
+        );
+      }
+      if (op.entidade == 'patrimonio') patrimonios.add(op.entidadeId);
+    }
+
+    // Em blocos: um lote traz milhares de operações, e uma consulta por
+    // operação custaria mais que aplicá-las.
+    final ids = patrimonios.toList();
+    for (var i = 0; i < ids.length; i += 500) {
+      final bloco = ids.sublist(i, (i + 500).clamp(0, ids.length));
+      final marcadores = List.filled(bloco.length, '?').join(',');
+      final alheios = _db.select(
+        'SELECT inventario_id FROM patrimonios '
+        'WHERE id IN ($marcadores) AND inventario_id <> ? LIMIT 1',
+        [...bloco, inventarioId],
+      );
+      if (alheios.isNotEmpty) {
+        throw LoteDeOutroInventario(
+          esperado: inventarioId,
+          recebido: alheios.first['inventario_id'] as String,
+        );
+      }
+    }
+  }
+
+  /// Guarda os contextos que vieram com o lote.
+  ///
+  /// Duas restrições, e as duas são de isolamento. O `ctx_id` é **recalculado**
+  /// do vetor, e não aceito como veio: a tabela é global, e um identificador
+  /// escolhido pelo remetente plantaria um contexto que faz uma escrita alheia
+  /// parecer conhecida — suprimindo conflito noutro inventário. E só entram os
+  /// contextos que alguma operação do próprio lote cita: o resto não seria
+  /// lido por ninguém, seria só peso no banco de quem recebe.
+  void _guardarContextosDoLote(
+    List<Operacao> ops,
+    Map<String, VersionVector> contextos,
+  ) {
+    if (contextos.isEmpty) return;
+    final citados = ops.map((o) => o.ctxId).whereType<String>().toSet();
+    if (citados.isEmpty) return;
+
+    for (final vetor in contextos.values) {
+      if (citados.contains(idDeContexto(vetor))) registrarContexto(vetor);
+    }
   }
 
   /// Decide o vencedor de um campo. Devolve `true` se registrou conflito.
@@ -796,9 +1123,15 @@ class RepositorioOperacoes {
   ///
   /// Inclui operações originadas em terceiros: é isso que faz o trabalho de C
   /// chegar a A através de B, sem que A e C se encontrem.
+  ///
+  /// Sai o que está acima do vetor do par **ou** dentro das [lacunas] que ele
+  /// declarou. Como a ordem é por `seq`, o que falta no meio vai primeiro:
+  /// assim o buraco fecha já no primeiro encontro, mesmo quando o que está
+  /// acima dele não cabe num lote só.
   List<Operacao> opsFaltantes(
     String inventarioId,
     VersionVector vetorDoPar, {
+    Lacunas lacunas = Lacunas.vazia,
     int limite = 5000,
   }) {
     final nosso = vetorDe(inventarioId);
@@ -806,12 +1139,20 @@ class RepositorioOperacoes {
 
     for (final dispositivo in nosso.dispositivos) {
       final desde = vetorDoPar[dispositivo];
-      if (nosso[dispositivo] <= desde) continue;
+      final faixas = lacunas[dispositivo];
+      if (nosso[dispositivo] <= desde && faixas.isEmpty) continue;
+
+      final condicoes = <String>['seq > ?'];
+      final valores = <Object?>[inventarioId, dispositivo, desde];
+      for (final faixa in faixas) {
+        condicoes.add('(seq >= ? AND seq <= ?)');
+        valores.addAll([faixa.de, faixa.ate]);
+      }
 
       final linhas = _db.select(
         'SELECT * FROM ops WHERE inventario_id = ? AND dispositivo = ? '
-        'AND seq > ? ORDER BY seq LIMIT ?',
-        [inventarioId, dispositivo, desde, limite - resultado.length],
+        'AND (${condicoes.join(' OR ')}) ORDER BY seq LIMIT ?',
+        [...valores, limite - resultado.length],
       );
       resultado.addAll(linhas.map(Operacao.doBanco));
       if (resultado.length >= limite) break;

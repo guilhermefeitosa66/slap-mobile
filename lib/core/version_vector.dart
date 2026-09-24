@@ -90,6 +90,120 @@ class VersionVector {
   String toString() => codificar();
 }
 
+/// Faixa contígua de operações que faltam de um aparelho, inclusiva nas duas
+/// pontas.
+class Faixa {
+  final int de;
+  final int ate;
+
+  const Faixa(this.de, this.ate);
+
+  bool contem(int seq) => seq >= de && seq <= ate;
+
+  @override
+  bool operator ==(Object outro) =>
+      outro is Faixa && de == outro.de && ate == outro.ate;
+
+  @override
+  int get hashCode => Object.hash(de, ate);
+
+  @override
+  String toString() => '[$de, $ate]';
+}
+
+/// Quantas faixas de um mesmo aparelho viajam num pedido.
+///
+/// Uma réplica cheia de buracos é rara — vem de réplica apagada e de operações
+/// que se perderam pelo caminho —, mas o limite existe porque a lista vai na
+/// rede e é escrita por quem está do outro lado. O que passar do limite fica
+/// para a sincronização seguinte: as faixas vão das mais antigas para as mais
+/// novas, então cada encontro fecha as primeiras e descobre as próximas.
+const int maximoFaixasPorAparelho = 64;
+
+/// O que falta **abaixo** do máximo conhecido de cada aparelho.
+///
+/// A version vector sozinha não sabe dizer isto: ela guarda um número por
+/// aparelho, e `{B: 100}` tanto pode ser "tenho as cem primeiras de B" quanto
+/// "tenho da 51 à 100". A diferença decide se um intervalo perdido volta ou
+/// some para sempre.
+///
+/// Anunciar só o prefixo contíguo — dizer `{B: 50}` quando falta o começo —
+/// não resolve: o par reenvia tudo acima do buraco a cada encontro, trava
+/// quando o que está acima passa do limite de um lote e nunca fecha a
+/// diferença se o intervalo se perdeu de vez. Com as lacunas declaradas, o que
+/// falta é pedido nominalmente; o que não existe mais em lugar nenhum é pedido
+/// uma vez por encontro e simplesmente não chega.
+class Lacunas {
+  final Map<String, List<Faixa>> _faixas;
+
+  const Lacunas._(this._faixas);
+
+  Lacunas(Map<String, List<Faixa>> faixas)
+    : _faixas = Map.unmodifiable({
+        for (final e in faixas.entries)
+          if (e.value.isNotEmpty)
+            e.key: List<Faixa>.unmodifiable(
+              (e.value.toList()..sort((a, b) => a.de.compareTo(b.de))).take(
+                maximoFaixasPorAparelho,
+              ),
+            ),
+      });
+
+  static const Lacunas vazia = Lacunas._({});
+
+  List<Faixa> operator [](String dispositivo) =>
+      _faixas[dispositivo] ?? const [];
+
+  Iterable<String> get dispositivos => _faixas.keys;
+
+  bool get isEmpty => _faixas.isEmpty;
+
+  String codificar() => jsonEncode({
+    for (final e in _faixas.entries)
+      e.key: [
+        for (final f in e.value) [f.de, f.ate],
+      ],
+  });
+
+  /// Lê o que veio da rede, descartando o que não faz sentido.
+  ///
+  /// Faixa invertida, com número não positivo ou fora de formato é ignorada
+  /// em silêncio: o outro lado escreve isto, e uma lacuna estranha não pode
+  /// derrubar a sincronização inteira.
+  static Lacunas decodificar(Object? bruto) {
+    if (bruto == null) return vazia;
+    Object? json = bruto;
+    if (bruto is String) {
+      if (bruto.isEmpty) return vazia;
+      try {
+        json = jsonDecode(bruto);
+      } on FormatException {
+        return vazia;
+      }
+    }
+    if (json is! Map) return vazia;
+
+    final faixas = <String, List<Faixa>>{};
+    for (final e in json.entries) {
+      final lista = e.value;
+      if (e.key is! String || lista is! List) continue;
+      final doAparelho = <Faixa>[];
+      for (final f in lista) {
+        if (f is! List || f.length != 2) continue;
+        final de = f[0], ate = f[1];
+        if (de is! num || ate is! num) continue;
+        if (de < 1 || ate < de) continue;
+        doAparelho.add(Faixa(de.toInt(), ate.toInt()));
+      }
+      if (doAparelho.isNotEmpty) faixas[e.key as String] = doAparelho;
+    }
+    return Lacunas(faixas);
+  }
+
+  @override
+  String toString() => codificar();
+}
+
 /// Relação causal entre duas operações.
 enum RelacaoCausal {
   /// A primeira aconteceu antes da segunda: quem escreveu a segunda já

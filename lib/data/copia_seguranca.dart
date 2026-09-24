@@ -64,6 +64,26 @@ class CopiaDeSeguranca {
     } finally {
       copia.close();
     }
+
+    _marcarLogComoSaido(banco, inventarioId);
+  }
+
+  /// O log saiu deste aparelho, e o que saiu não pode mais ser re-estampado.
+  ///
+  /// Restaurada noutro celular, a cópia leva estas operações com a estampa que
+  /// têm agora. Reescrever aqui uma delas criaria duas versões da mesma
+  /// operação — ver `RepositorioOperacoes.reestamparOperacoesDoFuturo`.
+  static void _marcarLogComoSaido(Banco banco, String? inventarioId) {
+    final ops = RepositorioOperacoes(banco);
+    final linhas = banco.db.select(
+      'SELECT inventario_id, MAX(seq) AS s FROM ops WHERE dispositivo = ?'
+      '${inventarioId == null ? '' : ' AND inventario_id = ?'} '
+      'GROUP BY inventario_id',
+      [banco.dispositivoId, if (inventarioId != null) inventarioId],
+    );
+    for (final l in linhas) {
+      ops.marcarEnviadoAte(l['inventario_id'] as String, l['s'] as int);
+    }
   }
 
   static void _manterSo(Database copia, String inventarioId) {
@@ -194,7 +214,11 @@ class CopiaDeSeguranca {
                 r['vetor'] as String,
               ),
           };
-          final resultado = ops.aplicarRemotas(lote, contextos: contextos);
+          final resultado = ops.aplicarRemotas(
+            lote,
+            inventarioId: id,
+            contextos: contextos,
+          );
           operacoes += resultado.aplicadas;
           conflitos += resultado.conflitos;
           ops.reaplicarEdsExcluidos(id);
