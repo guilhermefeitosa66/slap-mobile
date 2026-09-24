@@ -94,6 +94,9 @@ ESTILO = """
   --laranja-fundo: #FBE8D6; --laranja-texto: #8A4408;
   --vermelho-fundo: #FAE0DE; --vermelho-texto: #7E1214;
   --raio: 16px; --largura: 1080px;
+  /* Contorno das capturas: mais presente que --borda, porque o fundo da
+     página e o do aplicativo em tema claro são quase a mesma cor. */
+  --borda-captura: #D3D0C7;
 }
 FONTES
 * { box-sizing: border-box; }
@@ -152,8 +155,64 @@ header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 
 .abertura h1 span { color: var(--teal); }
 .chamadas { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
 .nota { font-size: 0.9rem; color: var(--tinta-secundaria); margin-top: 1rem; }
-.celular { border-radius: 28px; border: 1px solid var(--borda); background: var(--superficie);
-  box-shadow: 0 24px 48px -24px rgba(20, 32, 30, 0.35); overflow: hidden; }
+/* A captura precisa se destacar de um fundo quase branco, no tamanho da
+   abertura e no da galeria. Três camadas: um contorno de 1 px que encosta na
+   borda, uma sombra curta que define o recorte em qualquer tamanho e uma
+   longa que dá profundidade. A sombra única e muito difusa que havia aqui
+   funcionava só na abertura, onde a imagem é grande. */
+.celular { border-radius: 28px; border: 1px solid var(--borda-captura);
+  background: var(--superficie); overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20, 32, 30, 0.10),
+              0 5px 12px -3px rgba(20, 32, 30, 0.16),
+              0 20px 40px -20px rgba(20, 32, 30, 0.30); }
+/* A captura é um botão: ampliar é a única coisa que ela faz. */
+button.celular { display: block; width: 100%; padding: 0; cursor: zoom-in;
+  font: inherit; color: inherit; transition: transform 0.15s, box-shadow 0.15s; }
+button.celular:hover { transform: translateY(-2px);
+  box-shadow: 0 1px 2px rgba(20, 32, 30, 0.10),
+              0 8px 16px -4px rgba(20, 32, 30, 0.18),
+              0 26px 48px -22px rgba(20, 32, 30, 0.34); }
+button.celular:focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
+
+/* Ampliação da captura, como em loja virtual. Sem biblioteca: são trinta
+   linhas de CSS e um script pequeno. */
+.lupa { position: fixed; inset: 0; z-index: 50; background: rgba(10, 18, 16, 0.9);
+  display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.lupa[hidden] { display: none; }
+.lupa figure { margin: 0; display: flex; flex-direction: column; align-items: center;
+  gap: 0.9rem; max-height: 100%; max-width: 100%; }
+.lupa img { max-width: 100%; max-height: calc(100vh - 8rem);
+  max-height: calc(100dvh - 8rem); width: auto; border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: var(--superficie); }
+.lupa figcaption { color: #F3F2EE; font-size: 0.95rem; line-height: 1.4;
+  text-align: center; max-width: 36rem; }
+.lupa button { position: absolute; display: grid; place-items: center;
+  width: 48px; height: 48px; border-radius: 999px; border: 0; cursor: pointer;
+  background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 1.6rem;
+  line-height: 1; }
+.lupa button:hover { background: rgba(255, 255, 255, 0.26); }
+.lupa button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.lupa .fechar { top: 1rem; right: 1rem; }
+.lupa .anterior { left: 1rem; top: 50%; transform: translateY(-50%); }
+.lupa .seguinte { right: 1rem; top: 50%; transform: translateY(-50%); }
+.lupa button[hidden] { display: none; }
+@media (max-width: 720px) {
+  .lupa { padding: 0.35rem; }
+  /* Perto de 90% da altura da tela: é o que deixa o texto da interface
+     legível na captura, que é o motivo de ampliar. */
+  .lupa figure { gap: 0.5rem; }
+  .lupa img { max-height: 86vh; max-height: 86dvh; }
+  .lupa figcaption { font-size: 0.85rem; }
+  .lupa .anterior { left: 0.25rem; }
+  .lupa .seguinte { right: 0.25rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lupa { animation: surgir 0.18s ease-out; }
+  .lupa img { animation: crescer 0.18s ease-out; }
+}
+@keyframes surgir { from { opacity: 0; } }
+@keyframes crescer { from { transform: scale(0.97); } }
+body.ampliando { overflow: hidden; }
 .abertura .celular { max-width: 340px; margin: 0 auto; }
 @media (max-width: 860px) {
   .abertura { padding: 2.5rem 0 2rem; }
@@ -245,6 +304,115 @@ ICONES = {
 }
 
 
+# Ampliação das capturas. Sem biblioteca: a página é estática, e isto é o que
+# uma loja virtual faz — clicar na imagem e vê-la grande sobre fundo escuro.
+#
+# Os cuidados que não se veem: o foco volta para a captura de origem ao
+# fechar, fica preso dentro do diálogo enquanto ele está aberto, e o gesto de
+# voltar do Android fecha a ampliação em vez de sair da página. Sem isso, quem
+# usa teclado ou leitor de tela fica preso atrás do fundo escurecido.
+SCRIPT_LUPA = """<script>
+(function () {
+  var gatilhos = [].slice.call(document.querySelectorAll('.ampliar'));
+  if (!gatilhos.length) return;
+
+  var lupa = document.createElement('div');
+  lupa.className = 'lupa';
+  lupa.hidden = true;
+  lupa.setAttribute('role', 'dialog');
+  lupa.setAttribute('aria-modal', 'true');
+  lupa.setAttribute('aria-label', 'Captura ampliada');
+  lupa.innerHTML =
+    '<button type="button" class="fechar" aria-label="Fechar">×</button>' +
+    '<button type="button" class="anterior" aria-label="Captura anterior">‹</button>' +
+    '<figure><img alt=""><figcaption></figcaption></figure>' +
+    '<button type="button" class="seguinte" aria-label="Próxima captura">›</button>';
+  document.body.appendChild(lupa);
+
+  var imagem = lupa.querySelector('img');
+  var legenda = lupa.querySelector('figcaption');
+  var fechar = lupa.querySelector('.fechar');
+  var anterior = lupa.querySelector('.anterior');
+  var seguinte = lupa.querySelector('.seguinte');
+
+  var origem = null;
+  var irmaos = [];
+  var atual = 0;
+  var empurrou = false;
+
+  function mostrar(i) {
+    atual = (i + irmaos.length) % irmaos.length;
+    var img = irmaos[atual].querySelector('img');
+    imagem.src = img.src;
+    imagem.alt = img.alt;
+    legenda.textContent = img.alt;
+    var varias = irmaos.length > 1;
+    anterior.hidden = !varias;
+    seguinte.hidden = !varias;
+  }
+
+  function abrir(gatilho) {
+    origem = gatilho;
+    irmaos = gatilhos.filter(function (g) {
+      return g.dataset.grupo === gatilho.dataset.grupo;
+    });
+    mostrar(irmaos.indexOf(gatilho));
+    lupa.hidden = false;
+    document.body.classList.add('ampliando');
+    fechar.focus();
+    // O gesto de voltar fecha a ampliação, e não a página.
+    try {
+      history.pushState({ lupa: true }, '');
+      empurrou = true;
+    } catch (e) { empurrou = false; }
+  }
+
+  function encerrar(voltando) {
+    if (lupa.hidden) return;
+    lupa.hidden = true;
+    imagem.removeAttribute('src');
+    document.body.classList.remove('ampliando');
+    // Volta o foco para a captura que estava sendo vista, que pode não ser a
+    // de onde se partiu: quem andou com as setas continua de onde parou.
+    var alvo = irmaos[atual] || origem;
+    if (alvo) alvo.focus();
+    origem = null;
+    if (empurrou && !voltando) history.back();
+    empurrou = false;
+  }
+
+  gatilhos.forEach(function (g) {
+    g.addEventListener('click', function () { abrir(g); });
+  });
+
+  fechar.addEventListener('click', function () { encerrar(false); });
+  anterior.addEventListener('click', function () { mostrar(atual - 1); });
+  seguinte.addEventListener('click', function () { mostrar(atual + 1); });
+  lupa.addEventListener('click', function (e) {
+    // Clique fora da imagem e dos botões fecha.
+    if (e.target === lupa || e.target.tagName === 'FIGURE') encerrar(false);
+  });
+  window.addEventListener('popstate', function () { encerrar(true); });
+
+  document.addEventListener('keydown', function (e) {
+    if (lupa.hidden) return;
+    if (e.key === 'Escape') { encerrar(false); return; }
+    if (e.key === 'ArrowLeft' && irmaos.length > 1) { mostrar(atual - 1); return; }
+    if (e.key === 'ArrowRight' && irmaos.length > 1) { mostrar(atual + 1); return; }
+    if (e.key !== 'Tab') return;
+    // Foco preso no diálogo enquanto ele estiver aberto.
+    var focaveis = [fechar, anterior, seguinte].filter(function (b) {
+      return !b.hidden;
+    });
+    var i = focaveis.indexOf(document.activeElement);
+    e.preventDefault();
+    var proximo = e.shiftKey ? i - 1 : i + 1;
+    focaveis[(proximo + focaveis.length) % focaveis.length].focus();
+  });
+})();
+</script>"""
+
+
 def estilo(prefixo: str) -> str:
     faces = "\n".join(
         f'@font-face {{ font-family: "{familia}"; font-weight: {peso}; '
@@ -293,14 +461,24 @@ def converter(texto: str) -> str:
     )
 
 
-def captura(nome: str, classe: str = "celular", carregamento: str = "lazy") -> str:
-    """Uma captura de tela, com o texto alternativo de CAPTURAS."""
+def captura(nome: str, grupo: str, carregamento: str = "lazy") -> str:
+    """Uma captura de tela, clicável para ampliar.
+
+    É um `<button>`, e não uma `<div>` com `onclick`: ampliar é uma ação, e
+    assim ela chega pelo teclado e pelo leitor de tela sem nada a mais.
+    `grupo` liga as capturas que as setas percorrem — a galeria não navega
+    para os passos, que contam outra história.
+
+    720 × 1603 é o que tool/reduzir_capturas.py produz. A ampliação ajusta
+    pela altura da janela, que é sempre menor que 1603 px: a imagem nunca é
+    esticada além do original, e por isso a resolução atual basta.
+    """
     alt = html.escape(CAPTURAS[nome])
-    # 720 × 1603 é o que tool/reduzir_capturas.py produz; as dimensões evitam
-    # o salto do layout enquanto a imagem carrega.
     return (
-        f'<div class="{classe}"><img src="imagens/{nome}.png" alt="{alt}" '
-        f'width="720" height="1603" loading="{carregamento}"></div>'
+        f'<button type="button" class="celular ampliar" data-grupo="{grupo}" '
+        f'aria-label="Ampliar: {alt}">'
+        f'<img src="imagens/{nome}.png" alt="{alt}" '
+        f'width="720" height="1603" loading="{carregamento}"></button>'
     )
 
 
@@ -335,7 +513,7 @@ exporte os relatórios prontos para o SUAP.</p>
 </div>
 <p class="nota">Software livre · Apache-2.0 · Android 7.0 ou mais novo · sem conta, sem anúncios</p>
 </div>
-{captura("levantamento", carregamento="eager")}
+{captura("levantamento", "abertura", carregamento="eager")}
 </div>
 </section>"""
 
@@ -349,8 +527,9 @@ def por_que() -> str:
          "Os aparelhos do mesmo inventário trocam o que cada um levantou, direto entre "
          "eles, pela rede Wi-Fi local. Não há aparelho principal: todos têm a cópia inteira."),
         ("som", "Três retornos, sem olhar a tela",
-         "Cada leitura responde com som, vibração, cor e texto próprios. Dá para percorrer "
-         "uma sala inteira com o leitor numa mão e a etiqueta na outra."),
+         "Cada leitura responde com som, vibração, cor e texto próprios. O bipe já diz se o "
+         "item entrou, se já tinha sido lido ou se não está na planilha — não é preciso "
+         "conferir a tela a cada patrimônio."),
         ("config", "Configure uma vez, leia dezenas",
          "Sala, responsável, estado de conservação e situação de uso valem para as "
          "próximas leituras, até você mudar. É de onde vem a velocidade."),
@@ -359,7 +538,8 @@ def por_que() -> str:
          "conflito para alguém decidir, e a decisão vale em todos os aparelhos."),
         ("relatorio", "Relatórios prontos",
          "Itens corretos, itens que precisam de atualização no SUAP e itens não "
-         "localizados, em XLSX ou CSV — iguais em qualquer aparelho do inventário."),
+         "localizados, em XLSX ou CSV. Depois de sincronizar, saem iguais em qualquer "
+         "aparelho do inventário."),
     ]
     grade = "\n".join(
         f'<div class="cartao"><div class="icone">{ICONES[icone]}</div>'
@@ -378,7 +558,7 @@ inventário. Aqui o celular é o inventário.</p>
 <div class="retornos">
 <div class="retorno retorno-verde">Registrado<small>encontrado e gravado com a configuração atual</small></div>
 <div class="retorno retorno-laranja">Já verificado<small>lido antes; nada é sobrescrito sem confirmação</small></div>
-<div class="retorno retorno-vermelho">Não localizado<small>não está na planilha deste inventário</small></div>
+<div class="retorno retorno-vermelho">Não localizado<small>o código lido não está na planilha deste inventário</small></div>
 </div>
 </div>
 </section>"""
@@ -397,21 +577,27 @@ def como_usar() -> str:
          "Toque em Compartilhar e mostre o QR code ou envie o link. No outro celular, "
          "Novo → Ler o QR code de outro aparelho. Você aceita cada pedido de entrada; os dois "
          "precisam estar na mesma rede Wi-Fi."),
-        ("configuracao", "Diga onde você está",
+        ("configuracao", "Configure as leituras",
          "Sala, responsável, estado de conservação e situação de uso. A configuração vale "
-         "para todas as leituras seguintes, até você mudar de sala."),
+         "para todas as leituras seguintes, até você mudar — trocar de sala é só um dos "
+         "motivos para mudá-la."),
         ("levantamento", "Leia os códigos",
          "Pela câmera, com um leitor externo ou digitando o tombo. Verde é registrado, "
          "laranja é já verificado, vermelho é não localizado — com som e vibração para cada um."),
-        ("sincronizacao", "Sincronize quando quiser",
-         "Os aparelhos da mesma rede se encontram sozinhos. Se houver conflito, ele aparece "
-         "para alguém decidir; a decisão vale para todos."),
+        ("sincronizacao", "Troque os dados quando quiser",
+         "A troca é nos dois sentidos: cada aparelho manda o que levantou e recebe o que o "
+         "outro levantou. Eles se encontram sozinhos na mesma rede; se a rede da instituição "
+         "isolar os aparelhos, use o ponto de acesso de um dos celulares. Havendo conflito, "
+         "ele aparece para alguém decidir, e a decisão vale para todos."),
         ("relatorios", "Confira e exporte",
          "Três grupos: o que está certo, o que precisa de atualização no SUAP e o que não "
-         "foi localizado. Cada um sai em XLSX ou CSV."),
+         "foi localizado. Cada um sai em XLSX ou CSV. São eles que alimentam o relatório "
+         "final do inventário, que é arquivado, e o que vai ao setor de patrimônio para "
+         "atualizar o SUAP."),
     ]
     lista = "\n".join(
-        f'<li class="passo"><div><h3>{titulo}</h3><p>{texto}</p></div>{captura(nome)}</li>'
+        f'<li class="passo"><div><h3>{titulo}</h3><p>{texto}</p></div>'
+        f'{captura(nome, "passos")}</li>'
         for nome, titulo, texto in passos
     )
     return f"""<section id="como-usar">
@@ -439,15 +625,16 @@ def capturas() -> str:
         "detalhe",
     ]
     figuras = "\n".join(
-        f"<figure>{captura(nome)}<figcaption>{html.escape(CAPTURAS[nome])}</figcaption></figure>"
+        f'<figure>{captura(nome, "galeria")}'
+        f"<figcaption>{html.escape(CAPTURAS[nome])}</figcaption></figure>"
         for nome in nomes
     )
     return f"""<section id="capturas">
 <div class="largura centro">
 <span class="sobretitulo">Capturas</span>
 <h2>O aplicativo por dentro</h2>
-<p class="lede">Tema claro e escuro, TalkBack e fonte ampliada. Os nomes nas imagens são
-fictícios; o resto é um inventário real.</p>
+<p class="lede">Tema claro e escuro, TalkBack e fonte ampliada. Toque em qualquer captura
+para vê-la em tamanho maior.</p>
 <div class="galeria">
 {figuras}
 </div>
@@ -475,8 +662,10 @@ publicado no GitHub. Precisa de Android 7.0 ou mais novo.</p>
 toque em <strong>Configurações</strong>, ative <strong>Permitir desta fonte</strong> e volte.</li>
 <li>Toque em <strong>Instalar</strong>. Na primeira abertura, informe seu nome e comece.</li>
 </ol>
-<p class="secundario">Para atualizar, instale o APK novo por cima: os inventários ficam.
-O passo a passo completo, com a conferência do arquivo, está em
+<p class="secundario">Para atualizar, instale o APK novo por cima: os inventários ficam.</p>
+<p class="secundario">A partir de 30 de setembro de 2026, celular Android certificado no Brasil só
+instala aplicativo de desenvolvedor registrado no Google. As versões publicadas aqui atendem a
+isso. O passo a passo completo, com a conferência do arquivo, está em
 <a href="{REPOSITORIO}/blob/main/docs/instalacao.md">docs/instalacao.md</a>.</p>
 </div>
 <div class="cartao">
@@ -522,6 +711,7 @@ def pagina_inicial(logo: str) -> str:
             instalar(),
             "</main>",
             rodape(),
+            SCRIPT_LUPA,
         ]),
     )
 
