@@ -29,7 +29,7 @@ Future<ProviderContainer> montar(
   WidgetTester tester,
   Widget tela, {
   Banco? banco,
-  SonsMudos? sons,
+  Sons? sons,
   void Function(ProviderContainer)? preparar,
 }) async {
   final container = ProviderContainer(

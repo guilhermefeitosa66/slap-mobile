@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -107,6 +109,49 @@ void main() {
     await ler(tester, '887102');
     expect(campoComFoco(tester), isTrue);
     expect(sons.tocados, [Som.sucesso, Som.naoLocalizado, Som.sucesso]);
+  });
+
+  testWidgets('a leitura aparece na lista sem depender do som', (tester) async {
+    // O defeito: a tela esperava o áudio terminar para mostrar o item. Com o
+    // som quebrado, o patrimônio era gravado — o contador subia — e a linha
+    // não aparecia. Aqui o tocador nunca responde, de propósito.
+    final travado = Sons(criarTocador: _TocadorQueTrava.new)
+      ..vibrar = false
+      // A falha de áudio é o cenário do teste, não um defeito a relatar.
+      ..aoFalhar = (_, _) {};
+    addTearDown(travado.dispose);
+
+    await montar(
+      tester,
+      TelaLevantamento(inventarioId: inventario.id),
+      banco: banco,
+      sons: travado,
+      preparar: (c) => c
+          .read(configuracoesProvider.notifier)
+          .definir(
+            inventario.id,
+            const ConfiguracaoLevantamento(sala: 'Auditório'),
+          ),
+    );
+    await tester.pumpAndSettle();
+
+    await ler(tester, '887101');
+
+    expect(
+      find.text('MESA DE REUNIÃO'),
+      findsWidgets,
+      reason: 'a linha entra na lista mesmo com o áudio pendurado',
+    );
+    expect(contador(tester), '1 lido');
+    expect(
+      campoComFoco(tester),
+      isTrue,
+      reason: 'pronto para a leitura seguinte',
+    );
+
+    // Deixa o tempo limite do áudio estourar, para o teste não terminar com
+    // temporizador pendente.
+    await tester.pump(Sons.limite + const Duration(seconds: 1));
   });
 
   testWidgets('item já verificado pede confirmação e não regrava sozinho', (
@@ -292,4 +337,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Aplicar às próximas leituras'), findsOneWidget);
   });
+}
+
+/// Tocador cuja chamada de plataforma nunca volta, como a do defeito.
+class _TocadorQueTrava implements TocadorDeSom {
+  @override
+  Future<void> carregar(String arquivo) async {}
+
+  @override
+  Future<void> tocar() => Completer<void>().future;
+
+  @override
+  Future<void> dispose() async {}
 }
