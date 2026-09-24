@@ -37,6 +37,12 @@ enum CampoImportacao {
 /// qualquer mudança na exportação do SUAP quebra a importação em silêncio,
 /// jogando dado no campo errado. Reconhecer pelo nome, com sinônimos, sobrevive
 /// a versões diferentes da planilha.
+///
+/// **A ordem dentro de cada lista é preferência**: casando duas colunas, ganha
+/// a que casou com o sinônimo mais acima. É o que resolve a planilha do
+/// `inventario.ifpi.edu.br`, que traz `Código Elemento de Despesa` e
+/// `Elemento de Despesa` lado a lado — o código é o que o aplicativo agrupa,
+/// o nome é texto.
 const Map<CampoImportacao, List<String>> sinonimos = {
   CampoImportacao.tombo: [
     'tombo',
@@ -88,6 +94,13 @@ const Map<CampoImportacao, List<String>> sinonimos = {
   ],
   CampoImportacao.ed: [
     'ed',
+    // Antes dos nomes sem "código": onde existem as duas colunas, é o código
+    // que agrupa os bens e decide o que fica de fora do inventário.
+    'codigoelementodedespesa',
+    'codigoelementodespesa',
+    'codigodoelementodedespesa',
+    'codigoed',
+    'coded',
     'elementodedespesa',
     'elementodespesa',
     'elemento',
@@ -273,14 +286,24 @@ Map<CampoImportacao, int> _mapearLinha(List<String?> cabecalho) {
   return mapa;
 }
 
+/// Quanto uma coluna casa com um campo. Zero é não casar.
+///
+/// Duas faixas bem separadas — exata acima de parcial —, e dentro de cada uma
+/// a posição na lista desempata: o sinônimo mais acima vale mais. É o que faz
+/// `Sala` ganhar de `Setor`, que também é sinônimo de sala mas designa a
+/// unidade administrativa, e `Código Elemento de Despesa` ganhar de `Elemento
+/// de Despesa`.
 int _pontuar(String chave, List<String> sinonimosDoCampo) {
-  for (final s in sinonimosDoCampo) {
-    if (chave == s) return 100;
+  for (var i = 0; i < sinonimosDoCampo.length; i++) {
+    if (chave == sinonimosDoCampo[i]) return 1000 - i;
   }
-  for (final s in sinonimosDoCampo) {
+  for (var i = 0; i < sinonimosDoCampo.length; i++) {
     // Sinônimos muito curtos ("n", "ed") casariam com quase tudo por
     // substring; só valem em correspondência exata.
-    if (s.length >= 4 && chave.contains(s)) return 50;
+    if (sinonimosDoCampo[i].length >= 4 &&
+        chave.contains(sinonimosDoCampo[i])) {
+      return 500 - i;
+    }
   }
   return 0;
 }

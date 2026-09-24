@@ -198,7 +198,7 @@ void main() {
     await abrirImportacao(tester);
     await tester.tap(find.text('Escolher arquivo'));
     await tester.pumpAndSettle();
-    expect(find.text('Escolha a planilha exportada do SUAP'), findsOneWidget);
+    expect(find.text('Escolha a planilha do inventário'), findsOneWidget);
     expect(find.byType(MaterialBanner), findsNothing);
   });
 

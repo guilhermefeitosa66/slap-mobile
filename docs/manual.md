@@ -76,7 +76,7 @@ passado, o de uma unidade específica. Cada um é independente.
 comissão vai reconhecer, como "Campus Picos" ou "Campus Picos — Biblioteca". O ano separa
 inventários do mesmo lugar em exercícios diferentes.
 
-## Importar a planilha do SUAP
+## Importar a planilha
 
 A importação tem três passos, e o segundo é o que evita o erro caro.
 
@@ -84,8 +84,14 @@ A importação tem três passos, e o segundo é o que evita o erro caro.
 
 ### 1. Escolher o arquivo
 
-Aceita **XLSX** e **CSV**, como a exportação do SUAP produz. Planilhas `.xls` antigas
-precisam ser abertas e salvas como `.xlsx` antes — o aplicativo avisa e não tenta adivinhar.
+Servem as duas origens, sem você precisar dizer de qual veio:
+
+- a exportação do **SUAP**;
+- a do **inventario.ifpi.edu.br**.
+
+Os nomes das colunas são diferentes nas duas, e o aplicativo reconhece ambos. Aceita **XLSX** e
+**CSV**. Planilhas `.xls` antigas precisam ser abertas e salvas como `.xlsx` antes — o aplicativo
+avisa e não tenta adivinhar.
 
 Enquanto o arquivo é lido, uma barra mostra quantas linhas já foram percorridas. Com a
 planilha de um campus inteiro — dez mil linhas — isso leva alguns segundos.
@@ -105,11 +111,11 @@ ficam em "Não importar".
 | Campo | Para que serve |
 |---|---|
 | **Tombo** | Obrigatório. É o número que identifica o bem. |
-| **Código de barras** | O que o leitor lê. Pode ser diferente do tombo. |
+| **Código de barras** | O que o leitor lê. Pode ser diferente do tombo — no `inventario.ifpi.edu.br` ele está na coluna `Número`. |
 | **Descrição** | O que aparece na lista a cada leitura. |
-| **Sala** | Onde o SUAP diz que o bem está. Vira o valor "da planilha". |
-| **Responsável** | De quem o SUAP diz que o bem é. |
-| **Elemento de despesa (ED)** | Usado no passo 3 para deixar grupos de fora. |
+| **Sala** | Onde o cadastro diz que o bem está. Vira o valor "da planilha". Não confundir com `Setor`, que é a unidade administrativa. |
+| **Responsável** | De quem o cadastro diz que o bem é. |
+| **Elemento de despesa (ED)** | Usado no passo 3 para deixar grupos de fora. É o código (`44905242`), não o nome do grupo. |
 | **Valor** | Informativo, sai nos relatórios. |
 
 A tela também diz quantas linhas de dados o arquivo tem, o que é uma conferência barata: se

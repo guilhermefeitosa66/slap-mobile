@@ -252,14 +252,15 @@ class _PassoArquivo extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         Text(
-          'Escolha a planilha exportada do SUAP',
+          'Escolha a planilha do inventário',
           style: Theme.of(context).textTheme.titleMedium,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
         const Text(
-          'Aceita XLSX e CSV. As colunas são reconhecidas pelo nome, então a '
-          'ordem não importa.',
+          'Serve a exportação do SUAP e a do inventario.ifpi.edu.br. Aceita '
+          'XLSX e CSV; as colunas são reconhecidas pelo nome, então a ordem '
+          'não importa.',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),

@@ -161,6 +161,80 @@ void main() {
       expect(previa.itens.single.tombo, '23254');
     });
 
+    test('reconhece o cabeçalho do inventario.ifpi.edu.br', () {
+      // Outro sistema, os mesmos dados, outros nomes. Três armadilhas aqui:
+      // `Número` é o código de barras e não a numeração das linhas; há duas
+      // colunas de elemento de despesa, e a que vale é a do código; e `Sala`
+      // e `Setor` disputam o mesmo campo, com `Sala` sendo o ambiente e
+      // `Setor` a unidade administrativa.
+      final planilha = LeitorPlanilha.ler(
+        nomeArquivo: 'inventario-ifpi.xlsx',
+        bytes: planilhaXlsx([
+          [
+            'Número',
+            'Tombo',
+            'Marca',
+            'Modelo',
+            'Descrição',
+            'Status',
+            'Código Elemento de Despesa',
+            'Elemento de Despesa',
+            'Rótulos',
+            'Sala',
+            'Estado de Conservação',
+            'Responsável',
+            'Campus',
+            'Setor',
+            'Registrado em',
+            'Registrado por',
+          ],
+          [
+            '-42313',
+            '222',
+            '',
+            '',
+            'ARQUIVO DE ACO COM QUATRO GAVETAS',
+            'Ativo',
+            '44905242',
+            'MOBILIÁRIO EM GERAL',
+            '',
+            'PIC-BL A-08-MANUTENCAO',
+            'Bom',
+            'Tiago Morais de Almeida',
+            'Campus Picos',
+            'COORDENACAO DE LOGISTICA E MANUTENCAO',
+            '02/09/2025',
+            'alguem@ifpi.edu.br',
+          ],
+        ]),
+      );
+
+      final m = detectarMapeamento(planilha.linhas);
+
+      expect(m.valido, isTrue);
+      expect(m.colunaDe(CampoImportacao.codigoBarras), 0);
+      expect(m.colunaDe(CampoImportacao.tombo), 1);
+      expect(m.colunaDe(CampoImportacao.descricao), 4);
+      expect(
+        m.colunaDe(CampoImportacao.ed),
+        6,
+        reason: 'o código do elemento de despesa, não o nome dele',
+      );
+      expect(
+        m.colunaDe(CampoImportacao.sala),
+        9,
+        reason: 'o ambiente, não a unidade administrativa de Setor',
+      );
+      expect(m.colunaDe(CampoImportacao.responsavel), 11);
+
+      // Levantados em campo, nunca importados: o vocabulário da planilha é
+      // outro, e o valor que vale é o que a comissão encontra na sala.
+      expect(m.campoDaColuna(5), isNull, reason: 'Status');
+      expect(m.campoDaColuna(10), isNull, reason: 'Estado de Conservação');
+      // Sem coluna de valor neste formato.
+      expect(m.colunaDe(CampoImportacao.valor), isNull);
+    });
+
     test('a ordem das colunas é irrelevante', () {
       // É a correção central sobre o SLAP, que lê por posição e joga dado no
       // campo errado quando a exportação muda.

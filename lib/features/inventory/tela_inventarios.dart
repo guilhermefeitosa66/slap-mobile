@@ -263,7 +263,8 @@ class _FolhaNovo extends StatelessWidget {
             leading: const Icon(Icons.upload_file_outlined),
             title: const Text(rotuloImportar),
             subtitle: const Text(
-              'Cria o inventário com nome e ano e importa a planilha do SUAP.',
+              'Cria o inventário com nome e ano e importa a planilha do '
+              'SUAP ou do inventario.ifpi.edu.br.',
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 24,
