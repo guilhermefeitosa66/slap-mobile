@@ -39,8 +39,10 @@ class TelaDashboard extends ConsumerWidget {
         actions: [
           IconButton(
             tooltip: 'Compartilhar inventário',
-            icon: const Icon(Icons.qr_code_2),
-            onPressed: () => mostrarQrDoInventario(context, inv),
+            // Antes era o ícone do QR code, que só dava conta de quem está
+            // ao lado. A folha oferece as duas formas — QR e link.
+            icon: const Icon(Icons.share_outlined),
+            onPressed: () => compartilharInventario(context, ref, inv),
           ),
           PopupMenuButton<_Acao>(
             tooltip: 'Mais ações',

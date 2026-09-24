@@ -152,6 +152,89 @@ void main() {
     });
   });
 
+  group('acordo efêmero', () {
+    // A chave do inventário é entregue por este acordo depois do aceite: o
+    // canal cifrado de sempre deriva da própria `chave_sync`, que quem está
+    // entrando ainda não tem.
+    const rotulo = 'slap/entrada/inv-1/token-1|pub-a|pub-b';
+
+    test('os dois lados chegam à mesma chave sem ela trafegar', () {
+      final origem = AcordoEfemero.gerar();
+      final pedinte = AcordoEfemero.gerar();
+
+      final daOrigem = origem.combinar(pedinte.publica, rotulo: rotulo);
+      final doPedinte = pedinte.combinar(origem.publica, rotulo: rotulo);
+
+      final envelope = daOrigem.cifrar({'chave': chave}, contexto: contexto);
+      expect(doPedinte.decifrar(envelope, contexto: contexto), {
+        'chave': chave,
+      });
+
+      // O que atravessa a rede são as duas públicas e o envelope. Nenhum
+      // deles contém a chave do inventário.
+      for (final trafegado in [origem.publica, pedinte.publica, envelope]) {
+        expect(trafegado.contains(chave), isFalse);
+      }
+    });
+
+    test('um terceiro par de chaves não abre a entrega', () {
+      final origem = AcordoEfemero.gerar();
+      final pedinte = AcordoEfemero.gerar();
+      final bisbilhoteiro = AcordoEfemero.gerar();
+
+      final envelope = origem.combinar(pedinte.publica, rotulo: rotulo).cifrar({
+        'chave': chave,
+      }, contexto: contexto);
+
+      expect(
+        () => bisbilhoteiro
+            .combinar(origem.publica, rotulo: rotulo)
+            .decifrar(envelope, contexto: contexto),
+        throwsA(isA<CorpoIlegivel>()),
+      );
+    });
+
+    test('rótulo diferente não abre: a chave vale para um pedido só', () {
+      final origem = AcordoEfemero.gerar();
+      final pedinte = AcordoEfemero.gerar();
+
+      final envelope = origem.combinar(pedinte.publica, rotulo: rotulo).cifrar({
+        'chave': chave,
+      }, contexto: contexto);
+
+      expect(
+        () => pedinte
+            .combinar(origem.publica, rotulo: '$rotulo-de-outro-pedido')
+            .decifrar(envelope, contexto: contexto),
+        throwsA(isA<CorpoIlegivel>()),
+      );
+    });
+
+    test('cada acordo gera um par novo', () {
+      final publicas = {
+        for (var i = 0; i < 20; i++) AcordoEfemero.gerar().publica,
+      };
+      expect(publicas.length, 20);
+    });
+
+    test('chave pública inválida é recusada sem explodir', () {
+      final acordo = AcordoEfemero.gerar();
+      for (final lixo in [
+        '',
+        'nao-e-base64!!',
+        base64Url.encode(List.filled(65, 4)),
+        // Ponto fora da curva: o começo do ataque de curva inválida.
+        base64Url.encode([4, ...List.filled(64, 1)]),
+      ]) {
+        expect(
+          () => acordo.combinar(lixo, rotulo: rotulo),
+          throwsA(isA<CorpoIlegivel>()),
+          reason: 'pública "$lixo"',
+        );
+      }
+    });
+  });
+
   group('na rede', () {
     late Aparelho a;
     late ServidorSync servidor;

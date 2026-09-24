@@ -60,6 +60,7 @@ credentials.json
 /android/app/profile
 /android/app/release
 /android/.gradle/
+/android/.kotlin/
 /android/local.properties
 /ios/Flutter/Flutter.framework
 /ios/Flutter/Flutter.podspec

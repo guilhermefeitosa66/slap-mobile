@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
+import 'package:slap_mobile/features/sync/cifra.dart';
 import 'package:slap_mobile/features/sync/cliente.dart';
 import 'package:slap_mobile/features/sync/protocolo.dart';
 import 'package:slap_mobile/features/sync/servidor.dart';
@@ -27,17 +32,22 @@ void main() {
     a = Aparelho('Ana');
     b = Aparelho('Bruno');
 
+    // Validade curta: o pedido de entrada vale um minuto em campo, e o teste
+    // de expiração não pode esperar um minuto.
+    const validade = Duration(seconds: 2);
     servidorA = ServidorSync(
       banco: a.banco,
       ops: a.ops,
       inventarios: a.inventarios,
       patrimonios: a.patrimonios,
+      validadePedido: validade,
     );
     servidorB = ServidorSync(
       banco: b.banco,
       ops: b.ops,
       inventarios: b.inventarios,
       patrimonios: b.patrimonios,
+      validadePedido: validade,
     );
 
     final portaA = await servidorA.iniciar();
@@ -79,7 +89,49 @@ void main() {
     ]);
   });
 
+  StreamSubscription<PedidoEntrada>? inscricao;
+
+  /// Quem está com o aparelho A responde a todo pedido do mesmo jeito.
+  void aAtende({required bool aceitar}) {
+    inscricao = servidorA.pedidos.listen(
+      (p) => servidorA.responderPedido(p.token, aceitar: aceitar),
+    );
+  }
+
+  /// Um pedido montado à mão, para exercitar o que o `ClienteSync` não deixa
+  /// fazer — repetir um token, por exemplo.
+  Future<Map<String, dynamic>> pedirBruto(
+    Par par,
+    Map<String, dynamic> corpo, {
+    String? inventarioId,
+  }) async {
+    final cliente = HttpClient();
+    try {
+      final req = await cliente.postUrl(
+        Uri(
+          scheme: 'http',
+          host: par.host,
+          port: par.porta,
+          path: Rotas.pedido,
+          queryParameters: {'inventario': inventarioId ?? inventario.id},
+        ),
+      );
+      req.headers.set(cabecalhoVersao, '$versaoProtocolo');
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode(corpo));
+      final resposta = await req.close();
+      final texto = await utf8.decoder.bind(resposta).join();
+      return {
+        'status': resposta.statusCode,
+        if (texto.isNotEmpty) ...jsonDecode(texto) as Map<String, dynamic>,
+      };
+    } finally {
+      cliente.close(force: true);
+    }
+  }
+
   tearDown(() async {
+    await inscricao?.cancel();
     await servidorA.dispose();
     await servidorB.dispose();
     a.fechar();
@@ -328,6 +380,167 @@ void main() {
           reason: 'cabeçalho "$lixo"',
         );
       }
+    });
+  });
+
+  group('pedido de entrada', () {
+    test(
+      'o aceite entrega a chave, e com ela o pacote inicial chega',
+      () async {
+        // O fluxo inteiro da entrada por link: o link não trouxe chave nenhuma,
+        // e ela só existe do lado de quem entra depois do "Aceitar".
+        aAtende(aceitar: true);
+
+        final chave = await clienteB.pedirEntrada(
+          par: paraA,
+          inventarioId: inventario.id,
+          usuarioNome: 'Bruno',
+          matricula: '2024001',
+        );
+
+        expect(chave, inventario.chaveSync);
+
+        final pacote = await clienteB.baixarPacote(
+          par: paraA,
+          inventarioId: inventario.id,
+          chaveSync: chave,
+        );
+        b.inventarios.registrarRecebido(pacote.inventario);
+        b.patrimonios.inserirRecebidos(pacote.patrimonios);
+
+        expect(b.patrimonios.todos(inventario.id).length, 2);
+      },
+    );
+
+    test('o pedido diz quem está pedindo, para a pessoa decidir', () async {
+      final recebidos = <PedidoEntrada>[];
+      inscricao = servidorA.pedidos.listen((p) {
+        recebidos.add(p);
+        servidorA.responderPedido(p.token, aceitar: true);
+      });
+
+      await clienteB.pedirEntrada(
+        par: paraA,
+        inventarioId: inventario.id,
+        usuarioNome: 'Bruno',
+        matricula: '2024001',
+      );
+
+      expect(recebidos, hasLength(1));
+      expect(recebidos.single.dispositivo, b.dispositivoId);
+      expect(recebidos.single.usuarioNome, 'Bruno');
+      expect(recebidos.single.matricula, '2024001');
+      expect(recebidos.single.rotulo, startsWith('Bruno (aparelho '));
+    });
+
+    test('a recusa não entrega a chave', () async {
+      aAtende(aceitar: false);
+
+      await expectLater(
+        clienteB.pedirEntrada(par: paraA, inventarioId: inventario.id),
+        throwsA(
+          isA<EntradaRecusada>().having(
+            (e) => e.motivo,
+            'motivo',
+            MotivoRecusa.recusado,
+          ),
+        ),
+      );
+      expect(b.inventarios.porId(inventario.id), isNull);
+    });
+
+    test('sem resposta o pedido caduca, e nada é entregue', () async {
+      // Ninguém escuta: o aparelho de Ana está no bolso.
+      await expectLater(
+        clienteB.pedirEntrada(par: paraA, inventarioId: inventario.id),
+        throwsA(
+          isA<EntradaRecusada>().having(
+            (e) => e.motivo,
+            'motivo',
+            MotivoRecusa.expirou,
+          ),
+        ),
+      );
+    });
+
+    test('o mesmo token não vale duas vezes', () async {
+      aAtende(aceitar: true);
+
+      final corpo = PedidoEntrada(
+        inventarioId: inventario.id,
+        token: gerarTokenEntrada(),
+        dispositivo: b.dispositivoId,
+        chavePublica: AcordoEfemero.gerar().publica,
+        usuarioNome: 'Bruno',
+      ).toJson();
+
+      final primeira = await pedirBruto(paraA, corpo);
+      expect(primeira['aceito'], isTrue);
+
+      // Quem gravou a rede não reaproveita o pedido de outro para receber a
+      // chave uma segunda vez.
+      final segunda = await pedirBruto(paraA, corpo);
+      expect(segunda['aceito'], isFalse);
+      expect(segunda['motivo'], MotivoRecusa.tokenRepetido.name);
+      expect(segunda['entrega'], isNull);
+    });
+
+    test(
+      'pedido sem os campos obrigatórios é recusado sem derrubar nada',
+      () async {
+        for (final corpo in [
+          <String, dynamic>{},
+          {'inventario': inventario.id},
+          {
+            'inventario': inventario.id,
+            'token': '',
+            'dispositivo': 'x',
+            'pub': 'y',
+          },
+        ]) {
+          final resposta = await pedirBruto(paraA, corpo);
+          expect(resposta['aceito'], isFalse, reason: '$corpo');
+          expect(
+            resposta['motivo'],
+            MotivoRecusa.invalido.name,
+            reason: '$corpo',
+          );
+        }
+
+        // O servidor continua de pé depois do lixo.
+        final apresentacao = await clienteB.apresentar(
+          '127.0.0.1',
+          paraA.porta,
+        );
+        expect(apresentacao.dispositivoId, a.dispositivoId);
+      },
+    );
+
+    test(
+      'inventário que o aparelho não tem responde como chave inválida',
+      () async {
+        await expectLater(
+          clienteB.pedirEntrada(
+            par: paraA,
+            inventarioId: 'inventario-que-nao-existe',
+          ),
+          throwsA(isA<FalhaSync>()),
+        );
+      },
+    );
+
+    test('chave pública inválida no pedido não entrega nada', () async {
+      aAtende(aceitar: true);
+
+      final resposta = await pedirBruto(paraA, {
+        'inventario': inventario.id,
+        'token': gerarTokenEntrada(),
+        'dispositivo': b.dispositivoId,
+        'pub': 'isto-nao-e-um-ponto',
+      });
+
+      expect(resposta['aceito'], isFalse);
+      expect(resposta['motivo'], MotivoRecusa.invalido.name);
     });
   });
 

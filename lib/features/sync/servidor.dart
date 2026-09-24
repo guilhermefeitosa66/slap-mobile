@@ -32,15 +32,40 @@ class ServidorSync {
   /// banco em laço.
   final _eventos = StreamController<EventoSync>.broadcast();
 
+  /// Pedidos de entrada esperando o aceite de quem está com o aparelho.
+  final _pedidos = StreamController<PedidoEntrada>.broadcast();
+
+  /// Pedidos pendentes, por token.
+  final _emEspera = <String, _EsperaPedido>{};
+
+  /// Tokens já apresentados, com o momento em que chegaram. Cada pedido vale
+  /// uma vez só, tenha sido aceito, recusado ou esquecido.
+  final _tokensUsados = <String, DateTime>{};
+
+  /// Quanto um pedido de entrada espera pela resposta. Substituível nos
+  /// testes, que não podem esperar um minuto de verdade.
+  final Duration validadePedido;
+
   ServidorSync({
     required this.banco,
     required this.ops,
     required this.inventarios,
     required this.patrimonios,
     DateTime Function()? relogio,
-  }) : relogio = relogio ?? DateTime.now;
+    Duration? validadePedido,
+  }) : relogio = relogio ?? DateTime.now,
+       validadePedido = validadePedido ?? validadePedidoPadrao;
 
   Stream<EventoSync> get eventos => _eventos.stream;
+
+  /// Pedidos de entrada chegando. É o canal que o diálogo de aceite escuta.
+  Stream<PedidoEntrada> get pedidos => _pedidos.stream;
+
+  /// Pedidos que ainda esperam resposta. Serve a quem abre o aplicativo já
+  /// com um pedido em andamento.
+  List<PedidoEntrada> get pedidosPendentes => [
+    for (final espera in _emEspera.values) espera.pedido,
+  ];
 
   int? get porta => _servidor?.port;
   bool get ativo => _servidor != null;
@@ -64,6 +89,13 @@ class ServidorSync {
   }
 
   Future<void> parar() async {
+    // Pedido pendente não fica pendurado: fechar o servidor derruba a
+    // requisição, e a espera ficaria esperando para sempre.
+    for (final espera in _emEspera.values.toList()) {
+      espera.decidir(null);
+    }
+    _emEspera.clear();
+
     await _servidor?.close(force: true);
     _servidor = null;
   }
@@ -71,6 +103,7 @@ class ServidorSync {
   Future<void> dispose() async {
     await parar();
     await _eventos.close();
+    await _pedidos.close();
   }
 
   Future<void> _atender(HttpRequest req) async {
@@ -117,6 +150,13 @@ class ServidorSync {
         // Mesma resposta de assinatura inválida: dizer "não tenho esse
         // inventário" confirmaria a existência dele a quem não tem a chave.
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
+      }
+
+      // O pedido de entrada vem antes da assinatura, e é o único que vem:
+      // quem pede ainda não tem a chave com que assinaria — é ela que está
+      // sendo pedida. O que autoriza aqui é uma pessoa tocando em "Aceitar".
+      if (caminho == Rotas.pedido) {
+        return _atenderPedido(req, inventario, corpo);
       }
 
       final conferencia = Assinatura.conferir(
@@ -175,7 +215,11 @@ class ServidorSync {
           return _erro(req, HttpStatus.notFound, 'Rota desconhecida.');
       }
     } catch (e) {
-      await _erro(req, HttpStatus.internalServerError, 'Erro interno: $e');
+      try {
+        await _erro(req, HttpStatus.internalServerError, 'Erro interno: $e');
+      } catch (_) {
+        // Conexão já fechada do outro lado: não há a quem explicar.
+      }
     }
   }
 
@@ -285,6 +329,138 @@ class ServidorSync {
     );
   }
 
+  // ------------------------------------------------ pedido de entrada ---
+
+  /// Recebe um pedido de entrada e segura a resposta até alguém decidir.
+  ///
+  /// A requisição fica aberta enquanto o diálogo está na tela do outro lado:
+  /// é uma conversa entre dois celulares na mesma sala, e devolver "pedido
+  /// registrado, pergunte de novo depois" só acrescentaria um laço de
+  /// tentativas a um caso que dura segundos.
+  Future<void> _atenderPedido(
+    HttpRequest req,
+    Inventario inventario,
+    String corpo,
+  ) async {
+    const invalido = RespostaPedido.recusado(MotivoRecusa.invalido);
+
+    PedidoEntrada? pedido;
+    try {
+      pedido = PedidoEntrada.fromJson(
+        jsonDecode(corpo) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      // Rota aberta: qualquer coisa pode bater nela, inclusive um varredor.
+      pedido = null;
+    }
+    if (req.method != 'POST' ||
+        pedido == null ||
+        pedido.inventarioId != inventario.id) {
+      return _responderPedido(req, invalido);
+    }
+
+    // Um aparelho hostil na mesma rede não pode encher a tela de diálogos
+    // nem prender conexões: passado o limite, o pedido é recusado na hora.
+    if (_emEspera.length >= _limitePendentes) {
+      return _responderPedido(req, invalido);
+    }
+
+    _limparTokens();
+    // Uso único: um pedido aceito não pode ser reapresentado por quem estava
+    // ouvindo a rede para receber a chave uma segunda vez.
+    if (_tokensUsados.containsKey(pedido.token)) {
+      return _responderPedido(
+        req,
+        const RespostaPedido.recusado(MotivoRecusa.tokenRepetido),
+      );
+    }
+    _tokensUsados[pedido.token] = relogio();
+
+    final espera = _EsperaPedido(pedido);
+    _emEspera[pedido.token] = espera;
+    if (!_pedidos.isClosed) _pedidos.add(pedido);
+
+    // Sem resposta, o pedido caduca sozinho: ninguém fica esperando um
+    // aparelho que foi para o bolso.
+    final cronometro = Timer(validadePedido, () => espera.decidir(null));
+
+    final RespostaPedido resposta;
+    try {
+      final decisao = await espera.decisao;
+      resposta = switch (decisao) {
+        true => _entregarChave(inventario, pedido),
+        false => const RespostaPedido.recusado(MotivoRecusa.recusado),
+        null => const RespostaPedido.recusado(MotivoRecusa.expirou),
+      };
+    } finally {
+      cronometro.cancel();
+      _emEspera.remove(pedido.token);
+    }
+
+    await _responderPedido(req, resposta);
+  }
+
+  /// Resposta de quem está com o aparelho. Devolve `false` quando o pedido já
+  /// tinha caducado — o diálogo então some sem prometer nada.
+  bool responderPedido(String token, {required bool aceitar}) {
+    final espera = _emEspera[token];
+    if (espera == null) return false;
+    espera.decidir(aceitar);
+    return true;
+  }
+
+  /// Entrega a chave do inventário cifrada com a chave combinada do acordo
+  /// efêmero. Nem a chave nem o segredo combinado trafegam.
+  RespostaPedido _entregarChave(Inventario inventario, PedidoEntrada pedido) {
+    try {
+      final acordo = AcordoEfemero.gerar();
+      final cifra = acordo.combinar(
+        pedido.chavePublica,
+        rotulo: rotuloEntrega(
+          inventarioId: inventario.id,
+          token: pedido.token,
+          publicaPedinte: pedido.chavePublica,
+          publicaOrigem: acordo.publica,
+        ),
+      );
+      return RespostaPedido.aceito(
+        chavePublica: acordo.publica,
+        entrega: cifra.cifrar({
+          RespostaPedido.campoChave: inventario.chaveSync,
+        }, contexto: CifraSync.contextoResposta('POST', Rotas.pedido)),
+      );
+    } on CorpoIlegivel {
+      // Chave pública que não é um ponto desta curva.
+      return const RespostaPedido.recusado(MotivoRecusa.invalido);
+    }
+  }
+
+  /// Esquece tokens antigos. Sem isto a lista cresceria pelo dia inteiro; com
+  /// meia hora, a reapresentação de um token continua barrada muito além da
+  /// validade de um minuto do pedido.
+  void _limparTokens() {
+    final limite = relogio().subtract(const Duration(minutes: 30));
+    _tokensUsados.removeWhere((_, quando) => quando.isBefore(limite));
+  }
+
+  Future<void> _responderPedido(
+    HttpRequest req,
+    RespostaPedido resposta,
+  ) async {
+    try {
+      // Em claro, e não cifrada: é a resposta que carrega a chave combinada
+      // com que o resto vai ser decifrado. O conteúdo sensível dela — a chave
+      // do inventário — vai cifrado por dentro.
+      await _responder(req, resposta.toJson());
+    } catch (_) {
+      // A requisição ficou aberta enquanto o diálogo estava na tela: quem
+      // pediu pode ter desistido e fechado a conexão. Não é erro.
+    }
+  }
+
+  /// Quantos pedidos de entrada podem esperar resposta ao mesmo tempo.
+  static const _limitePendentes = 5;
+
   void _registrarPar(
     String dispositivo,
     String inventarioId, {
@@ -354,6 +530,21 @@ class EventoSync {
   });
 
   bool get recusadoPorRelogio => diferencaRelogio != null;
+}
+
+/// Um pedido de entrada esperando a decisão de quem está com o aparelho.
+class _EsperaPedido {
+  final PedidoEntrada pedido;
+  final _decisao = Completer<bool?>();
+
+  _EsperaPedido(this.pedido);
+
+  /// `true` aceito, `false` recusado, `null` caducou.
+  Future<bool?> get decisao => _decisao.future;
+
+  void decidir(bool? aceito) {
+    if (!_decisao.isCompleted) _decisao.complete(aceito);
+  }
 }
 
 /// A resposta a um pedido autenticado, cifrada com a chave do inventário.
