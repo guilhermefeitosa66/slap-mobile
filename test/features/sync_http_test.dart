@@ -256,6 +256,31 @@ void main() {
     );
   });
 
+  test('pacote de aparelho antigo, com a coluna de ordem, é aceito', () {
+    // A v1.1.0 e anteriores mandam `ordem` no pacote inicial. A chave sobra e
+    // é ignorada; nada mais no formato mudou, e por isso a versão do
+    // protocolo continua a mesma.
+    final pacote = PacoteInventario(
+      inventario: inventario,
+      patrimonios: a.patrimonios.todos(inventario.id),
+    ).toJson();
+
+    expect(
+      (pacote['patrimonios'] as List).first,
+      isNot(contains('ordem')),
+      reason: 'esta versão não manda mais a coluna',
+    );
+
+    for (final p in pacote['patrimonios'] as List) {
+      (p as Map<String, dynamic>)['ordem'] = '7';
+    }
+
+    final lido = PacoteInventario.fromJson(pacote);
+    expect(lido.patrimonios.length, 2);
+    expect(lido.patrimonios.first.tombo, isNotEmpty);
+    expect(lido.inventario.id, inventario.id);
+  });
+
   test('o download do pacote diz quanto já chegou', () async {
     // Era a espera mais longa do aplicativo, e a única coisa na tela era uma
     // roda girando. O `Content-Length` da resposta é o que permite dizer

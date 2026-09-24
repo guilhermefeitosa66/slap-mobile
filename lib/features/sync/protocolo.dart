@@ -461,7 +461,6 @@ class PacoteInventario {
       for (final p in patrimonios)
         {
           'id': p.id,
-          'ordem': p.ordem,
           'tombo': p.tombo,
           'codigo_barras': p.codigoBarras,
           'ed': p.ed,
@@ -497,7 +496,6 @@ class PacoteInventario {
           Patrimonio(
             id: p['id'] as String,
             inventarioId: inventario.id,
-            ordem: p['ordem'] as String?,
             tombo: p['tombo'] as String,
             codigoBarras: p['codigo_barras'] as String?,
             ed: p['ed'] as String?,

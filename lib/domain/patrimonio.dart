@@ -15,8 +15,6 @@ class Patrimonio {
   // ---------------------------------------------------------------- SUAP ---
   // Imutáveis após a importação.
 
-  final String? ordem;
-
   /// Número de tombo, como veio do SUAP. Sempre texto: zeros à esquerda são
   /// significativos e um inteiro os perderia.
   final String tombo;
@@ -58,7 +56,6 @@ class Patrimonio {
     required this.id,
     required this.inventarioId,
     required this.tombo,
-    this.ordem,
     this.codigoBarras,
     this.ed,
     this.descricao,
@@ -107,7 +104,6 @@ class Patrimonio {
       id: id,
       inventarioId: inventarioId,
       tombo: tombo,
-      ordem: ordem,
       codigoBarras: codigoBarras,
       ed: ed,
       descricao: descricao,

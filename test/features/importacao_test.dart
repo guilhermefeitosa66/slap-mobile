@@ -26,7 +26,6 @@ void main() {
     // A tela "Confira as colunas" percorre `CampoImportacao.values`. Quem
     // conferia a planilha no SLAP confere aqui na mesma sequência.
     expect(CampoImportacao.values.map((c) => c.rotulo).toList(), [
-      'Ordem',
       'Código de barras',
       'Tombo',
       'Elemento de despesa',
@@ -68,7 +67,9 @@ void main() {
       final m = detectarMapeamento(planilha.linhas);
 
       expect(m.valido, isTrue);
-      expect(m.colunaDe(CampoImportacao.ordem), 0);
+      // `ORDEM` não alimenta campo nenhum: a numeração das linhas do
+      // relatório de origem não diz nada sobre o bem.
+      expect(m.campoDaColuna(0), isNull);
       expect(m.colunaDe(CampoImportacao.codigoBarras), 1);
       expect(m.colunaDe(CampoImportacao.tombo), 2);
       expect(m.colunaDe(CampoImportacao.ed), 3);
@@ -79,7 +80,8 @@ void main() {
     });
 
     test('reconhece o cabeçalho real da exportação do SUAP', () {
-      // `#` é a ordem e `NUMERO` é o código de barras. `NUMERO NOTA FISCAL`
+      // `#` é a numeração das linhas, que não se importa, e `NUMERO` é o
+      // código de barras. `NUMERO NOTA FISCAL`
       // e `NÚMERO DE SÉRIE` contêm "numero" e não podem roubar a coluna;
       // `STATUS` e `ESTADO DE CONSERVAÇÃO` têm outro vocabulário e ficam de
       // fora.
@@ -134,7 +136,6 @@ void main() {
       final m = detectarMapeamento(planilha.linhas);
 
       final esperado = {
-        CampoImportacao.ordem: 0,
         CampoImportacao.codigoBarras: 1,
         CampoImportacao.tombo: 2,
         CampoImportacao.ed: 4,
@@ -156,7 +157,6 @@ void main() {
       expect(m.disponiveis[0].cabecalho, '#');
 
       final previa = Importador.preparar(planilha, m);
-      expect(previa.itens.single.ordem, '1');
       expect(previa.itens.single.codigoBarras, '-019281');
       expect(previa.itens.single.tombo, '23254');
     });

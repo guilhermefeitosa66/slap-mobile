@@ -239,15 +239,15 @@ class CopiaDeSeguranca {
   static void _copiarPatrimonios(Database de, Database para, String id) {
     // A lista é fechada, e não `SELECT *`, para que uma cópia feita por uma
     // versão anterior do esquema continue restaurável: as colunas que ela
-    // tinha a mais — `conservacao_original` e `situacao_original`, até a
-    // versão 3 — simplesmente não são lidas.
+    // tinha a mais — `conservacao_original` e `situacao_original` até a versão
+    // 3, `ordem` até a 4 — simplesmente não são lidas.
     const colunas =
-        'id, inventario_id, ordem, tombo, codigo_barras, ed, descricao, '
+        'id, inventario_id, tombo, codigo_barras, ed, descricao, '
         'responsavel_original, sala_original, valor, tombo_chave, '
         'codigo_barras_chave, ignorado';
     final stmt = para.prepare(
       'INSERT OR IGNORE INTO patrimonios ($colunas) '
-      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
     );
 
     try {

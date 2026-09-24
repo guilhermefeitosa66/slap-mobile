@@ -111,7 +111,6 @@ ficam em "Não importar".
 | **Responsável** | De quem o SUAP diz que o bem é. |
 | **Elemento de despesa (ED)** | Usado no passo 3 para deixar grupos de fora. |
 | **Valor** | Informativo, sai nos relatórios. |
-| **Ordem** | O número da linha no relatório do SUAP, se houver. |
 
 A tela também diz quantas linhas de dados o arquivo tem, o que é uma conferência barata: se
 a planilha do campus tem dez mil itens e a tela diz doze, alguma coisa está errada no

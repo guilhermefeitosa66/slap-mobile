@@ -115,7 +115,6 @@ Future<Inventario> duplicarEstrutura({
   final itens = [
     for (final p in patrimonios.todos(origem.id, incluirIgnorados: true))
       PatrimonioImportado(
-        ordem: p.ordem,
         tombo: p.tombo,
         codigoBarras: p.codigoBarras,
         ed: p.ed,

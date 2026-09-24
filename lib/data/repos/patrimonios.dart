@@ -134,7 +134,6 @@ class ConfiguracaoLevantamento {
 
 /// Linha de patrimônio pronta para importar.
 class PatrimonioImportado {
-  final String? ordem;
   final String tombo;
   final String? codigoBarras;
   final String? ed;
@@ -145,7 +144,6 @@ class PatrimonioImportado {
 
   const PatrimonioImportado({
     required this.tombo,
-    this.ordem,
     this.codigoBarras,
     this.ed,
     this.descricao,
@@ -396,10 +394,10 @@ class RepositorioPatrimonios {
 
     return banco.transacao(() {
       final stmt = _db.prepare(
-        'INSERT INTO patrimonios (id, inventario_id, ordem, tombo, codigo_barras, '
+        'INSERT INTO patrimonios (id, inventario_id, tombo, codigo_barras, '
         'ed, descricao, responsavel_original, sala_original, valor, '
         'tombo_chave, codigo_barras_chave) '
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -408,7 +406,6 @@ class RepositorioPatrimonios {
           stmt.execute([
             _uuid.v4(),
             inventarioId,
-            i.ordem,
             i.tombo,
             i.codigoBarras,
             i.ed,
@@ -445,10 +442,10 @@ class RepositorioPatrimonios {
 
     return banco.transacao(() {
       final stmt = _db.prepare(
-        'INSERT OR IGNORE INTO patrimonios (id, inventario_id, ordem, tombo, '
+        'INSERT OR IGNORE INTO patrimonios (id, inventario_id, tombo, '
         'codigo_barras, ed, descricao, responsavel_original, sala_original, '
         'valor, tombo_chave, codigo_barras_chave, ignorado) '
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -456,7 +453,6 @@ class RepositorioPatrimonios {
           stmt.execute([
             p.id,
             p.inventarioId,
-            p.ordem,
             p.tombo,
             p.codigoBarras,
             p.ed,
@@ -505,9 +501,12 @@ class RepositorioPatrimonios {
     final consulta = _filtro(inventarioId, classificacao, filtro, busca);
     final linhas = _db.select(
       'SELECT * FROM patrimonios WHERE ${consulta.onde} '
-      // O id desempata: sem ordem total, a mesma linha poderia aparecer em
-      // duas páginas, ou em nenhuma.
-      'ORDER BY CAST(ordem AS INTEGER), tombo_chave, id LIMIT ? OFFSET ?',
+      // Pelo tombo, em número: a chave de busca já vem sem sinal nem zeros
+      // à esquerda, e ordenar o texto puro poria 100 antes de 99. O id
+      // desempata — sem ordem total, a mesma linha poderia aparecer em duas
+      // páginas, ou em nenhuma.
+      'ORDER BY CAST(tombo_chave AS INTEGER), tombo_chave, id '
+      'LIMIT ? OFFSET ?',
       [...consulta.parametros, limite, deslocamento],
     );
     return linhas.map(_daLinha).toList();
@@ -628,7 +627,7 @@ class RepositorioPatrimonios {
     final linhas = _db.select(
       'SELECT * FROM patrimonios WHERE inventario_id = ? '
       '${incluirIgnorados ? '' : 'AND ignorado = 0'} '
-      'ORDER BY CAST(ordem AS INTEGER), tombo_chave',
+      'ORDER BY CAST(tombo_chave AS INTEGER), tombo_chave, id',
       [inventarioId],
     );
     return linhas.map(_daLinha).toList();
@@ -796,7 +795,6 @@ class RepositorioPatrimonios {
   static Patrimonio _daLinha(Row r) => Patrimonio(
     id: r['id'] as String,
     inventarioId: r['inventario_id'] as String,
-    ordem: r['ordem'] as String?,
     tombo: r['tombo'] as String,
     codigoBarras: r['codigo_barras'] as String?,
     ed: r['ed'] as String?,

@@ -25,7 +25,6 @@ void main() {
     inventario = a.inventarios.criar(nome: 'Campus', ano: 2026);
     a.patrimonios.inserirLote(inventario.id, const [
       PatrimonioImportado(
-        ordem: '1',
         tombo: '000001',
         codigoBarras: '887001',
         ed: '449052',
@@ -35,7 +34,6 @@ void main() {
         valor: '350,00',
       ),
       PatrimonioImportado(
-        ordem: '2',
         tombo: '000002',
         descricao: 'CADEIRA',
         sala: 'Biblioteca',

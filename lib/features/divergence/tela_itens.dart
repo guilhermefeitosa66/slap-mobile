@@ -1097,7 +1097,6 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
           _Campo('Valor', p.valor ?? '—'),
           _Campo('Sala', p.salaOriginal ?? '—'),
           _Campo('Responsável', p.responsavelOriginal ?? '—'),
-          if (p.ordem case final ordem?) _Campo('Ordem na planilha', ordem),
 
           // 3. O que o inventário produz.
           const SizedBox(height: 20),

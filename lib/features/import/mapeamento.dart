@@ -8,12 +8,11 @@ import '../../core/codigo.dart';
 /// Antieconômico / Recuperável; Ativo / Baixado / Pendente), e o valor que
 /// vale é o que a comissão encontra na sala.
 ///
-/// Na ordem da planilha do SLAP (`ORDEM`, `COD. BARRAS`, `TOMBO`, `ED`,
-/// `DESCRIÇÃO`, `RESPONSAVEL ATUAL`, `SALA ATUAL`, `VALOR`), que é a que a
-/// tela "Confira as colunas" percorre: quem conferia a planilha no SLAP
-/// confere aqui na mesma sequência, sem procurar.
+/// Na ordem da planilha do SLAP (`COD. BARRAS`, `TOMBO`, `ED`, `DESCRIÇÃO`,
+/// `RESPONSAVEL ATUAL`, `SALA ATUAL`, `VALOR`), que é a que a tela "Confira as
+/// colunas" percorre: quem conferia a planilha no SLAP confere aqui na mesma
+/// sequência, sem procurar.
 enum CampoImportacao {
-  ordem('Ordem'),
   codigoBarras('Código de barras'),
   tombo('Tombo', obrigatorio: true),
   ed('Elemento de despesa'),
@@ -124,16 +123,6 @@ const Map<CampoImportacao, List<String>> sinonimos = {
     'unidade',
     'lotacao',
   ],
-  CampoImportacao.ordem: [
-    'ordem',
-    'ord',
-    'sequencia',
-    'seq',
-    'indice',
-    // `Nº` e `#` sozinhos: a coluna de numeração das linhas.
-    'n',
-  ],
-
   CampoImportacao.valor: [
     'valor',
     'valoraquisicao',

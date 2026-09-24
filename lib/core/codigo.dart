@@ -65,10 +65,10 @@ String chaveCabecalho(String bruto) {
 
   var texto = bruto.toLowerCase().trim();
 
-  // A exportação do SUAP chama a coluna de ordem de `#`. Só de pontuação, ela
-  // viraria chave vazia e ninguém a reivindicaria. Sozinha, `#` é o símbolo de
-  // número — o mesmo que `Nº` —, e vira a mesma chave; no meio de outro
-  // cabeçalho continua sendo pontuação descartada.
+  // `#` é o símbolo de número, o mesmo que `Nº`: a exportação do SUAP chama
+  // assim a coluna de numeração das linhas. Só de pontuação, ela viraria chave
+  // vazia; virando `n`, ela é uma coluna como as outras na tela de conferência
+  // — nenhum campo a reivindica, e é isso mesmo.
   if (texto == '#') return 'n';
 
   final buffer = StringBuffer();

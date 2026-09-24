@@ -74,7 +74,6 @@ class Cenario {
     patrimonios.inserirLote(geral.id, [
       for (var i = 0; i < 412; i++)
         PatrimonioImportado(
-          ordem: '${i + 1}',
           tombo: (23100 + i).toString().padLeft(6, '0'),
           codigoBarras: (887000 + i).toString(),
           ed: '44905242',
@@ -86,7 +85,6 @@ class Cenario {
     patrimonios.inserirLote(biblioteca.id, [
       for (var i = 0; i < 64; i++)
         PatrimonioImportado(
-          ordem: '${i + 1}',
           tombo: (31000 + i).toString().padLeft(6, '0'),
           descricao: _descricoes[i % _descricoes.length],
           sala: 'Biblioteca',

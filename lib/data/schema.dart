@@ -6,7 +6,7 @@
 /// serem a mesma estrutura, em vez de três mecanismos concorrentes.
 library;
 
-const int versaoEsquema = 4;
+const int versaoEsquema = 5;
 
 /// Campos de patrimônio que o levantamento altera.
 ///
@@ -257,6 +257,15 @@ const List<String> migracaoV4 = [
   'ALTER TABLE patrimonios DROP COLUMN situacao_original',
 ];
 
+/// Versão 5: fora a coluna de ordem.
+///
+/// Ela guardava o `#` da exportação do SUAP — a numeração das linhas do
+/// relatório de onde a planilha saiu. Não identifica o bem, não é conferida em
+/// campo, não entra em nenhuma decisão e muda a cada exportação; a exportação
+/// do `inventario.ifpi.edu.br` nem a tem. A listagem, que se ordenava por ela,
+/// passa a se ordenar pelo tombo.
+const List<String> migracaoV5 = ['ALTER TABLE patrimonios DROP COLUMN ordem'];
+
 /// Migrações por versão de destino. Um banco novo passa por todas, em ordem:
 /// é o mesmo caminho de quem atualiza, e por isso é o caminho testado.
 const Map<int, List<String>> migracoes = {
@@ -264,6 +273,7 @@ const Map<int, List<String>> migracoes = {
   2: migracaoV2,
   3: migracaoV3,
   4: migracaoV4,
+  5: migracaoV5,
 };
 
 /// Chaves da tabela `config`.

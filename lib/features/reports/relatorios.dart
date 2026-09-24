@@ -107,7 +107,6 @@ class GeradorRelatorios {
       linhas: [
         for (final p in selecionados)
           [
-            p.ordem ?? '',
             p.tombo,
             p.codigoBarras ?? '',
             p.ed ?? '',
@@ -188,7 +187,6 @@ class GeradorRelatorios {
       linhas: [
         for (final p in selecionados)
           [
-            p.ordem ?? '',
             p.tombo,
             p.codigoBarras ?? '',
             p.ed ?? '',
@@ -227,7 +225,6 @@ class GeradorRelatorios {
       linhas: [
         for (final p in itens)
           [
-            p.ordem ?? '',
             p.tombo,
             p.codigoBarras ?? '',
             p.ed ?? '',

@@ -36,7 +36,6 @@ void main() {
     repo.inserirLote(inventario.id, [
       for (var i = 1; i <= quantidade; i++)
         PatrimonioImportado(
-          ordem: '$i',
           tombo: i.toString().padLeft(6, '0'),
           descricao: '$descricao $i',
           sala: 'Sala ${i % 7}',
@@ -225,28 +224,24 @@ void main() {
     void cenario() {
       repo.inserirLote(inventario.id, const [
         PatrimonioImportado(
-          ordem: '1',
           tombo: '1',
           descricao: 'CADEIRA',
           sala: 'Sala 1',
           responsavel: 'Ana',
         ),
         PatrimonioImportado(
-          ordem: '2',
           tombo: '2',
           descricao: 'MESA',
           sala: 'Sala 1',
           responsavel: 'Ana',
         ),
         PatrimonioImportado(
-          ordem: '3',
           tombo: '3',
           descricao: 'ARMÁRIO',
           sala: 'Sala 2',
           responsavel: 'Bruno',
         ),
         PatrimonioImportado(
-          ordem: '4',
           tombo: '4',
           descricao: 'CADEIRA',
           sala: 'Sala 2',
@@ -413,11 +408,7 @@ void main() {
     test('a paginação repassa o filtro em cada página', () {
       repo.inserirLote(inventario.id, [
         for (var i = 1; i <= 300; i++)
-          PatrimonioImportado(
-            ordem: '$i',
-            tombo: '$i',
-            sala: i.isEven ? 'Par' : 'Ímpar',
-          ),
+          PatrimonioImportado(tombo: '$i', sala: i.isEven ? 'Par' : 'Ímpar'),
       ]);
       const filtro = FiltroItens(sala: 'Par');
       final vistos = <String>[];

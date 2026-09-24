@@ -144,12 +144,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Exemplo: 023101'), findsOneWidget);
-    // Os seletores seguem a ordem da planilha do SLAP: ordem, código de
-    // barras, tombo, ED…
-    final alturaOrdem = tester.getTopLeft(find.text('Ordem')).dy;
+    // Os seletores seguem a ordem da planilha do SLAP: código de barras,
+    // tombo, ED…
+    // Rótulos que não se repetem como cabeçalho da planilha de teste — os que
+    // se repetem apareceriam duas vezes, no campo e no seletor — e que cabem
+    // na tela sem rolar.
     final alturaCodigo = tester.getTopLeft(find.text('Código de barras')).dy;
     final alturaEd = tester.getTopLeft(find.text('Elemento de despesa')).dy;
-    expect(alturaOrdem, lessThan(alturaCodigo));
     expect(alturaCodigo, lessThan(alturaEd));
     await tester.tap(find.text('Continuar'));
 

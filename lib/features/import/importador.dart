@@ -108,7 +108,6 @@ class Importador {
       itens.add(
         PatrimonioImportado(
           tombo: tombo,
-          ordem: _celula(linha, mapeamento.colunaDe(CampoImportacao.ordem)),
           codigoBarras: _celula(
             linha,
             mapeamento.colunaDe(CampoImportacao.codigoBarras),
