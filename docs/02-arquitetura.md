@@ -58,7 +58,7 @@ inventories       id, name, year, created_at, origin_device_id, sync_key, exclud
 assets            id, inventory_id,
                   -- original do SUAP, imutável após a importação:
                   ord, tombo, barcode, ed, description, responsible_original,
-                  room_original, value, conservation_original, usage_original,
+                  room_original, value,
                   -- cache materializado do levantamento (derivado de asset_field):
                   verified, room_current, responsible_current,
                   conservation, usage_status, verified_at, verified_by_name
@@ -119,19 +119,23 @@ O item é encontrado, mas o usuário sabe que há inconsistência no cadastro.
 A spec §29 pede divergência de **quatro** campos: sala, responsável, estado de conservação e
 situação de uso.
 
-**Os dois últimos não têm base de comparação.** A planilha exportada do SUAP não traz estado de
-conservação nem situação de uso — por isso o SLAP grava esses campos mas nunca os compara com
-nada. Sem valor anterior não existe divergência; existe apenas informação nova.
+**Os dois últimos não têm base de comparação.** Estado de conservação e situação de uso são
+levantados em campo; a importação não os lê. A exportação do SUAP até traz uma coluna
+`ESTADO DE CONSERVAÇÃO` e uma `STATUS`, mas com outro vocabulário (Bom / Antieconômico /
+Recuperável / Irrecuperável; Ativo / Baixado / Pendente) — tratá-las como valor de origem
+inventava divergência onde só há vocabulário diferente. O SLAP grava esses campos e nunca os
+compara com nada, e o app novo faz o mesmo: sem valor anterior não existe divergência; existe
+apenas informação nova.
 
 Tratamento adotado:
 
-- O importador **aceita** colunas de estado e situação, caso a planilha as traga. Quando
-  mapeadas, viram `conservation_original` / `usage_original` e a divergência funciona
-  exatamente como a de sala e responsável.
-- Quando ausentes, o valor levantado é registrado como informação nova e **não** torna o item
-  divergente por si só.
-- Independentemente disso, itens em estado `ruim` ou situação `inserv.` recebem uma marca de
-  atenção, que aparece como coluna nos relatórios. São acionáveis mesmo sem valor anterior.
+- O importador **não oferece** estado nem situação entre os campos da planilha, e o patrimônio
+  não tem `conservation_original` / `usage_original` — as colunas existiram até a versão 3 do
+  esquema e a migração para a 4 as remove.
+- O valor levantado é registrado como informação nova e **não** torna o item divergente por si
+  só.
+- Itens em estado `ruim` ou situação `inserv.` recebem uma marca de atenção, que aparece como
+  coluna nos relatórios. São acionáveis mesmo sem valor anterior.
 
 Isso mantém os três grupos da spec §31 limpos, sem inventar uma divergência que o dado não
 sustenta.
@@ -141,9 +145,8 @@ sustenta.
 ```
 NÃO LOCALIZADO  → verified = false ao encerrar
 DIVERGENTE      → verified = true E (sala ≠ sala_original
-                                  OU responsável ≠ responsável_original
-                                  OU (existe base) E estado ≠ estado_original
-                                  OU (existe base) E situação ≠ situação_original)
+                                  OU responsável ≠ responsável_original)
+
 OK              → verified = true E nenhuma diferença
 ```
 

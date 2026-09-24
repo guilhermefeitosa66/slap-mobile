@@ -43,8 +43,8 @@ const _bens = [
   ('52', 'ESTABILIZADOR ELETRÔNICO 1000VA', 310.00),
 ];
 
-const _conservacao = ['bom', 'bom', 'bom', 'regular', 'ruim'];
-const _situacao = ['ativo', 'ativo', 'ativo', 'ocioso', 'inserv.'];
+// Estado de conservação e situação de uso ficam de fora de propósito: são
+// levantados em campo, e a importação não os lê.
 
 void main() {
   final excel = Excel.createExcel();
@@ -60,8 +60,6 @@ void main() {
       'RESPONSAVEL ATUAL',
       'SALA ATUAL',
       'VALOR',
-      'ESTADO DE CONSERVAÇÃO',
-      'SITUAÇÃO DE USO',
     ])
       TextCellValue(titulo),
   ]);
@@ -83,8 +81,6 @@ void main() {
         TextCellValue(_responsaveis[(s + b) % _responsaveis.length]),
         TextCellValue(_salas[s]),
         DoubleCellValue(valor),
-        TextCellValue(_conservacao[(s * 3 + b) % _conservacao.length]),
-        TextCellValue(_situacao[(s * 7 + b * 2) % _situacao.length]),
       ]);
     }
   }

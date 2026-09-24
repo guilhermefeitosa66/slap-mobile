@@ -7,7 +7,6 @@ import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
-import 'package:slap_mobile/domain/valores.dart';
 import 'package:slap_mobile/features/import/importador.dart';
 import 'package:slap_mobile/features/import/leitor_planilha.dart';
 import 'package:slap_mobile/features/import/mapeamento.dart';
@@ -23,6 +22,21 @@ Uint8List planilhaXlsx(List<List<String>> linhas) {
 }
 
 void main() {
+  test('os campos seguem a ordem da planilha do SLAP', () {
+    // A tela "Confira as colunas" percorre `CampoImportacao.values`. Quem
+    // conferia a planilha no SLAP confere aqui na mesma sequência.
+    expect(CampoImportacao.values.map((c) => c.rotulo).toList(), [
+      'Ordem',
+      'Código de barras',
+      'Tombo',
+      'Elemento de despesa',
+      'Descrição',
+      'Responsável',
+      'Sala',
+      'Valor',
+    ]);
+  });
+
   group('detecção de colunas', () {
     test('reconhece o cabeçalho do SLAP na ordem original', () {
       final planilha = LeitorPlanilha.ler(
@@ -62,6 +76,89 @@ void main() {
       expect(m.colunaDe(CampoImportacao.responsavel), 5);
       expect(m.colunaDe(CampoImportacao.sala), 6);
       expect(m.colunaDe(CampoImportacao.valor), 7);
+    });
+
+    test('reconhece o cabeçalho real da exportação do SUAP', () {
+      // `#` é a ordem e `NUMERO` é o código de barras. `NUMERO NOTA FISCAL`
+      // e `NÚMERO DE SÉRIE` contêm "numero" e não podem roubar a coluna;
+      // `STATUS` e `ESTADO DE CONSERVAÇÃO` têm outro vocabulário e ficam de
+      // fora.
+      final planilha = LeitorPlanilha.ler(
+        nomeArquivo: 'suap-real.xlsx',
+        bytes: planilhaXlsx([
+          [
+            '#',
+            'NUMERO',
+            'TOMBO',
+            'STATUS',
+            'ED',
+            'DESCRICAO',
+            'RÓTULOS',
+            'CARGA ATUAL',
+            'SETOR DO RESPONSÁVEL',
+            'CAMPUS DA CARGA',
+            'VALOR AQUISIÇÃO',
+            'VALOR DEPRECIADO',
+            'NUMERO NOTA FISCAL',
+            'NÚMERO DE SÉRIE',
+            'DATA DA ENTRADA',
+            'DATA DA CARGA',
+            'FORNECEDOR',
+            'SALA',
+            'ESTADO DE CONSERVAÇÃO',
+          ],
+          [
+            '1',
+            '-019281',
+            '23254',
+            'Ativo',
+            '449052',
+            'ESTABILIZADOR',
+            '',
+            'Dann Luciano',
+            'CTI',
+            'Picos',
+            '58,00',
+            '0,00',
+            '1234',
+            'SN-1',
+            '01/02/2010',
+            '01/02/2010',
+            'FORNECEDOR LTDA',
+            'SRN-CTI',
+            'Bom',
+          ],
+        ]),
+      );
+
+      final m = detectarMapeamento(planilha.linhas);
+
+      final esperado = {
+        CampoImportacao.ordem: 0,
+        CampoImportacao.codigoBarras: 1,
+        CampoImportacao.tombo: 2,
+        CampoImportacao.ed: 4,
+        CampoImportacao.descricao: 5,
+        CampoImportacao.responsavel: 7,
+        CampoImportacao.sala: 17,
+        CampoImportacao.valor: 10,
+      };
+      expect(m.valido, isTrue);
+      expect(m.colunas, esperado);
+      for (var coluna = 0; coluna < 19; coluna++) {
+        if (esperado.containsValue(coluna)) continue;
+        expect(
+          m.campoDaColuna(coluna),
+          isNull,
+          reason: 'coluna ${coluna + 1} não alimenta campo nenhum',
+        );
+      }
+      expect(m.disponiveis[0].cabecalho, '#');
+
+      final previa = Importador.preparar(planilha, m);
+      expect(previa.itens.single.ordem, '1');
+      expect(previa.itens.single.codigoBarras, '-019281');
+      expect(previa.itens.single.tombo, '23254');
     });
 
     test('a ordem das colunas é irrelevante', () {
@@ -352,19 +449,6 @@ void main() {
       );
       expect(depois.patrimonio!.verificado, isTrue);
       expect(depois.patrimonio!.salaAtual, 'Auditório');
-    });
-
-    test('estado e situação são reconhecidos quando a planilha os traz', () {
-      final previa = prever([
-        ['TOMBO', 'ESTADO DE CONSERVAÇÃO', 'SITUAÇÃO DE USO'],
-        ['1', 'Bom', 'Ativo'],
-        ['2', 'RUIM', 'inserv.'],
-      ]);
-
-      expect(previa.itens[0].conservacao, EstadoConservacao.bom);
-      expect(previa.itens[0].situacao, SituacaoUso.ativo);
-      expect(previa.itens[1].conservacao, EstadoConservacao.ruim);
-      expect(previa.itens[1].situacao, SituacaoUso.inservivel);
     });
 
     test('o código de barras negativo da base real fica encontrável', () {

@@ -6,7 +6,6 @@ import '../../core/version_vector.dart';
 import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';
 import '../../domain/patrimonio.dart';
-import '../../domain/valores.dart';
 import 'cifra.dart';
 
 /// Tipo de serviço anunciado por mDNS. O primeiro rótulo precisa ter no
@@ -408,8 +407,6 @@ class PacoteInventario {
           'responsavel': p.responsavelOriginal,
           'sala': p.salaOriginal,
           'valor': p.valor,
-          'conservacao': p.conservacaoOriginal?.valor,
-          'situacao': p.situacaoOriginal?.valor,
           'ignorado': p.ignorado,
         },
     ],
@@ -446,10 +443,6 @@ class PacoteInventario {
             responsavelOriginal: p['responsavel'] as String?,
             salaOriginal: p['sala'] as String?,
             valor: p['valor'] as String?,
-            conservacaoOriginal: EstadoConservacao.de(
-              p['conservacao'] as String?,
-            ),
-            situacaoOriginal: SituacaoUso.de(p['situacao'] as String?),
             ignorado: p['ignorado'] as bool? ?? false,
           ),
       ],

@@ -6,7 +6,7 @@
 /// serem a mesma estrutura, em vez de três mecanismos concorrentes.
 library;
 
-const int versaoEsquema = 3;
+const int versaoEsquema = 4;
 
 /// Campos de patrimônio que o levantamento altera.
 ///
@@ -60,6 +60,7 @@ const List<String> ddlEsquema = [
     responsavel_original TEXT,
     sala_original        TEXT,
     valor                TEXT,
+    -- Removidas na versão 4: esses campos nunca vêm da planilha.
     conservacao_original TEXT,
     situacao_original    TEXT,
 
@@ -241,12 +242,28 @@ const List<String> migracaoV3 = [
   'ALTER TABLE pares ADD COLUMN nosso_seq INTEGER NOT NULL DEFAULT 0',
 ];
 
+/// Versão 4: fora as colunas de origem de estado de conservação e situação
+/// de uso.
+///
+/// Elas recebiam o que a planilha trouxesse com esse nome. Mas os dois campos
+/// são levantados em campo, nunca importados: a exportação do SUAP tem uma
+/// coluna `ESTADO DE CONSERVAÇÃO` com outro vocabulário, e lida como origem
+/// ela inventava divergência. Sem origem, o levantado é informação nova. As
+/// colunas somem para que nada volte a lê-las ou escrevê-las por engano; o
+/// resto da linha fica intacto. (`DROP COLUMN` existe desde o SQLite 3.35; o
+/// `package:sqlite3` embute uma versão bem mais nova.)
+const List<String> migracaoV4 = [
+  'ALTER TABLE patrimonios DROP COLUMN conservacao_original',
+  'ALTER TABLE patrimonios DROP COLUMN situacao_original',
+];
+
 /// Migrações por versão de destino. Um banco novo passa por todas, em ordem:
 /// é o mesmo caminho de quem atualiza, e por isso é o caminho testado.
 const Map<int, List<String>> migracoes = {
   1: ddlEsquema,
   2: migracaoV2,
   3: migracaoV3,
+  4: migracaoV4,
 };
 
 /// Chaves da tabela `config`.

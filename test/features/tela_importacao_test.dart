@@ -144,7 +144,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Exemplo: 023101'), findsOneWidget);
+    // Os seletores seguem a ordem da planilha do SLAP: ordem, código de
+    // barras, tombo, ED…
+    final alturaOrdem = tester.getTopLeft(find.text('Ordem')).dy;
+    final alturaCodigo = tester.getTopLeft(find.text('Código de barras')).dy;
+    final alturaEd = tester.getTopLeft(find.text('Elemento de despesa')).dy;
+    expect(alturaOrdem, lessThan(alturaCodigo));
+    expect(alturaCodigo, lessThan(alturaEd));
     await tester.tap(find.text('Continuar'));
+
     await esperarAte(tester, find.text('Elementos de despesa'));
 
     // 3. EDs: material bibliográfico fora.

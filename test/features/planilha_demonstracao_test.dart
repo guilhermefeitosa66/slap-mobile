@@ -27,7 +27,5 @@ void main() {
     expect(previa.semTombo, 0);
     expect(previa.tombosDuplicados, isEmpty);
     expect(previa.itens.first.tombo, '023101');
-    expect(previa.itens.map((i) => i.conservacao).toSet(), hasLength(3));
-    expect(previa.itens.map((i) => i.situacao).toSet(), hasLength(3));
   });
 }
