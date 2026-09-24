@@ -17,7 +17,10 @@ class IconeCodigoBarras extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final corFinal = cor ?? IconTheme.of(context).color ?? Colors.black;
+    final corFinal =
+        cor ??
+        IconTheme.of(context).color ??
+        Theme.of(context).colorScheme.onSurface;
     return ExcludeSemantics(
       child: SizedBox.square(
         dimension: tamanho,
