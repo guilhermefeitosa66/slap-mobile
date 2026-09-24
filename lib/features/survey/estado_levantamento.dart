@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../core/hlc.dart';
 import '../../data/banco.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../data/schema.dart';
@@ -87,6 +88,11 @@ const intervaloParaConfirmarSala = Duration(hours: 4);
 ///
 /// Conta a partir do que for mais recente: a última leitura deste aparelho
 /// neste inventário ou o momento em que a configuração passou a valer.
+///
+/// Um marco no futuro não conta: foi gravado com a data do aparelho
+/// adiantada, e a data já foi corrigida. Com a conta negativa, a sala de
+/// ontem valeria até a próxima leitura. Sem outro marco, pergunta; depois de
+/// confirmada, o `desde` novo passa a valer.
 bool precisaConfirmarSala({
   required ConfiguracaoLevantamento config,
   required DateTime? ultimaLeitura,
@@ -94,7 +100,10 @@ bool precisaConfirmarSala({
 }) {
   final marcos = [?ultimaLeitura, ?config.desde];
   if (marcos.isEmpty) return false;
-  final referencia = marcos.reduce((a, b) => a.isAfter(b) ? a : b);
+  final limite = agora.add(deslocamentoMaximoRelogio);
+  final validos = marcos.where((m) => !m.isAfter(limite));
+  if (validos.isEmpty) return true;
+  final referencia = validos.reduce((a, b) => a.isAfter(b) ? a : b);
   return agora.difference(referencia) > intervaloParaConfirmarSala;
 }
 

@@ -290,6 +290,12 @@ class RepositorioPatrimonios {
       usuarioNome: usuarioNome,
       usuarioMatricula: usuarioMatricula,
     );
+    // A pergunta "ainda nesta sala?" conta a partir daqui. Levantamento e
+    // câmera passam os dois por este método.
+    banco.gravarConfig(
+      Config.ultimaLeitura(patrimonio.inventarioId),
+      '${DateTime.now().millisecondsSinceEpoch}',
+    );
 
     return porId(patrimonio.id)!;
   }

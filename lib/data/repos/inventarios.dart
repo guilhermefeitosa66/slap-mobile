@@ -207,6 +207,7 @@ class RepositorioInventarios {
       }
 
       banco.apagarConfig(Config.configuracaoLevantamento(inventarioId));
+      banco.apagarConfig(Config.ultimaLeitura(inventarioId));
       if (banco.lerConfig(Config.levantamentoAberto) == inventarioId) {
         banco.apagarConfig(Config.levantamentoAberto);
       }

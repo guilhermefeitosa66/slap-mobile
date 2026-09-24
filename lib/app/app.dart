@@ -54,6 +54,56 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
             final identidade = ref.read(identidadeProvider);
             return identidade.configurada ? null : '/identidade';
           },
+          // O inventário fica debaixo da lista, mesmo quando o aplicativo abre
+          // direto no levantamento: voltar do painel chega à lista, em vez de
+          // fechar o aplicativo.
+          routes: [
+            GoRoute(
+              path: 'inventario/:id',
+              builder: (_, estado) =>
+                  TelaDashboard(inventarioId: estado.pathParameters['id']!),
+              routes: [
+                GoRoute(
+                  path: 'importar',
+                  builder: (_, estado) => TelaImportacao(
+                    inventarioId: estado.pathParameters['id']!,
+                  ),
+                ),
+                GoRoute(
+                  path: 'levantamento',
+                  builder: (_, estado) => TelaLevantamento(
+                    inventarioId: estado.pathParameters['id']!,
+                  ),
+                ),
+                GoRoute(
+                  path: 'itens',
+                  builder: (_, estado) => TelaItens(
+                    inventarioId: estado.pathParameters['id']!,
+                    classificacao: _classificacaoDe(
+                      estado.uri.queryParameters['grupo'],
+                    ),
+                  ),
+                ),
+                GoRoute(
+                  path: 'sincronizar',
+                  builder: (_, estado) => TelaSincronizacao(
+                    inventarioId: estado.pathParameters['id']!,
+                  ),
+                ),
+                GoRoute(
+                  path: 'conflitos',
+                  builder: (_, estado) =>
+                      TelaConflitos(inventarioId: estado.pathParameters['id']!),
+                ),
+                GoRoute(
+                  path: 'relatorios',
+                  builder: (_, estado) => TelaRelatorios(
+                    inventarioId: estado.pathParameters['id']!,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         GoRoute(path: '/ajustes', builder: (_, _) => const TelaAjustes()),
         GoRoute(
@@ -61,47 +111,6 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
           builder: (_, estado) => TelaIdentidade(
             primeiraVez: estado.uri.queryParameters['inicial'] != 'false',
           ),
-        ),
-        GoRoute(
-          path: '/inventario/:id',
-          builder: (_, estado) =>
-              TelaDashboard(inventarioId: estado.pathParameters['id']!),
-          routes: [
-            GoRoute(
-              path: 'importar',
-              builder: (_, estado) =>
-                  TelaImportacao(inventarioId: estado.pathParameters['id']!),
-            ),
-            GoRoute(
-              path: 'levantamento',
-              builder: (_, estado) =>
-                  TelaLevantamento(inventarioId: estado.pathParameters['id']!),
-            ),
-            GoRoute(
-              path: 'itens',
-              builder: (_, estado) => TelaItens(
-                inventarioId: estado.pathParameters['id']!,
-                classificacao: _classificacaoDe(
-                  estado.uri.queryParameters['grupo'],
-                ),
-              ),
-            ),
-            GoRoute(
-              path: 'sincronizar',
-              builder: (_, estado) =>
-                  TelaSincronizacao(inventarioId: estado.pathParameters['id']!),
-            ),
-            GoRoute(
-              path: 'conflitos',
-              builder: (_, estado) =>
-                  TelaConflitos(inventarioId: estado.pathParameters['id']!),
-            ),
-            GoRoute(
-              path: 'relatorios',
-              builder: (_, estado) =>
-                  TelaRelatorios(inventarioId: estado.pathParameters['id']!),
-            ),
-          ],
         ),
       ],
     );

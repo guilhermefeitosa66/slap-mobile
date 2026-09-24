@@ -923,17 +923,33 @@ class RepositorioOperacoes {
     );
   }
 
-  /// Quando este aparelho gravou pela última vez neste inventário.
+  /// Quando este aparelho leu um patrimônio pela última vez neste inventário.
   ///
   /// Serve para perceber que a pessoa voltou depois de horas — no dia
-  /// seguinte, talvez em outra sala — sem gravar nada a mais a cada leitura.
-  DateTime? ultimaEscritaLocal(String inventarioId) {
-    final r = _db.select(
-      'SELECT MAX(criado_em) AS m FROM ops '
-      'WHERE inventario_id = ? AND dispositivo = ?',
-      [inventarioId, dispositivoId],
-    );
-    final m = r.first['m'] as int?;
+  /// seguinte, talvez em outra sala. Vem da marca gravada a cada leitura, e
+  /// não do log: reabrir o inventário ou resolver um conflito de manhã também
+  /// gravam operações, e esconderiam a volta.
+  ///
+  /// Bancos gravados antes da marca não a têm. Na primeira consulta ela vem
+  /// do log, das operações de patrimônio deste aparelho — leituras, mas
+  /// também edições e desfazer, só desta vez. Vazia fica gravada como '', para
+  /// não voltar ao log.
+  DateTime? ultimaLeituraLocal(String inventarioId) {
+    final chave = Config.ultimaLeitura(inventarioId);
+    var texto = banco.lerConfig(chave);
+    if (texto == null) {
+      final m =
+          _db.select(
+                'SELECT MAX(criado_em) AS m FROM ops '
+                'WHERE inventario_id = ? AND dispositivo = ? '
+                "AND entidade = 'patrimonio'",
+                [inventarioId, dispositivoId],
+              ).first['m']
+              as int?;
+      texto = m?.toString() ?? '';
+      banco.gravarConfig(chave, texto);
+    }
+    final m = int.tryParse(texto);
     return m == null ? null : DateTime.fromMillisecondsSinceEpoch(m);
   }
 
