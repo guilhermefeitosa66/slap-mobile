@@ -7,14 +7,19 @@ import '../../core/codigo.dart';
 /// `ESTADO DE CONSERVAÇÃO` e uma `STATUS`, mas com outro vocabulário (Bom /
 /// Antieconômico / Recuperável; Ativo / Baixado / Pendente), e o valor que
 /// vale é o que a comissão encontra na sala.
+///
+/// Na ordem da planilha do SLAP (`ORDEM`, `COD. BARRAS`, `TOMBO`, `ED`,
+/// `DESCRIÇÃO`, `RESPONSAVEL ATUAL`, `SALA ATUAL`, `VALOR`), que é a que a
+/// tela "Confira as colunas" percorre: quem conferia a planilha no SLAP
+/// confere aqui na mesma sequência, sem procurar.
 enum CampoImportacao {
-  tombo('Tombo', obrigatorio: true),
+  ordem('Ordem'),
   codigoBarras('Código de barras'),
-  descricao('Descrição'),
+  tombo('Tombo', obrigatorio: true),
   ed('Elemento de despesa'),
+  descricao('Descrição'),
   responsavel('Responsável'),
   sala('Sala'),
-  ordem('Ordem'),
   valor('Valor');
 
   final String rotulo;

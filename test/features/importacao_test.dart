@@ -22,6 +22,21 @@ Uint8List planilhaXlsx(List<List<String>> linhas) {
 }
 
 void main() {
+  test('os campos seguem a ordem da planilha do SLAP', () {
+    // A tela "Confira as colunas" percorre `CampoImportacao.values`. Quem
+    // conferia a planilha no SLAP confere aqui na mesma sequência.
+    expect(CampoImportacao.values.map((c) => c.rotulo).toList(), [
+      'Ordem',
+      'Código de barras',
+      'Tombo',
+      'Elemento de despesa',
+      'Descrição',
+      'Responsável',
+      'Sala',
+      'Valor',
+    ]);
+  });
+
   group('detecção de colunas', () {
     test('reconhece o cabeçalho do SLAP na ordem original', () {
       final planilha = LeitorPlanilha.ler(
