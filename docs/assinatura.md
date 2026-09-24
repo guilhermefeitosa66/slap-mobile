@@ -19,7 +19,7 @@ arquivo.
 | Senha e alias | _a preencher — cofre de senhas, separado do arquivo_ |
 | Quem tem acesso | _a preencher — nomes_ |
 | Última conferência das cópias | _a preencher — data_ |
-| Impressão digital SHA-256 do certificado | _a preencher — é pública; ver [Conferir](#conferir-a-assinatura)_ |
+| Impressão digital SHA-256 do certificado | `e45bb7066374dbd734a2edc1464a8e43d0bb99c7668c0a99178e173fafb645fd` (v1.0.0, 24/09/2026) |
 
 ## Gerar (uma vez só)
 
