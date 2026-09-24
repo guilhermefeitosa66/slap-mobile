@@ -239,6 +239,41 @@ class ErroRelogio {
   }
 }
 
+/// Resposta de erro para dois aparelhos escrevendo com a mesma identidade.
+///
+/// Vai estruturada, e não como frase pronta, porque **a frase depende de quem
+/// lê**. Quem recusa diz "outro aparelho está usando a identidade deste"
+/// pensando na identidade *dele*; repetido tal e qual no outro lado, isso
+/// manda o aparelho honesto tocar em "Gerar nova identidade" e apagar o
+/// trabalho que ainda não entregou. Com o identificador do aparelho duplicado
+/// na resposta, cada lado monta a frase do ponto de vista dele.
+///
+/// O campo `erro` continua existindo, com um texto neutro que serve aos dois
+/// casos: é o que uma versão anterior do aplicativo mostra, e ela não tem como
+/// saber deste formato.
+class ErroIdentidade {
+  static const codigo = 'identidade';
+
+  /// Aparelho cuja identidade está duplicada.
+  final String dispositivo;
+
+  const ErroIdentidade(this.dispositivo);
+
+  Map<String, dynamic> toJson() => {
+    'erro': IdentidadeDuplicada(dispositivo, esteAparelho: false).toString(),
+    'tipo': codigo,
+    'dispositivo': dispositivo,
+  };
+
+  static ErroIdentidade? fromJson(Map<String, dynamic> j) {
+    final dispositivo = j['dispositivo'];
+    if (j['tipo'] != codigo || dispositivo is! String || dispositivo.isEmpty) {
+      return null;
+    }
+    return ErroIdentidade(dispositivo);
+  }
+}
+
 /// Identificação devolvida por `/hello`.
 ///
 /// Não é autenticada, porque serve para o aparelho aparecer na lista antes de

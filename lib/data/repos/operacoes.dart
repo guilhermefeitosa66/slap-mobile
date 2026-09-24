@@ -124,13 +124,18 @@ class IdentidadeDuplicada implements Exception {
 
   IdentidadeDuplicada(this.dispositivo, {required this.esteAparelho});
 
+  /// Como o aparelho duplicado aparece na mensagem. O identificador pode vir
+  /// da rede, então nem se supõe que ele tenha seis caracteres.
+  String get apelido =>
+      dispositivo.length > 6 ? dispositivo.substring(0, 6) : dispositivo;
+
   @override
   String toString() => esteAparelho
       ? 'Outro aparelho está usando a identidade deste. Isso acontece quando '
             'os dados do aplicativo são copiados de um celular para outro. A '
             'sincronização foi recusada para não misturar o trabalho dos dois.'
       : 'Dois aparelhos estão usando a mesma identidade '
-            '(${dispositivo.substring(0, 6)}). Isso acontece quando os dados '
+            '($apelido). Isso acontece quando os dados '
             'do aplicativo são copiados de um celular para outro. A '
             'sincronização foi recusada para não misturar o trabalho dos dois.';
 }

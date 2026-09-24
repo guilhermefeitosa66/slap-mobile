@@ -343,6 +343,22 @@ Uma sincronização entre A e B é `pull` seguido de `push`, nos dois sentidos. 
 **repassa operações de terceiros**, A↔B propaga o trabalho de C sem que A e C se encontrem —
 o que faz a topologia em malha da spec §43 funcionar de verdade.
 
+As **cabeças** — a última operação que cada lado tem de cada aparelho — viajam junto para
+detectar dois aparelhos escrevendo com a mesma identidade: se a mesma posição da sequência de um
+aparelho tem operações diferentes nos dois lados, os dados do aplicativo foram copiados de um
+celular para outro (ver `copia-de-seguranca.md`), e a sincronização é recusada em vez de misturar
+as duas histórias.
+
+**A recusa vai estruturada, não como frase pronta**, porque a frase depende de quem lê. Quem
+recusa fala da identidade *dele*: "outro aparelho está usando a identidade deste". Repetida tal e
+qual do outro lado, ela manda o aparelho honesto — que só estava passando por ali — tocar em
+"Gerar nova identidade" e apagar o trabalho que ainda não entregou. A resposta leva `tipo` e
+`device_id`, e cada lado monta a frase do ponto de vista dele; quem descobre que a identidade
+duplicada é a própria recebe a orientação de gerar identidade nova, e quem não tem nada com isso
+lê que dois aparelhos, nomeados, estão em conflito. O campo `erro` continua existindo com um texto
+neutro que serve aos dois casos, para uma versão anterior do aplicativo mostrar algo que faça
+sentido.
+
 O `pull` envia a version vector do solicitante e as lacunas dele, e recebe só o que falta: é a
 sincronização incremental do §40, sem retransmitir o inventário inteiro. A resposta traz a vector
 e as lacunas de quem respondeu, e é com elas que o `push` seguinte manda exatamente o que falta ao

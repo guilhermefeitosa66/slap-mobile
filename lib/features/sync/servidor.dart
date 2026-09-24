@@ -243,7 +243,7 @@ class ServidorSync {
     try {
       ops.conferirCabecas(inventarioId, pedido.cabecas);
     } on IdentidadeDuplicada catch (e) {
-      return _erro(req, HttpStatus.conflict, '$e');
+      return _erroDeIdentidade(req, e);
     }
     final faltantes = ops.opsFaltantes(
       inventarioId,
@@ -304,7 +304,7 @@ class ServidorSync {
       return _erroDeInventario(req);
     } on IdentidadeDuplicada catch (e) {
       // Nada do lote entrou. O outro lado recebe a explicação.
-      return _erro(req, HttpStatus.conflict, '$e');
+      return _erroDeIdentidade(req, e);
     } on RelogioForaDeSincronia catch (e) {
       // Operações com horário no futuro. A transação já foi desfeita: nada
       // do lote entrou. Aceitar arrastaria o relógio deste aparelho, e depois
@@ -537,6 +537,20 @@ class ServidorSync {
       ),
     );
   }
+
+  /// Dois aparelhos escrevendo com a mesma identidade.
+  ///
+  /// A resposta leva o identificador do aparelho duplicado, e não só a frase:
+  /// do lado de cá, "outro aparelho está usando a identidade deste" fala da
+  /// identidade *daqui*, e repetida tal e qual no outro lado mandaria um
+  /// aparelho honesto se apagar. Em `erro` fica um texto neutro, que é o que
+  /// uma versão anterior do aplicativo mostra.
+  Future<void> _erroDeIdentidade(HttpRequest req, IdentidadeDuplicada e) =>
+      _responderJson(
+        req,
+        HttpStatus.conflict,
+        ErroIdentidade(e.dispositivo).toJson(),
+      );
 
   /// O corpo fala de um inventário e a requisição foi autenticada com a chave
   /// de outro.

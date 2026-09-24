@@ -134,6 +134,64 @@ void main() {
     }
   }
 
+  /// Uma requisição autenticada montada à mão: é o que um aparelho hostil
+  /// faria com a chave de um inventário para falar de outro.
+  Future<({int status, Map<String, dynamic> corpo})> requisitarBruto({
+    required String caminho,
+    required String inventarioNaQuery,
+    required String chaveSync,
+    required Map<String, dynamic> corpo,
+  }) async {
+    final cifra = CifraSync(chaveSync);
+    final texto = cifra.cifrar(
+      corpo,
+      contexto: CifraSync.contextoPedido('POST', caminho),
+    );
+    final cliente = HttpClient();
+    try {
+      final req = await cliente.postUrl(
+        Uri(
+          scheme: 'http',
+          host: paraA.host,
+          port: paraA.porta,
+          path: caminho,
+          queryParameters: {'inventario': inventarioNaQuery},
+        ),
+      );
+      req.headers.set(cabecalhoVersao, '$versaoProtocolo');
+      req.headers.set(
+        HttpHeaders.authorizationHeader,
+        Assinatura.gerar(
+          chaveSync: chaveSync,
+          dispositivoId: b.dispositivoId,
+          metodo: 'POST',
+          caminho: caminho,
+          corpo: texto,
+        ),
+      );
+      req.headers.contentType = ContentType.text;
+      req.write(texto);
+
+      final resposta = await req.close();
+      final retorno = await utf8.decoder.bind(resposta).join();
+      if (resposta.statusCode != HttpStatus.ok) {
+        return (
+          status: resposta.statusCode,
+          corpo: jsonDecode(retorno) as Map<String, dynamic>,
+        );
+      }
+      return (
+        status: resposta.statusCode,
+        corpo: cifra.decifrar(
+          retorno,
+          contexto: CifraSync.contextoResposta('POST', caminho),
+        ),
+      );
+    } finally {
+      cliente.close(force: true);
+    }
+  }
+
   tearDown(() async {
     await inscricao?.cancel();
     await servidorA.dispose();
@@ -586,64 +644,6 @@ void main() {
   });
 
   group('isolamento entre inventários', () {
-    /// Uma requisição autenticada montada à mão: é o que um aparelho hostil
-    /// faria com a chave de um inventário para falar de outro.
-    Future<({int status, Map<String, dynamic> corpo})> requisitarBruto({
-      required String caminho,
-      required String inventarioNaQuery,
-      required String chaveSync,
-      required Map<String, dynamic> corpo,
-    }) async {
-      final cifra = CifraSync(chaveSync);
-      final texto = cifra.cifrar(
-        corpo,
-        contexto: CifraSync.contextoPedido('POST', caminho),
-      );
-      final cliente = HttpClient();
-      try {
-        final req = await cliente.postUrl(
-          Uri(
-            scheme: 'http',
-            host: paraA.host,
-            port: paraA.porta,
-            path: caminho,
-            queryParameters: {'inventario': inventarioNaQuery},
-          ),
-        );
-        req.headers.set(cabecalhoVersao, '$versaoProtocolo');
-        req.headers.set(
-          HttpHeaders.authorizationHeader,
-          Assinatura.gerar(
-            chaveSync: chaveSync,
-            dispositivoId: b.dispositivoId,
-            metodo: 'POST',
-            caminho: caminho,
-            corpo: texto,
-          ),
-        );
-        req.headers.contentType = ContentType.text;
-        req.write(texto);
-
-        final resposta = await req.close();
-        final retorno = await utf8.decoder.bind(resposta).join();
-        if (resposta.statusCode != HttpStatus.ok) {
-          return (
-            status: resposta.statusCode,
-            corpo: jsonDecode(retorno) as Map<String, dynamic>,
-          );
-        }
-        return (
-          status: resposta.statusCode,
-          corpo: cifra.decifrar(
-            retorno,
-            contexto: CifraSync.contextoResposta('POST', caminho),
-          ),
-        );
-      } finally {
-        cliente.close(force: true);
-      }
-    }
-
     /// Um segundo inventário no aparelho da Ana, de cuja chave o Bruno não
     /// sabe nada. É o alvo da invasão.
     late Inventario segredo;
@@ -820,6 +820,105 @@ void main() {
             contains('outro inventário'),
           ),
         ),
+      );
+    });
+  });
+
+  group('identidade duplicada', () {
+    /// Faz o aparelho da Ana e o do Bruno discordarem sobre qual operação
+    /// ocupa uma posição da sequência de [dono] — que é o que acontece quando
+    /// os dados do aplicativo são copiados de um celular para outro.
+    Future<void> duasHistoriasPara(Aparelho dono) async {
+      await entrarNoInventario(b, clienteB, paraA);
+      dono.patrimonios.registrarVerificacao(
+        patrimonio: dono.patrimonios.porId('item-1')!,
+        config: const ConfiguracaoLevantamento(sala: 'Auditório'),
+        usuarioNome: dono.apelido,
+      );
+      // O outro aparelho tem, nas mesmas posições, operações diferentes.
+      plantarOperacoes(
+        dono == a ? b : a,
+        inventarioId: inventario.id,
+        dispositivo: dono.dispositivoId,
+        patrimonioId: 'item-2',
+        de: 1,
+        ate: dono.ops.vetorDe(inventario.id)[dono.dispositivoId],
+      );
+    }
+
+    test('a identidade do par não vira ordem para este se apagar', () async {
+      // O caso do defeito: a identidade duplicada é a da Ana, e ela recusa
+      // dizendo "outro aparelho está usando a identidade deste" — dela. O
+      // Bruno, que não tem nada a ver com isso, era levado a "Gerar nova
+      // identidade" e a perder o trabalho ainda não entregue.
+      await duasHistoriasPara(a);
+
+      await expectLater(
+        clienteB.sincronizar(
+          par: paraA,
+          inventarioId: inventario.id,
+          chaveSync: inventario.chaveSync,
+        ),
+        throwsA(
+          isA<IdentidadeEmConflito>()
+              .having((e) => e.dispositivo, 'aparelho', a.dispositivoId)
+              .having((e) => e.esteAparelho, 'é o deste aparelho', isFalse)
+              .having((e) => e.mensagem, 'mensagem', contains('Dois aparelhos'))
+              .having(
+                (e) => e.mensagem,
+                'mensagem',
+                isNot(contains('identidade deste')),
+              ),
+        ),
+      );
+    });
+
+    test('quando a identidade é a deste, a mensagem diz isso', () async {
+      await duasHistoriasPara(b);
+
+      await expectLater(
+        clienteB.sincronizar(
+          par: paraA,
+          inventarioId: inventario.id,
+          chaveSync: inventario.chaveSync,
+        ),
+        throwsA(
+          isA<IdentidadeEmConflito>()
+              .having((e) => e.esteAparelho, 'é o deste aparelho', isTrue)
+              .having(
+                (e) => e.mensagem,
+                'mensagem',
+                startsWith('Outro aparelho está usando a identidade deste'),
+              ),
+        ),
+      );
+    });
+
+    test('a recusa vai estruturada, com um texto neutro em erro', () async {
+      await duasHistoriasPara(a);
+
+      final resposta = await requisitarBruto(
+        caminho: Rotas.pull,
+        inventarioNaQuery: inventario.id,
+        chaveSync: inventario.chaveSync,
+        corpo: PedidoPull(
+          inventarioId: inventario.id,
+          vetor: b.ops.vetorDe(inventario.id),
+          cabecas: b.ops.cabecas(inventario.id),
+        ).toJson(),
+      );
+
+      expect(resposta.status, HttpStatus.conflict);
+      expect(resposta.corpo['tipo'], ErroIdentidade.codigo);
+      expect(resposta.corpo['dispositivo'], a.dispositivoId);
+      expect(
+        resposta.corpo['erro'],
+        allOf(
+          isA<String>(),
+          contains('Dois aparelhos'),
+          isNot(contains('identidade deste')),
+        ),
+        reason: 'uma versão anterior mostra este texto, e ele serve aos dois',
       );
     });
   });

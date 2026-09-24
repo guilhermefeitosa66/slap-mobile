@@ -54,6 +54,25 @@ class RelogioDivergente extends FalhaSync {
       'aparelhos e sincronize de novo.';
 }
 
+/// Dois aparelhos estão escrevendo com a mesma identidade.
+///
+/// A mensagem é montada **aqui**, do ponto de vista de quem vai lê-la. O par
+/// que recusou fala da identidade dele; repetir a frase dele faria o aparelho
+/// honesto entender que o problema é o dele, tocar em "Gerar nova identidade"
+/// e apagar o trabalho que ainda não entregou.
+class IdentidadeEmConflito extends FalhaSync {
+  /// Aparelho cuja identidade está duplicada.
+  final String dispositivo;
+
+  /// A identidade duplicada é a deste aparelho.
+  final bool esteAparelho;
+
+  IdentidadeEmConflito(this.dispositivo, {required this.esteAparelho})
+    : super(
+        IdentidadeDuplicada(dispositivo, esteAparelho: esteAparelho).toString(),
+      );
+}
+
 /// O pedido de entrada não foi atendido.
 ///
 /// Recusa, expiração e token repetido são respostas normais do protocolo, e
@@ -253,7 +272,7 @@ class ClienteSync {
       // inventário autenticou a conversa, e o par mandou operação de outro.
       throw FalhaSync(_foraDoInventario(par));
     } on IdentidadeDuplicada catch (e) {
-      throw FalhaSync('$e');
+      throw IdentidadeEmConflito(e.dispositivo, esteAparelho: e.esteAparelho);
     } on RelogioForaDeSincronia catch (e) {
       final autor = e.recebido.nodeId;
       throw RelogioDivergente(
@@ -541,7 +560,7 @@ class ClienteSync {
         throw _versaoRecusada(texto, rotulo ?? host);
       }
       if (resposta.statusCode == HttpStatus.conflict) {
-        throw _relogioRecusado(texto, rotulo ?? host);
+        throw _recusadoComConflito(texto, rotulo ?? host);
       }
       if (resposta.statusCode == HttpStatus.unauthorized) {
         throw FalhaSync(
@@ -592,20 +611,32 @@ class ClienteSync {
     );
   }
 
-  /// Traduz a recusa por relógio do outro lado.
+  /// Traduz uma recusa `409` do outro lado.
   ///
-  /// Quando o par aponta o autor das operações do futuro, o aviso é sobre
-  /// ele; senão, a diferença é entre o relógio do par e o nosso.
-  FalhaSync _relogioRecusado(String texto, String rotulo) {
+  /// São recusas que o par explica: relógio fora de sincronia e identidade
+  /// duplicada. Nos dois casos os dados vêm estruturados e a frase é montada
+  /// aqui, do ponto de vista de quem vai lê-la — quem recusou fala do ponto de
+  /// vista dele.
+  FalhaSync _recusadoComConflito(String texto, String rotulo) {
     final Map<String, dynamic> corpo;
     try {
       corpo = jsonDecode(texto) as Map<String, dynamic>;
     } catch (_) {
       return FalhaSync('Resposta inesperada (409).');
     }
+
+    final identidade = ErroIdentidade.fromJson(corpo);
+    if (identidade != null) {
+      return IdentidadeEmConflito(
+        identidade.dispositivo,
+        esteAparelho: identidade.dispositivo == ops.dispositivoId,
+      );
+    }
+
     final erro = ErroRelogio.fromJson(corpo);
     if (erro == null) {
-      // Outra recusa explicada pelo par — identidade duplicada, por exemplo.
+      // Recusa de um formato que não conhecemos, ou de uma versão anterior:
+      // o texto que o par mandou é o que há.
       final motivo = corpo['erro'];
       return FalhaSync(
         motivo is String ? motivo : 'Resposta inesperada (409).',
