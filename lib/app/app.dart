@@ -16,6 +16,7 @@ import '../data/banco.dart';
 import '../data/repos/inventarios.dart';
 import '../data/schema.dart';
 import '../domain/divergencia.dart';
+import 'preferencias.dart';
 import 'providers.dart';
 import 'tema.dart';
 
@@ -131,6 +132,8 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
       routerConfig: _rotas,
       theme: temaClaro,
       darkTheme: temaEscuro,
+      themeMode: ref.watch(preferenciasProvider).tema.modo,
+      builder: (_, filho) => BarrasDoSistema(child: filho!),
     );
   }
 }
