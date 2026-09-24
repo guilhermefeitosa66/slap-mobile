@@ -1219,6 +1219,26 @@ class RepositorioOperacoes {
     );
   }
 
+  /// Quando cada aparelho trocou dados com este pela última vez, neste
+  /// inventário.
+  ///
+  /// A tela de sincronização mostra isso ao lado de cada par: saber que já se
+  /// trocou com aquele aparelho hoje de manhã é o que evita a troca repetida
+  /// "por via das dúvidas".
+  Map<String, DateTime> ultimasTrocas(String inventarioId) {
+    final linhas = _db.select(
+      'SELECT dispositivo, ultima_sync FROM pares '
+      'WHERE inventario_id = ? AND ultima_sync IS NOT NULL',
+      [inventarioId],
+    );
+    return {
+      for (final l in linhas)
+        l['dispositivo'] as String: DateTime.fromMillisecondsSinceEpoch(
+          l['ultima_sync'] as int,
+        ),
+    };
+  }
+
   /// O que se perde apagando a réplica local: o trabalho deste aparelho que
   /// nenhum outro recebeu.
   ///

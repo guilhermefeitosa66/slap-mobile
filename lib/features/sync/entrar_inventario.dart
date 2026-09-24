@@ -260,6 +260,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
         par: par,
         inventarioId: pacote.inventario.id,
         chaveSync: chaveSync,
+        aoProgredir: _andando,
       );
     } on FalhaSync {
       // O inventário já está aqui; a tela de sincronização resolve.

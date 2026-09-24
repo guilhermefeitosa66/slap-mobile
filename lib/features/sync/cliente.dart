@@ -189,11 +189,18 @@ class ClienteSync {
   /// contexto causal antes de enviarmos as nossas, e o par recebe um lote já
   /// ciente do que ele mesmo escreveu — o que evita marcar como concorrente
   /// algo que acabou de chegar.
+  /// [aoProgredir] acompanha as duas viagens. As operações são a unidade
+  /// natural aqui — é o número que o protocolo já tem —, mas o recebimento
+  /// só sabe quantas são depois que a resposta chega, e até lá o que dá para
+  /// contar são os bytes.
   Future<ResultadoSync> sincronizar({
     required Par par,
     required String inventarioId,
     required String chaveSync,
+    void Function(Andamento)? aoProgredir,
   }) async {
+    aoProgredir?.call(Andamento('Falando com ${par.rotulo}…'));
+
     // Os relógios são conferidos antes de qualquer troca: com diferença
     // grande, nenhum dos dois lados deve aplicar nada do outro.
     await _conferirRelogio(par);
@@ -206,7 +213,12 @@ class ClienteSync {
 
     // Uma viagem para puxar: a resposta traz as operações que nos faltam e a
     // version vector do par. Outra para enviar exatamente o que falta a ele.
-    final lote = await _puxar(par, inventarioId, chaveSync);
+    final lote = await _puxar(
+      par,
+      inventarioId,
+      chaveSync,
+      aoProgredir: aoProgredir,
+    );
 
     final recebidas = lote.ops.isEmpty
         ? const ResultadoAplicacao(
@@ -217,7 +229,22 @@ class ClienteSync {
           )
         : _aplicar(par, lote, inventarioId);
 
-    final enviadas = await _enviar(par, inventarioId, chaveSync, lote);
+    aoProgredir?.call(
+      Andamento(
+        'Recebendo de ${par.rotulo}…',
+        feitos: recebidas.aplicadas,
+        total: recebidas.aplicadas,
+        unidade: 'alterações recebidas',
+      ),
+    );
+
+    final enviadas = await _enviar(
+      par,
+      inventarioId,
+      chaveSync,
+      lote,
+      aoProgredir: aoProgredir,
+    );
 
     // Até onde o nosso trabalho está com o par: o que ele declarou ter, mais
     // o que ele acabou de aceitar do nosso envio, e sempre até o começo da
@@ -314,8 +341,12 @@ class ClienteSync {
   Future<LoteOperacoes> _puxar(
     Par par,
     String inventarioId,
-    String chaveSync,
-  ) async {
+    String chaveSync, {
+    void Function(Andamento)? aoProgredir,
+  }) async {
+    final etapa = 'Recebendo de ${par.rotulo}…';
+    aoProgredir?.call(Andamento(etapa));
+
     final resposta = await _requisitar(
       host: par.host,
       porta: par.porta,
@@ -323,6 +354,10 @@ class ClienteSync {
       metodo: 'POST',
       caminho: Rotas.pull,
       inventarioId: inventarioId,
+      aoReceber: aoProgredir == null
+          ? null
+          : (recebidos, total) =>
+                aoProgredir(andamentoDeBytes(etapa, recebidos, total)),
       corpo: PedidoPull(
         inventarioId: inventarioId,
         vetor: ops.vetorDe(inventarioId),
@@ -352,8 +387,9 @@ class ClienteSync {
     Par par,
     String inventarioId,
     String chaveSync,
-    LoteOperacoes doPar,
-  ) async {
+    LoteOperacoes doPar, {
+    void Function(Andamento)? aoProgredir,
+  }) async {
     // Vai mesmo sem nada a enviar: o lote leva o nosso vetor, e é assim que
     // o par fica sabendo que já recebemos o trabalho dele. Sem isso, quem só
     // forneceu dados nunca saberia se eles chegaram — e a confirmação de
@@ -362,6 +398,18 @@ class ClienteSync {
       inventarioId,
       doPar.vetor,
       lacunas: doPar.lacunas,
+    );
+
+    // Aqui o total é conhecido antes da viagem: são as operações que faltam
+    // ao par, contadas do nosso lado.
+    final etapa = 'Enviando para ${par.rotulo}…';
+    aoProgredir?.call(
+      Andamento(
+        etapa,
+        feitos: 0,
+        total: faltantes.length,
+        unidade: 'alterações enviadas',
+      ),
     );
 
     await _requisitar(
@@ -380,6 +428,15 @@ class ClienteSync {
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
+    );
+
+    aoProgredir?.call(
+      Andamento(
+        etapa,
+        feitos: faltantes.length,
+        total: faltantes.length,
+        unidade: 'alterações enviadas',
+      ),
     );
 
     // Saíram daqui: a partir de agora elas não podem mais ser re-estampadas.

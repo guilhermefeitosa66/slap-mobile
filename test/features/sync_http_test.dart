@@ -319,6 +319,65 @@ void main() {
     expect(b.patrimonios.progresso(inventario.id).verificados, 2);
   });
 
+  test('a troca diz o que está recebendo e o que está enviando', () async {
+    // A tela ficava parada até o fim, sem dizer nem a direção nem o tamanho.
+    // As duas viagens são contadas em alterações, que é o número que o
+    // protocolo já tem.
+    await entrarNoInventario(b, clienteB, paraA);
+
+    a.patrimonios.registrarVerificacao(
+      patrimonio: a.patrimonios.porId('item-1')!,
+      config: const ConfiguracaoLevantamento(sala: 'Auditório'),
+      usuarioNome: 'Ana',
+    );
+    b.patrimonios.registrarVerificacao(
+      patrimonio: b.patrimonios.porId('item-2')!,
+      config: const ConfiguracaoLevantamento(sala: 'Laboratório'),
+      usuarioNome: 'Bruno',
+    );
+
+    final andamentos = <Andamento>[];
+    final resultado = await clienteB.sincronizar(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+      aoProgredir: andamentos.add,
+    );
+
+    final etapas = andamentos.map((a) => a.etapa).toSet();
+    expect(etapas, contains('Recebendo de ${paraA.rotulo}…'));
+    expect(etapas, contains('Enviando para ${paraA.rotulo}…'));
+
+    final recebendo = andamentos.lastWhere(
+      (a) => a.etapa.startsWith('Recebendo'),
+    );
+    expect(recebendo.feitos, resultado.recebidas);
+    expect(recebendo.contagem, contains('alterações recebidas'));
+
+    final enviando = andamentos.lastWhere(
+      (a) => a.etapa.startsWith('Enviando'),
+    );
+    expect(enviando.feitos, resultado.enviadas);
+    expect(enviando.total, resultado.enviadas);
+    expect(enviando.fracao, 1);
+  });
+
+  test('a última troca com cada aparelho fica registrada', () async {
+    await entrarNoInventario(b, clienteB, paraA);
+    await clienteB.sincronizar(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+    );
+
+    final trocas = b.ops.ultimasTrocas(inventario.id);
+    expect(trocas[a.dispositivoId], isNotNull);
+    expect(
+      DateTime.now().difference(trocas[a.dispositivoId]!).inMinutes,
+      lessThan(1),
+    );
+  });
+
   test('sincronizar de novo sem novidade não transfere nada', () async {
     await entrarNoInventario(b, clienteB, paraA);
 
