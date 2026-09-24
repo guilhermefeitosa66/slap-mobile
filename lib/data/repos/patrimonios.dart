@@ -292,6 +292,63 @@ class RepositorioPatrimonios {
     return porId(patrimonio.id)!;
   }
 
+  /// Altera os campos do levantamento de um item, pelo detalhe dele.
+  ///
+  /// Mesmo caminho de [registrarVerificacao]: uma operação por campo que de
+  /// fato mudou, nenhuma para valor igual — e nenhuma operação se nada mudou.
+  /// Um item ainda não verificado passa a verificado: editar o levantamento
+  /// é verificá-lo manualmente, sem leitor, e o crédito vai a quem salvou.
+  /// Num item já verificado, quem o encontrou permanece; a edição fica no
+  /// histórico, com o seu autor.
+  ///
+  /// [sala] e [responsavel] em branco valem `null`: o valor da planilha
+  /// permanece, como na regra do SLAP para o responsável. Devolve o item como
+  /// ficou.
+  Patrimonio alterarLevantamento({
+    required Patrimonio patrimonio,
+    required String? sala,
+    required String? responsavel,
+    required EstadoConservacao conservacao,
+    required SituacaoUso situacao,
+    String? usuarioNome,
+    String? usuarioMatricula,
+  }) {
+    String? limpo(String? texto) {
+      final t = texto?.trim() ?? '';
+      return t.isEmpty ? null : t;
+    }
+
+    final salaNova = limpo(sala);
+    final responsavelNovo = limpo(responsavel);
+    final campos = <String, String?>{};
+
+    if (!patrimonio.verificado) campos[CampoPatrimonio.verificado] = '1';
+    if (!mesmoTexto(patrimonio.salaAtual, salaNova)) {
+      campos[CampoPatrimonio.salaAtual] = salaNova;
+    }
+    if (!mesmoTexto(patrimonio.responsavelAtual, responsavelNovo)) {
+      campos[CampoPatrimonio.responsavelAtual] = responsavelNovo;
+    }
+    if (patrimonio.conservacao != conservacao) {
+      campos[CampoPatrimonio.conservacao] = conservacao.valor;
+    }
+    if (patrimonio.situacao != situacao) {
+      campos[CampoPatrimonio.situacao] = situacao.valor;
+    }
+
+    if (campos.isEmpty) return patrimonio;
+
+    ops.registrarLocal(
+      inventarioId: patrimonio.inventarioId,
+      entidade: 'patrimonio',
+      entidadeId: patrimonio.id,
+      campos: campos,
+      usuarioNome: usuarioNome,
+      usuarioMatricula: usuarioMatricula,
+    );
+    return porId(patrimonio.id)!;
+  }
+
   /// Desfaz a verificação de um item.
   ///
   /// Ao contrário do `undo` do SLAP, que apaga os campos sem deixar rastro, a

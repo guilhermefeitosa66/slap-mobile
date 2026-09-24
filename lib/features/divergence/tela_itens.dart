@@ -10,6 +10,8 @@ import '../../app/tema.dart';
 import '../../core/formato.dart';
 import '../../domain/divergencia.dart';
 import '../../domain/patrimonio.dart';
+import '../../domain/valores.dart';
+import '../survey/campo_com_sugestoes.dart';
 
 /// Lista de patrimônios, filtrada por grupo do resultado.
 class TelaItens extends ConsumerStatefulWidget {
@@ -374,18 +376,106 @@ class _LinhaPatrimonio extends StatelessWidget {
   }
 }
 
-/// Ficha completa de um patrimônio, com o que veio do SUAP, o que foi
-/// encontrado e o histórico de alterações.
-class DetalhePatrimonio extends ConsumerWidget {
+/// Ficha completa de um patrimônio, em três seções: o status, o que veio da
+/// planilha do SUAP e o que o levantamento encontrou — editável ali mesmo.
+/// Depois delas, o histórico de alterações e o desfazer.
+class DetalhePatrimonio extends ConsumerStatefulWidget {
   final String patrimonioId;
 
   const DetalhePatrimonio({super.key, required this.patrimonioId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DetalhePatrimonio> createState() => _DetalhePatrimonioState();
+}
+
+class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
+  /// Campos em edição. Só existe enquanto a seção "Levantamento" está aberta
+  /// para alteração.
+  _EdicaoLevantamento? _edicao;
+
+  @override
+  void dispose() {
+    _edicao?.dispose();
+    super.dispose();
+  }
+
+  bool _encerrado(Patrimonio p) =>
+      ref.read(inventarioProvider(p.inventarioId))?.encerrado ?? false;
+
+  void _editar(Patrimonio p) {
+    final repo = ref.read(patrimoniosProvider);
+    setState(() {
+      _edicao = _EdicaoLevantamento(
+        p,
+        salas: repo.salas(p.inventarioId),
+        responsaveis: repo.responsaveis(p.inventarioId),
+      );
+    });
+  }
+
+  void _fecharEdicao() {
+    final antiga = _edicao;
+    setState(() => _edicao = null);
+    // Os campos ainda estão na tela até o próximo quadro.
+    WidgetsBinding.instance.addPostFrameCallback((_) => antiga?.dispose());
+  }
+
+  /// Grava o que mudou, pelo log de operações — nunca direto na tabela: a
+  /// alteração precisa chegar aos outros aparelhos e sobreviver à
+  /// materialização.
+  ///
+  /// Abrir o detalhe e salvar já é a ação explícita que a regra "item já
+  /// verificado nunca é sobrescrito em silêncio" exige; não há segunda
+  /// confirmação.
+  void _salvar(Patrimonio p) {
+    final edicao = _edicao;
+    if (edicao == null) return;
+
+    // Outro aparelho pode ter encerrado o inventário com o painel aberto.
+    if (_encerrado(p)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Inventário encerrado: nada foi alterado.'),
+        ),
+      );
+      _fecharEdicao();
+      return;
+    }
+
+    final identidade = ref.read(identidadeProvider);
+    ref
+        .read(patrimoniosProvider)
+        .alterarLevantamento(
+          patrimonio: p,
+          sala: edicao.sala.text,
+          responsavel: edicao.responsavel.text,
+          conservacao: edicao.conservacao,
+          situacao: edicao.situacao,
+          usuarioNome: identidade.nome,
+          usuarioMatricula: identidade.matricula,
+        );
+    ref.read(revisaoProvider.notifier).mudou();
+    _fecharEdicao();
+  }
+
+  void _desfazer(Patrimonio p) {
+    final identidade = ref.read(identidadeProvider);
+    ref
+        .read(patrimoniosProvider)
+        .desfazerVerificacao(
+          patrimonio: p,
+          usuarioNome: identidade.nome,
+          usuarioMatricula: identidade.matricula,
+        );
+    ref.read(revisaoProvider.notifier).mudou();
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.watch(revisaoProvider);
 
-    final p = ref.read(patrimoniosProvider).porId(patrimonioId);
+    final p = ref.read(patrimoniosProvider).porId(widget.patrimonioId);
     if (p == null) {
       return const Padding(
         padding: EdgeInsets.all(32),
@@ -394,9 +484,14 @@ class DetalhePatrimonio extends ConsumerWidget {
     }
 
     final classificacao = classificar(p);
-    final divergencias = divergenciasDe(p);
+    final tom = CoresResultado.of(context).de(classificacao);
     final historico = ref.read(operacoesProvider).historicoDe(p.id);
     final formato = DateFormat('dd/MM/yyyy HH:mm');
+    final encerrado =
+        ref.watch(inventarioProvider(p.inventarioId))?.encerrado ?? false;
+    final esteAparelho = ref.read(bancoProvider).dispositivoId;
+    final tema = Theme.of(context);
+    final edicao = _edicao;
 
     return DraggableScrollableSheet(
       expand: false,
@@ -404,20 +499,30 @@ class DetalhePatrimonio extends ConsumerWidget {
       maxChildSize: 0.95,
       builder: (context, controlador) => ListView(
         controller: controlador,
-        padding: const EdgeInsets.all(20),
+        // O teclado da edição cobre a parte de baixo da folha; o recuo deixa
+        // rolar até o que ficou embaixo dele.
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
         children: [
+          // 1. Status.
           Row(
             children: [
               IconeEmTom(
                 icone: CoresResultado.icone(classificacao),
-                tom: CoresResultado.of(context).de(classificacao),
+                tom: tom,
                 tamanho: 32,
               ),
               const SizedBox(width: 10),
-              Text(
-                classificacao.rotulo,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: CoresResultado.of(context).de(classificacao).texto,
+              // Com a fonte do sistema grande, o rótulo quebra em vez de
+              // empurrar o ícone para fora da tela.
+              Expanded(
+                child: Text(
+                  classificacao.rotulo,
+                  style: tema.textTheme.titleSmall?.copyWith(color: tom.texto),
                 ),
               ),
             ],
@@ -425,38 +530,50 @@ class DetalhePatrimonio extends ConsumerWidget {
           const SizedBox(height: 12),
           Text(
             p.descricao ?? 'Sem descrição',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: tema.textTheme.titleLarge,
           ),
-          const SizedBox(height: 16),
 
+          // 2. O que veio da importação, e não muda.
+          const SizedBox(height: 20),
+          const _TituloSecao('Dados da planilha (SUAP)'),
           _Campo('Tombo', p.tombo),
           _Campo('Código de barras', p.codigoBarras ?? '—'),
           _Campo('Elemento de despesa', p.ed ?? '—'),
           _Campo('Valor', p.valor ?? '—'),
+          _Campo('Sala', p.salaOriginal ?? '—'),
+          _Campo('Responsável', p.responsavelOriginal ?? '—'),
+          if (p.ordem case final ordem?) _Campo('Ordem na planilha', ordem),
 
-          if (divergencias.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Divergências',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            for (final d in divergencias) _CartaoDivergencia(divergencia: d),
-          ],
+          // 3. O que o inventário produz.
+          const SizedBox(height: 20),
+          const _TituloSecao('Levantamento'),
+          // Fora da edição, os valores vêm antes de quem os registrou. Com o
+          // formulário aberto a ordem se inverte, para que Cancelar e Salvar
+          // fechem a seção em vez de ficarem no meio dela.
+          if (edicao == null)
+            if (!p.verificado)
+              Text(
+                'Ainda não encontrado no levantamento.',
+                style: tema.textTheme.bodySmall,
+              )
+            else ...[
+              _CampoComTom(
+                rotulo: 'Sala atual',
+                valor: p.salaAtual ?? 'não alterada',
+                igual: mesmoTexto(p.salaOriginal, p.salaEfetiva),
+              ),
+              _CampoComTom(
+                rotulo: 'Responsável atual',
+                valor: p.responsavelAtual ?? 'não alterado',
+                igual: mesmoTexto(p.responsavelOriginal, p.responsavelEfetivo),
+              ),
+              _Campo('Estado de conservação', p.conservacao?.rotulo ?? '—'),
+              _Campo('Situação de uso', p.situacao?.rotulo ?? '—'),
+            ],
 
-          const SizedBox(height: 16),
-          Text('Situação', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          _Campo('Sala (SUAP)', p.salaOriginal ?? '—'),
-          _Campo('Sala encontrada', p.salaAtual ?? 'não alterada'),
-          _Campo('Responsável (SUAP)', p.responsavelOriginal ?? '—'),
-          _Campo(
-            'Responsável encontrado',
-            p.responsavelAtual ?? 'não alterado',
-          ),
-          _Campo('Estado', p.conservacao?.rotulo ?? '—'),
-          _Campo('Situação de uso', p.situacao?.rotulo ?? '—'),
-
+          // Quem encontrou o item. Não se edita: vem da identidade de quem
+          // gravou a verificação. Fica visível durante a edição porque é o que
+          // diz de quem é o levantamento que está prestes a ser alterado.
           if (p.verificado) ...[
             const SizedBox(height: 8),
             _Campo(
@@ -468,18 +585,61 @@ class DetalhePatrimonio extends ConsumerWidget {
               'Verificado em',
               p.verificadoEm == null ? '—' : formato.format(p.verificadoEm!),
             ),
+            // Depois da sincronização, é o que diz se fui eu ou outra pessoa.
+            _Campo('Aparelho', switch (p.verificadoPorDispositivo) {
+              null => '—',
+              final d when d == esteAparelho => 'Este aparelho',
+              _ => 'Outro aparelho',
+            }),
           ],
 
-          if (historico.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Histórico de alterações',
-              style: Theme.of(context).textTheme.titleMedium,
+          if (edicao != null) ...[
+            _FormularioLevantamento(
+              edicao: edicao,
+              verificacaoManual: !p.verificado,
+              aoCancelar: _fecharEdicao,
+              aoSalvar: () => _salvar(p),
             ),
-            const SizedBox(height: 4),
+          ] else ...[
+            const SizedBox(height: 12),
+            if (encerrado)
+              Text(
+                'Inventário encerrado: o levantamento não muda mais.',
+                style: tema.textTheme.bodySmall,
+              )
+            else
+              // Item de ED excluído também se edita: o leitor já o registra,
+              // avisando que está fora do inventário, e bloquear só aqui seria
+              // mais uma regra para o usuário descobrir sozinho.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => _editar(p),
+                  icon: Icon(
+                    p.verificado
+                        ? Icons.edit_outlined
+                        : Icons.fact_check_outlined,
+                  ),
+                  // Editar um item não localizado é verificá-lo sem leitor.
+                  label: Text(
+                    p.verificado
+                        ? 'Editar levantamento'
+                        : 'Verificar manualmente',
+                  ),
+                ),
+              ),
+          ],
+
+          // Com o formulário aberto, o painel termina em Cancelar e Salvar:
+          // nem o histórico nem o desfazer disputam a atenção ali — e
+          // "Desfazer verificação" logo abaixo de "Salvar" é vizinhança
+          // perigosa para um toque apressado.
+          if (edicao == null && historico.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const _TituloSecao('Histórico de alterações'),
             Text(
               'Toda alteração fica registrada, com autor e aparelho.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: tema.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             for (final op in historico.take(30))
@@ -497,11 +657,9 @@ class DetalhePatrimonio extends ConsumerWidget {
 
           const SizedBox(height: 24),
           // Encerrado, o levantamento não muda mais — nem para desfazer.
-          if (p.verificado &&
-              !(ref.read(inventarioProvider(p.inventarioId))?.encerrado ??
-                  false))
+          if (edicao == null && p.verificado && !encerrado)
             OutlinedButton.icon(
-              onPressed: () => _desfazer(context, ref, p),
+              onPressed: () => _desfazer(p),
               icon: const Icon(Icons.undo),
               label: const Text('Desfazer verificação'),
             ),
@@ -509,18 +667,154 @@ class DetalhePatrimonio extends ConsumerWidget {
       ),
     );
   }
+}
 
-  void _desfazer(BuildContext context, WidgetRef ref, Patrimonio p) {
-    final identidade = ref.read(identidadeProvider);
-    ref
-        .read(patrimoniosProvider)
-        .desfazerVerificacao(
-          patrimonio: p,
-          usuarioNome: identidade.nome,
-          usuarioMatricula: identidade.matricula,
-        );
-    ref.read(revisaoProvider.notifier).mudou();
-    Navigator.of(context).pop();
+/// O que está sendo editado na seção "Levantamento".
+///
+/// Sala e responsável mostram só o que o levantamento gravou: em branco, o
+/// valor da planilha permanece — e salvar sem mexer em nada não gera
+/// operação. Estado e situação sem valor partem do padrão das leituras.
+class _EdicaoLevantamento {
+  final TextEditingController sala;
+  final TextEditingController responsavel;
+  EstadoConservacao conservacao;
+  SituacaoUso situacao;
+  final List<String> salas;
+  final List<String> responsaveis;
+
+  _EdicaoLevantamento(
+    Patrimonio p, {
+    required this.salas,
+    required this.responsaveis,
+  }) : sala = TextEditingController(text: p.salaAtual ?? ''),
+       responsavel = TextEditingController(text: p.responsavelAtual ?? ''),
+       conservacao = p.conservacao ?? EstadoConservacao.bom,
+       situacao = p.situacao ?? SituacaoUso.ativo;
+
+  void dispose() {
+    sala.dispose();
+    responsavel.dispose();
+  }
+}
+
+/// Os quatro campos do levantamento, para alterar ali mesmo.
+class _FormularioLevantamento extends StatefulWidget {
+  final _EdicaoLevantamento edicao;
+
+  /// O item ainda não foi encontrado: salvar é verificá-lo manualmente.
+  final bool verificacaoManual;
+  final VoidCallback aoCancelar;
+  final VoidCallback aoSalvar;
+
+  const _FormularioLevantamento({
+    required this.edicao,
+    required this.verificacaoManual,
+    required this.aoCancelar,
+    required this.aoSalvar,
+  });
+
+  @override
+  State<_FormularioLevantamento> createState() =>
+      _FormularioLevantamentoState();
+}
+
+class _FormularioLevantamentoState extends State<_FormularioLevantamento> {
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.edicao;
+    final tema = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 4),
+        CampoComSugestoes(
+          controlador: e.sala,
+          sugestoes: e.salas,
+          rotulo: 'Sala atual',
+          icone: Icons.room_outlined,
+          ajuda: 'Em branco, a sala da planilha é mantida.',
+          rotuloLimpar: 'Limpar a sala',
+        ),
+        const SizedBox(height: 16),
+        CampoComSugestoes(
+          controlador: e.responsavel,
+          sugestoes: e.responsaveis,
+          rotulo: 'Responsável atual',
+          icone: Icons.person_outline,
+          ajuda:
+              'Em branco, o responsável da planilha é mantido. '
+              'Pode ser um nome novo.',
+          rotuloLimpar: 'Limpar o responsável',
+        ),
+        const SizedBox(height: 16),
+        Text('Estado de conservação', style: tema.textTheme.labelLarge),
+        const SizedBox(height: 8),
+        SegmentedButton<EstadoConservacao>(
+          showSelectedIcon: false,
+          expandedInsets: EdgeInsets.zero,
+          segments: [
+            for (final c in EstadoConservacao.values)
+              ButtonSegment(value: c, label: Text(c.rotulo)),
+          ],
+          selected: {e.conservacao},
+          onSelectionChanged: (s) => setState(() => e.conservacao = s.first),
+        ),
+        const SizedBox(height: 16),
+        Text('Situação de uso', style: tema.textTheme.labelLarge),
+        const SizedBox(height: 8),
+        SegmentedButton<SituacaoUso>(
+          showSelectedIcon: false,
+          expandedInsets: EdgeInsets.zero,
+          segments: [
+            for (final s in SituacaoUso.values)
+              ButtonSegment(value: s, label: Text(s.rotulo)),
+          ],
+          selected: {e.situacao},
+          onSelectionChanged: (s) => setState(() => e.situacao = s.first),
+        ),
+        if (widget.verificacaoManual) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Ao salvar, o item fica verificado por você, sem leitura de código.',
+            style: tema.textTheme.bodySmall,
+          ),
+        ],
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.aoCancelar,
+                child: const Text('Cancelar'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: widget.aoSalvar,
+                icon: const Icon(Icons.check),
+                label: const Text('Salvar'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _TituloSecao extends StatelessWidget {
+  final String texto;
+
+  const _TituloSecao(this.texto);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(texto, style: Theme.of(context).textTheme.titleMedium),
+    );
   }
 }
 
@@ -548,40 +842,83 @@ class _Campo extends StatelessWidget {
   }
 }
 
-class _CartaoDivergencia extends StatelessWidget {
-  final Divergencia divergencia;
+/// Linha do levantamento no tom do resultado: verde quando o valor confere
+/// com a planilha (ou não foi alterado), laranja quando diverge.
+///
+/// Sempre com ícone e rótulo falado, como o resto do app: cor sozinha não
+/// serve a quem tem daltonismo nem a quem usa leitor de tela.
+class _CampoComTom extends StatelessWidget {
+  final String rotulo;
+  final String valor;
 
-  const _CartaoDivergencia({required this.divergencia});
+  /// Igual ao que veio da planilha.
+  final bool igual;
+
+  const _CampoComTom({
+    required this.rotulo,
+    required this.valor,
+    required this.igual,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final tom = CoresResultado.of(context).jaVerificado;
-    final estilo = Theme.of(
-      context,
-    ).textTheme.bodyMedium?.copyWith(color: tom.texto, fontSize: 13.5);
+    final cores = CoresResultado.of(context);
+    final tom = igual ? cores.registrado : cores.jaVerificado;
+    final tema = Theme.of(context);
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: tom.fundo,
-        borderRadius: BorderRadius.circular(11),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            divergencia.campo.rotulo,
-            style: estilo?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 3),
-          Text('SUAP: ${divergencia.valorSuap ?? "(vazio)"}', style: estilo),
-          Text(
-            'Encontrado: ${divergencia.valorEncontrado ?? "(vazio)"}',
-            style: estilo,
-          ),
-        ],
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 150,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(rotulo, style: tema.textTheme.bodySmall),
+              ),
+            ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: tom.fundo,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        igual ? Icons.check_circle_outline : Icons.swap_horiz,
+                        size: 16,
+                        color: tom.texto,
+                        semanticLabel: igual
+                            ? 'igual à planilha'
+                            : 'diferente da planilha',
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          valor,
+                          style: tema.textTheme.bodyMedium?.copyWith(
+                            color: tom.texto,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
