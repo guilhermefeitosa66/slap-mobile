@@ -13,9 +13,12 @@ guarda, para onde eles vão e por quê.
   num arquivo que **você** decide gerar e enviar.
 - Não há servidor, conta, anúncio nem rastreamento. Quem mantém o aplicativo **não recebe nenhum
   dado** dele.
-- Uma exceção, só no Android: a biblioteca do Google que lê códigos de barras envia ao Google
-  dados técnicos de funcionamento dela — nunca as imagens nem os códigos lidos. Ver
-  [Leitura de códigos no Android](#leitura-de-códigos-no-android).
+- Duas exceções, e nenhuma delas leva dado do inventário:
+  - a biblioteca do Google que lê códigos de barras envia ao Google dados técnicos de
+    funcionamento dela — nunca as imagens nem os códigos lidos. Ver
+    [Leitura de códigos no Android](#leitura-de-códigos-no-android);
+  - ao abrir, o aplicativo pergunta ao GitHub qual é a última versão publicada, para avisar quando
+    a sua está desatualizada. Ver [Verificação de versão](#verificação-de-versão).
 
 ## O que o aplicativo guarda no aparelho
 
@@ -82,14 +85,40 @@ detalhes estão na
 
 No iPhone, a leitura usa o recurso do próprio sistema, que não envia nada.
 
+## Verificação de versão
+
+O aplicativo é instalado por arquivo APK, fora da loja: nada avisaria quem está com uma versão
+antiga, e uma versão antiga pode ter um defeito já corrigido. Por isso, **ao abrir**, ele consulta
+
+```
+https://api.github.com/repos/guilhermefeitosa66/slap-mobile/releases/latest
+```
+
+e compara o número da última versão publicada com a instalada. Havendo versão mais nova, aparece
+uma faixa com um botão que leva à página de instalação.
+
+**O que essa consulta envia:** nada além do próprio pedido HTTP. Nenhum dado do inventário,
+nenhum identificador do aparelho, nenhum nome. Como em qualquer acesso à internet, o GitHub
+registra o endereço IP de onde o pedido saiu e o tipo de aplicativo que pediu; é o mesmo que
+aconteceria ao abrir a página do projeto no navegador. Quem mantém o SLAP Mobile não recebe nada
+dessa consulta nem tem acesso a esses registros.
+
+**Como desligar:** em **Ajustes → Atualizações → Avisar de versão nova**. Desligada, o aplicativo
+não faz essa consulta, e nenhuma outra sai dele por conta própria — resta só a sincronização, que
+é local e só acontece quando você manda.
+
+Se a consulta falhar — sem internet, com o GitHub fora do ar — o aplicativo abre normalmente e
+não avisa nada. O levantamento não depende dela.
+
 ## Permissões
 
 - **Câmera** — para ler os códigos de barras dos patrimônios e o QR code que dá entrada num
   inventário. Nenhuma foto ou vídeo é gravado ou enviado. Ela só é pedida quando você abre a
   câmera, e o aplicativo funciona sem ela com um leitor de código externo.
 - **Rede local** — para achar os outros aparelhos do inventário e sincronizar com eles. No
-  Android, aparece como acesso à rede e à internet, que é a permissão técnica para usar a rede; o
-  aplicativo só conversa com aparelhos da mesma rede local (além da exceção do ML Kit acima).
+  Android, aparece como acesso à rede e à internet, que é a permissão técnica para usar a rede. O
+  aplicativo só conversa com aparelhos da mesma rede local, além das duas exceções acima: o ML Kit
+  e a verificação de versão.
 
 O aplicativo **não** pede localização, contatos, microfone, fotos nem acesso aos seus arquivos: a
 planilha e as cópias são abertas pela janela de arquivos do sistema, só o arquivo que você escolher.

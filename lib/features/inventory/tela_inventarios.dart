@@ -8,6 +8,7 @@ import '../../app/tema.dart';
 import '../../core/formato.dart';
 import '../sync/entrar_inventario.dart';
 import 'acoes_inventario.dart';
+import 'aviso_atualizacao.dart';
 
 /// Lista dos inventários que existem neste aparelho.
 class TelaInventarios extends ConsumerWidget {
@@ -45,20 +46,28 @@ class TelaInventarios extends ConsumerWidget {
           const SizedBox(width: 12),
         ],
       ),
-      body: inventarios.isEmpty
-          ? _Vazio(
-              aoLerQr: () => entrarEmInventario(context, ref),
-              aoImportar: () => _criar(context, ref),
-            )
-          : ListView.builder(
-              // Espaço para o botão flutuante não cobrir o último cartão.
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-              itemCount: inventarios.length,
-              itemBuilder: (context, i) {
-                final inv = inventarios[i];
-                return _CartaoInventario(inventarioId: inv.id);
-              },
-            ),
+      body: Column(
+        children: [
+          const AvisoAtualizacao(),
+          Expanded(
+            child: inventarios.isEmpty
+                ? _Vazio(
+                    aoLerQr: () => entrarEmInventario(context, ref),
+                    aoImportar: () => _criar(context, ref),
+                  )
+                : ListView.builder(
+                    // Espaço para o botão flutuante não cobrir o último
+                    // cartão.
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                    itemCount: inventarios.length,
+                    itemBuilder: (context, i) {
+                      final inv = inventarios[i];
+                      return _CartaoInventario(inventarioId: inv.id);
+                    },
+                  ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _novo(context, ref),
         icon: const Icon(Icons.add),

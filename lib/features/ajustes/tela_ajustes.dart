@@ -113,6 +113,21 @@ class TelaAjustes extends ConsumerWidget {
               ),
             ],
           ),
+          secao('Atualizações'),
+          CartaoAgrupado(
+            linhas: [
+              SwitchListTile(
+                secondary: const Icon(Icons.system_update_alt),
+                title: const Text('Avisar de versão nova'),
+                subtitle: const Text(
+                  'Ao abrir, pergunta ao GitHub qual é a última versão. Não '
+                  'envia nada do inventário.',
+                ),
+                value: preferencias.verificarAtualizacao,
+                onChanged: controlador.verificarAtualizacao,
+              ),
+            ],
+          ),
           secao('Cópia de segurança'),
           CartaoAgrupado(
             linhas: [

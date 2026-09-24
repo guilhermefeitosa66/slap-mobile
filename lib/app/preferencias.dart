@@ -47,11 +47,15 @@ class Preferencias {
   /// Tema claro, escuro ou o do sistema.
   final Tema tema;
 
+  /// Perguntar ao GitHub, na abertura, se há versão mais nova.
+  final bool verificarAtualizacao;
+
   const Preferencias({
     this.manterTelaLigada = true,
     this.sons = true,
     this.vibracao = true,
     this.tema = Tema.sistema,
+    this.verificarAtualizacao = true,
   });
 
   static Preferencias doBanco(Banco banco) {
@@ -61,6 +65,7 @@ class Preferencias {
       sons: ler(Config.sons),
       vibracao: ler(Config.vibracao),
       tema: Tema.doNome(banco.lerConfig(chaveTema)),
+      verificarAtualizacao: ler(Config.verificarAtualizacao),
     );
   }
 }
@@ -83,6 +88,9 @@ class ControladorPreferencias extends Notifier<Preferencias> {
   }
 
   void tema(Tema valor) => _gravar(Preferencias.chaveTema, valor.name);
+
+  void verificarAtualizacao(bool valor) =>
+      _gravarBool(Config.verificarAtualizacao, valor);
 
   void _gravarBool(String chave, bool valor) =>
       _gravar(chave, valor ? '1' : '0');

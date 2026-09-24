@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/atualizacao.dart';
 import '../core/sons.dart';
 import '../data/banco.dart';
 import '../data/repos/conflitos.dart';
@@ -55,6 +56,12 @@ final sonsProvider = Provider<Sons>((ref) {
   ref.onDispose(sons.dispose);
   return sons;
 });
+
+/// Quem pergunta ao GitHub se há versão mais nova. Trocável nos testes, que
+/// não têm — e não devem ter — rede.
+final verificadorAtualizacaoProvider = Provider<VerificadorAtualizacao>(
+  (ref) => VerificadorAtualizacao(),
+);
 
 final clienteSyncProvider = Provider<ClienteSync>(
   (ref) => ClienteSync(ref.watch(operacoesProvider)),

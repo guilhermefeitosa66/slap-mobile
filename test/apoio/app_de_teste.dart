@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slap_mobile/app/providers.dart';
 import 'package:slap_mobile/app/tema.dart';
+import 'package:slap_mobile/core/atualizacao.dart';
 import 'package:slap_mobile/core/sons.dart';
 import 'package:slap_mobile/data/banco.dart';
 
@@ -30,12 +31,17 @@ Future<ProviderContainer> montar(
   Widget tela, {
   Banco? banco,
   Sons? sons,
+  VerificadorAtualizacao? atualizacao,
   void Function(ProviderContainer)? preparar,
 }) async {
   final container = ProviderContainer(
     overrides: [
       bancoProvider.overrideWithValue(banco ?? Banco.emMemoria()),
       sonsProvider.overrideWithValue(sons ?? SonsMudos()),
+      // Sem rede nos testes: por padrão, a consulta não devolve nada.
+      verificadorAtualizacaoProvider.overrideWithValue(
+        atualizacao ?? VerificadorAtualizacao(buscar: (_) async => null),
+      ),
     ],
   );
   addTearDown(container.dispose);

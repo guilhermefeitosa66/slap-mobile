@@ -418,6 +418,7 @@ troque dados com todos os aparelhos da comissão.
 | **Som a cada leitura** | Um som diferente para registrado, já verificado e não localizado. |
 | **Vibrar a cada leitura** | Útil em biblioteca e sala de aula, com o som desligado. |
 | **Tema** | Claro, escuro ou o que o celular estiver usando. |
+| **Avisar de versão nova** | Ao abrir, pergunta ao GitHub qual é a última versão publicada. Não envia nada do inventário; dá para desligar. |
 | **Exportar cópia** / **Restaurar de uma cópia** | Veja abaixo. |
 | **Gerar nova identidade** | Só num caso, descrito em [Perguntas e problemas comuns](#dois-aparelhos-estão-com-a-mesma-identidade). |
 | **Licenças** | Bibliotecas e fontes usadas pelo aplicativo. |
@@ -515,6 +516,18 @@ que foi levantado.
 Não deve mais acontecer. Se acontecer, o levantamento não está perdido: o contador da sala,
 no alto da tela, sobe no momento da gravação, e o item está na lista de **Todos os itens**.
 Vale relatar numa [issue](https://github.com/guilhermefeitosa66/slap-mobile/issues).
+
+### Apareceu um aviso de versão nova
+
+O aplicativo é instalado por arquivo, fora da loja, e nada mais avisaria que saiu uma versão
+corrigida. Tocando em **Ver como**, a página de instalação abre no navegador. Instalar por cima
+mantém os inventários — **não desinstale**.
+
+**Agora não** tira o aviso até a versão seguinte. Para não ver mais nenhum, desligue em **Ajustes
+→ Atualizações**.
+
+Vale atualizar todos os aparelhos da comissão juntos: aparelhos em versões diferentes trocam
+dados normalmente, mas um deles pode estar com um defeito que os outros já não têm.
 
 ### Não ouço o som das leituras
 

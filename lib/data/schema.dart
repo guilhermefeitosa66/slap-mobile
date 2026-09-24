@@ -331,4 +331,11 @@ class Config {
 
   /// Vibração de retorno das leituras. Padrão: sim.
   static const vibracao = 'pref_vibracao';
+
+  /// Verificar, ao abrir, se há versão mais nova publicada.
+  static const verificarAtualizacao = 'pref_verificar_atualizacao';
+
+  /// Versão cujo aviso de atualização já foi dispensado. Guardada para o
+  /// aviso não voltar a cada abertura depois que alguém já disse "agora não".
+  static const atualizacaoDispensada = 'atualizacao_dispensada';
 }
