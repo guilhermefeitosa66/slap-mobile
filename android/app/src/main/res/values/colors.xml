@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Teal institucional do design. -->
+    <color name="ic_launcher_background">#0F5C52</color>
+    <!-- Fundo do tema claro. A abertura usa a mesma cor da primeira tela, para
+         não haver um lampejo branco entre uma e outra. -->
+    <color name="fundo_abertura">#F7F6F3</color>
+</resources>

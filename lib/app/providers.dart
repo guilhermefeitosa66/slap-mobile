@@ -45,7 +45,12 @@ final conflitosProvider = Provider<RepositorioConflitos>(
 );
 
 final sonsProvider = Provider<Sons>((ref) {
-  final sons = Sons();
+  // Nasce com as preferências gravadas: quem desligou o som na véspera não
+  // pode ouvir o primeiro bipe do dia seguinte.
+  final banco = ref.watch(bancoProvider);
+  final sons = Sons()
+    ..silencioso = banco.lerConfig(Config.sons) == '0'
+    ..vibrar = banco.lerConfig(Config.vibracao) != '0';
   ref.onDispose(sons.dispose);
   return sons;
 });

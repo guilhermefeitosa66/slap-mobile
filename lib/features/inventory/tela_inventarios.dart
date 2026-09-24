@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../sync/entrar_inventario.dart';
+import 'acoes_inventario.dart';
 
 /// Lista dos inventários que existem neste aparelho.
 class TelaInventarios extends ConsumerWidget {
@@ -16,19 +20,35 @@ class TelaInventarios extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventários'),
+        toolbarHeight: 72,
+        title: Text(
+          'Inventários',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
         actions: [
-          IconButton(
-            tooltip: 'Meus dados',
+          IconButton.outlined(
+            tooltip: 'Meus dados e ajustes',
             icon: const Icon(Icons.person_outline),
-            onPressed: () => context.push('/identidade?inicial=false'),
+            style: IconButton.styleFrom(
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerLowest,
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () => context.push('/ajustes'),
           ),
+          const SizedBox(width: 12),
         ],
       ),
       body: inventarios.isEmpty
           ? const _Vazio()
           : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 160),
               itemCount: inventarios.length,
               itemBuilder: (context, i) {
                 final inv = inventarios[i];
@@ -39,9 +59,20 @@ class TelaInventarios extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          FloatingActionButton.small(
+          FloatingActionButton(
             heroTag: 'entrar',
-            tooltip: 'Entrar em um inventário',
+            tooltip: 'Entrar em um inventário lendo o QR code',
+            elevation: 1,
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerLowest,
+            foregroundColor: Theme.of(context).colorScheme.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
             onPressed: () => entrarEmInventario(context, ref),
             child: const Icon(Icons.qr_code_scanner),
           ),
@@ -71,7 +102,10 @@ class TelaInventarios extends ConsumerWidget {
   Future<void> _criar(BuildContext context, WidgetRef ref) async {
     final dados = await showDialog<({String nome, int ano})>(
       context: context,
-      builder: (_) => const _DialogoNovoInventario(),
+      builder: (_) => const DialogoInventario(
+        titulo: 'Novo inventário',
+        rotuloConfirmar: 'Criar',
+      ),
     );
     if (dados == null || !context.mounted) return;
 
@@ -80,7 +114,7 @@ class TelaInventarios extends ConsumerWidget {
         .criar(nome: dados.nome, ano: dados.ano);
     ref.read(revisaoProvider.notifier).mudou();
 
-    if (context.mounted) context.push('/inventario/${inv.id}/importar');
+    if (context.mounted) await context.push('/inventario/${inv.id}/importar');
   }
 }
 
@@ -96,59 +130,75 @@ class _CartaoInventario extends ConsumerWidget {
 
     final progresso = ref.watch(progressoProvider(inventarioId));
     final conflitos = ref.watch(conflitosPendentesProvider(inventarioId));
+    final tema = Theme.of(context);
+    final erro = CoresResultado.of(context).naoLocalizado.texto;
+
+    final situacao = progresso.total == 0
+        ? 'Sem patrimônios importados'
+        : '${formatarInteiro(progresso.verificados)} de '
+              '${formatarInteiro(progresso.total)} · '
+              '${progresso.concluido ? 'concluído' : '${formatarPercentual(progresso.percentual)}%'}'
+              '${inv.encerrado ? ' · encerrado' : ''}';
 
     return Card(
       child: InkWell(
         onTap: () => context.push('/inventario/$inventarioId'),
-        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
                 children: [
                   Expanded(
-                    child: Text(
-                      inv.nome,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    child: Text(inv.nome, style: tema.textTheme.titleMedium),
                   ),
+                  const SizedBox(width: 10),
                   Text(
                     '${inv.ano}',
-                    style: Theme.of(context).textTheme.labelLarge,
+                    style: tema.textTheme.titleMedium?.copyWith(
+                      fontSize: 15,
+                      color: tema.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              LinearProgressIndicator(
-                value: progresso.total == 0 ? 0 : progresso.percentual / 100,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
+              const SizedBox(height: 14),
+              BarraProgresso(
+                valor: progresso.total == 0 ? 0 : progresso.percentual / 100,
               ),
-              const SizedBox(height: 8),
-              Text(
-                progresso.total == 0
-                    ? 'Sem patrimônios importados'
-                    : '${progresso.verificados} de ${progresso.total} '
-                          '(${progresso.percentual.toStringAsFixed(1)}%)',
-                style: Theme.of(context).textTheme.bodySmall,
+              const SizedBox(height: 9),
+              Row(
+                children: [
+                  if (inv.encerrado) ...[
+                    Icon(
+                      Icons.lock_outline,
+                      size: 15,
+                      color: tema.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Expanded(
+                    child: Text(situacao, style: tema.textTheme.bodySmall),
+                  ),
+                ],
               ),
               if (conflitos > 0) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
                   children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$conflitos ${conflitos == 1 ? 'conflito' : 'conflitos'} '
-                      'para conferir',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    Icon(Icons.warning_amber_rounded, size: 18, color: erro),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        '$conflitos ${conflitos == 1 ? 'conflito' : 'conflitos'} '
+                        'para conferir',
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: erro,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ],
@@ -193,85 +243,6 @@ class _Vazio extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DialogoNovoInventario extends StatefulWidget {
-  const _DialogoNovoInventario();
-
-  @override
-  State<_DialogoNovoInventario> createState() => _DialogoNovoInventarioState();
-}
-
-class _DialogoNovoInventarioState extends State<_DialogoNovoInventario> {
-  final _formulario = GlobalKey<FormState>();
-  final _nome = TextEditingController();
-  late final _ano = TextEditingController(text: '${DateTime.now().year}');
-
-  @override
-  void dispose() {
-    _nome.dispose();
-    _ano.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Novo inventário'),
-      content: Form(
-        key: _formulario,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _nome,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Nome',
-                hintText: 'Campus Picos — Biblioteca',
-                // Nome + ano não são chave única: a mesma unidade pode ter
-                // vários processos no mesmo ano.
-                helperText: 'Texto livre. Pode repetir no mesmo ano.',
-                helperMaxLines: 2,
-              ),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Informe um nome' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _ano,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Ano'),
-              validator: (v) {
-                final ano = int.tryParse(v ?? '');
-                if (ano == null || ano < 1990 || ano > 2100) {
-                  return 'Ano inválido';
-                }
-                return null;
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (!_formulario.currentState!.validate()) return;
-            Navigator.pop(context, (
-              nome: _nome.text.trim(),
-              ano: int.parse(_ano.text),
-            ));
-          },
-          child: const Text('Criar'),
-        ),
-      ],
     );
   }
 }

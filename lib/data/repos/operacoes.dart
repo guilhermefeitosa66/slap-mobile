@@ -109,6 +109,52 @@ class Operacao {
   );
 }
 
+/// Dois aparelhos escrevendo com o mesmo `dispositivo_id`.
+///
+/// Acontece quando os dados do aplicativo são copiados de um celular para
+/// outro por fora dele — backup do sistema, cópia de pastas. A numeração das
+/// operações deixa de identificar quem escreveu o quê, e a sincronização é
+/// recusada para não misturar as duas histórias. Ver
+/// `docs/copia-de-seguranca.md`.
+class IdentidadeDuplicada implements Exception {
+  final String dispositivo;
+
+  /// A identidade duplicada é a deste aparelho.
+  final bool esteAparelho;
+
+  IdentidadeDuplicada(this.dispositivo, {required this.esteAparelho});
+
+  @override
+  String toString() => esteAparelho
+      ? 'Outro aparelho está usando a identidade deste. Isso acontece quando '
+            'os dados do aplicativo são copiados de um celular para outro. A '
+            'sincronização foi recusada para não misturar o trabalho dos dois.'
+      : 'Dois aparelhos estão usando a mesma identidade '
+            '(${dispositivo.substring(0, 6)}). Isso acontece quando os dados '
+            'do aplicativo são copiados de um celular para outro. A '
+            'sincronização foi recusada para não misturar o trabalho dos dois.';
+}
+
+/// Trabalho deste aparelho que ainda não está em nenhum outro.
+class TrabalhoNaoEntregue {
+  /// Algum outro aparelho já sincronizou este inventário com este.
+  final bool jaSincronizou;
+
+  /// Operações deste aparelho que nenhum par confirmou ter.
+  final int operacoes;
+
+  /// Itens verificados por este aparelho cuja verificação nenhum par tem.
+  final int verificacoes;
+
+  const TrabalhoNaoEntregue({
+    required this.jaSincronizou,
+    required this.operacoes,
+    required this.verificacoes,
+  });
+
+  bool get nada => operacoes == 0;
+}
+
 /// Resultado de aplicar um lote de operações recebidas de outro aparelho.
 class ResultadoAplicacao {
   final int aplicadas;
@@ -179,7 +225,94 @@ class RepositorioOperacoes {
       'WHERE inventario_id = ? AND dispositivo = ?',
       [inventarioId, dispositivoId],
     );
-    return (r.first['s'] as int) + 1;
+    final noLog = r.first['s'] as int;
+    // Se a réplica foi apagada, a numeração continua de onde parou: os pares
+    // ainda guardam as operações antigas, e reusar um número faria a nova
+    // ser tomada pela velha.
+    final piso =
+        int.tryParse(banco.lerConfig(Config.seqMinimo(inventarioId)) ?? '') ??
+        0;
+    return (noLog > piso ? noLog : piso) + 1;
+  }
+
+  /// A última operação que este aparelho tem de cada aparelho do inventário.
+  ///
+  /// Vai junto nos pedidos de sincronização para o par conferir que, na mesma
+  /// posição da sequência de um aparelho, os dois têm a mesma operação. Se não
+  /// têm, dois aparelhos escreveram com a mesma identidade — e o vetor, que só
+  /// conta posições, não perceberia.
+  Map<String, ({int seq, String opId})> cabecas(String inventarioId) {
+    final linhas = _db.select(
+      'SELECT o.dispositivo, o.seq, o.op_id FROM ops o '
+      'JOIN (SELECT dispositivo, MAX(seq) AS s FROM ops '
+      '      WHERE inventario_id = ?1 GROUP BY dispositivo) m '
+      'ON m.dispositivo = o.dispositivo AND m.s = o.seq '
+      'WHERE o.inventario_id = ?1',
+      [inventarioId],
+    );
+    return {
+      for (final l in linhas)
+        l['dispositivo'] as String: (
+          seq: l['seq'] as int,
+          opId: l['op_id'] as String,
+        ),
+    };
+  }
+
+  /// Lança [IdentidadeDuplicada] se o par tem, em alguma posição que também
+  /// temos, uma operação diferente da nossa.
+  void conferirCabecas(
+    String inventarioId,
+    Map<String, ({int seq, String opId})> doPar,
+  ) {
+    for (final MapEntry(key: dispositivo, value: cabeca) in doPar.entries) {
+      final nossa = _db.select(
+        'SELECT op_id FROM ops WHERE inventario_id = ? AND dispositivo = ? '
+        'AND seq = ?',
+        [inventarioId, dispositivo, cabeca.seq],
+      );
+      if (nossa.isNotEmpty && nossa.first['op_id'] != cabeca.opId) {
+        throw IdentidadeDuplicada(
+          dispositivo,
+          esteAparelho: dispositivo == dispositivoId,
+        );
+      }
+    }
+  }
+
+  /// O que este aparelho tem do inventário, para pedir a um par o que falta.
+  ///
+  /// Igual a [vetorDe], exceto pela entrada deste aparelho, que só conta a
+  /// parte contígua da sequência. Depois de apagar a réplica e voltar a
+  /// escrever, as operações antigas deste aparelho faltam no começo; pedir
+  /// pelo máximo faria o par achar que já temos tudo, e elas nunca voltariam.
+  VersionVector vetorParaPedido(String inventarioId) {
+    final vetor = vetorDe(inventarioId);
+    final maximo = vetor[dispositivoId];
+    if (maximo == 0) return vetor;
+
+    final quantas =
+        _db.select(
+              'SELECT COUNT(*) AS n FROM ops '
+              'WHERE inventario_id = ? AND dispositivo = ?',
+              [inventarioId, dispositivoId],
+            ).first['n']
+            as int;
+    if (quantas == maximo) return vetor;
+
+    var contiguo = 0;
+    for (final l in _db.select(
+      'SELECT seq FROM ops WHERE inventario_id = ? AND dispositivo = ? '
+      'ORDER BY seq',
+      [inventarioId, dispositivoId],
+    )) {
+      if (l['seq'] != contiguo + 1) break;
+      contiguo++;
+    }
+    return VersionVector({
+      for (final d in vetor.dispositivos) d: vetor[d],
+      dispositivoId: contiguo,
+    });
   }
 
   /// Contexto causal corrente: o que sabemos dos **outros** aparelhos.
@@ -353,20 +486,27 @@ class RepositorioOperacoes {
       final ordenadas = [...ops]..sort((a, b) => a.hlc.compareTo(b.hlc));
 
       for (final op in ordenadas) {
-        if (op.dispositivo == dispositivoId) {
-          // Nossa própria operação, voltando por um terceiro. Já a temos.
+        final jaTemos = _db.select(
+          'SELECT op_id FROM ops WHERE inventario_id = ? AND dispositivo = ? AND seq = ?',
+          [op.inventarioId, op.dispositivo, op.seq],
+        );
+        if (jaTemos.isNotEmpty) {
+          // A mesma posição na sequência de um aparelho com outra operação:
+          // dois aparelhos estão escrevendo com a mesma identidade. Aceitar
+          // misturaria as duas histórias sem ninguém perceber.
+          if (jaTemos.first['op_id'] != op.opId) {
+            throw IdentidadeDuplicada(
+              op.dispositivo,
+              esteAparelho: op.dispositivo == dispositivoId,
+            );
+          }
           ignoradas++;
           continue;
         }
 
-        final jaTemos = _db.select(
-          'SELECT 1 FROM ops WHERE inventario_id = ? AND dispositivo = ? AND seq = ?',
-          [op.inventarioId, op.dispositivo, op.seq],
-        );
-        if (jaTemos.isNotEmpty) {
-          ignoradas++;
-          continue;
-        }
+        // Operação deste próprio aparelho que não está aqui: a réplica foi
+        // apagada e o histórico está voltando pelos pares, ou por uma cópia
+        // de segurança. Entra como qualquer outra.
 
         _absorverHlc(op.hlc);
         _gravarOp(op);
@@ -427,6 +567,7 @@ class RepositorioOperacoes {
       case RelacaoCausal.anterior:
         // Quem escreveu já conhecia o valor que está aqui: é atualização.
         _gravarCampo(op);
+        _encerrarConflitosSuperados(op);
         return false;
 
       case RelacaoCausal.posterior:
@@ -455,6 +596,36 @@ class RepositorioOperacoes {
     }
   }
 
+  /// Encerra os conflitos do campo que [op] superou.
+  ///
+  /// Quem escreveu conhecendo as duas escritas concorrentes já decidiu — seja
+  /// pela tela de conflitos, seja relendo o item. É o que faz uma resolução
+  /// valer em todas as réplicas: sem isto, o conflito seguiria pendente em
+  /// todo aparelho que não fosse o de quem resolveu.
+  void _encerrarConflitosSuperados(Operacao op) {
+    final pendentes = _db.select(
+      'SELECT c.id, v.dispositivo AS vd, v.seq AS vs, '
+      'p.dispositivo AS pd, p.seq AS ps FROM conflitos c '
+      'JOIN ops v ON v.op_id = c.op_vencedora '
+      'JOIN ops p ON p.op_id = c.op_perdedora '
+      'WHERE c.patrimonio_id = ? AND c.campo = ? AND c.resolvido_em IS NULL',
+      [op.entidadeId, op.campo],
+    );
+    if (pendentes.isEmpty) return;
+
+    final conhecia = contexto(op.ctxId).com(op.dispositivo, op.seq);
+    for (final c in pendentes) {
+      if (conhecia.conhece(c['vd'] as String, c['vs'] as int) &&
+          conhecia.conhece(c['pd'] as String, c['ps'] as int)) {
+        _db.execute(
+          'UPDATE conflitos SET resolvido_em = ?, resolvido_por_op = ? '
+          'WHERE id = ?',
+          [DateTime.now().millisecondsSinceEpoch, op.opId, c['id']],
+        );
+      }
+    }
+  }
+
   void _gravarCampo(Operacao op) {
     _db.execute(
       'INSERT INTO campos_patrimonio '
@@ -477,10 +648,31 @@ class RepositorioOperacoes {
     );
   }
 
+  /// Aplica um campo do inventário, se a operação for a mais nova dele.
+  ///
+  /// Last-writer-wins pelo HLC, igual em todas as réplicas. Operação antiga
+  /// chegando depois fica no log e não altera nada — é o que impede, por
+  /// exemplo, um aparelho que sincronizou tarde de reabrir um inventário
+  /// encerrado.
   void _aplicarCampoInventario(Operacao op) {
     const permitidos = {'nome', 'ano', 'eds_excluidos', 'encerrado_em'};
     if (!permitidos.contains(op.campo)) return;
 
+    final vigente = _db.select(
+      'SELECT hlc FROM campos_inventario WHERE inventario_id = ? AND campo = ?',
+      [op.entidadeId, op.campo],
+    );
+    if (vigente.isNotEmpty &&
+        Hlc.decodificar(vigente.first['hlc'] as String) >= op.hlc) {
+      return;
+    }
+
+    _db.execute(
+      'INSERT INTO campos_inventario (inventario_id, campo, valor, hlc, op_id) '
+      'VALUES (?,?,?,?,?) ON CONFLICT(inventario_id, campo) DO UPDATE SET '
+      'valor = excluded.valor, hlc = excluded.hlc, op_id = excluded.op_id',
+      [op.entidadeId, op.campo, op.valor, op.hlc.codificar(), op.opId],
+    );
     _db.execute('UPDATE inventarios SET ${op.campo} = ? WHERE id = ?', [
       op.valor,
       op.entidadeId,
@@ -654,6 +846,95 @@ class RepositorioOperacoes {
       [patrimonioId],
     );
     return linhas.map(Operacao.doBanco).toList();
+  }
+
+  // ------------------------------------------------------------------ pares ---
+
+  /// Registra um encontro com outro aparelho neste inventário.
+  ///
+  /// [nossoSeq] é até onde as operações *deste* aparelho estão comprovadamente
+  /// no par — o que ele declarou ter, ou o que aceitou num envio. Só cresce:
+  /// um encontro não desfaz o que o anterior entregou.
+  void registrarPar(
+    String dispositivo,
+    String inventarioId, {
+    int nossoSeq = 0,
+    String? usuarioNome,
+  }) {
+    _db.execute(
+      'INSERT INTO pares (dispositivo, inventario_id, usuario_nome, '
+      'ultima_sync, nosso_seq) VALUES (?,?,?,?,?) '
+      'ON CONFLICT(dispositivo, inventario_id) DO UPDATE SET '
+      'ultima_sync = excluded.ultima_sync, '
+      'usuario_nome = COALESCE(excluded.usuario_nome, pares.usuario_nome), '
+      'nosso_seq = MAX(pares.nosso_seq, excluded.nosso_seq)',
+      [
+        dispositivo,
+        inventarioId,
+        usuarioNome,
+        DateTime.now().millisecondsSinceEpoch,
+        nossoSeq,
+      ],
+    );
+  }
+
+  /// O que se perde apagando a réplica local: o trabalho deste aparelho que
+  /// nenhum outro recebeu.
+  ///
+  /// Conservador de propósito — conta como não entregue o que o par ainda
+  /// não confirmou ter. Avisar a mais custa uma pergunta; avisar a menos
+  /// custa o levantamento de um dia.
+  TrabalhoNaoEntregue trabalhoNaoEntregue(String inventarioId) {
+    final par = _db.select(
+      'SELECT COUNT(*) AS n, COALESCE(MAX(nosso_seq), 0) AS s FROM pares '
+      'WHERE inventario_id = ?',
+      [inventarioId],
+    ).first;
+    final entregue = par['s'] as int;
+
+    final operacoes =
+        _db.select(
+              'SELECT COUNT(*) AS n FROM ops '
+              'WHERE inventario_id = ? AND dispositivo = ? AND seq > ?',
+              [inventarioId, dispositivoId, entregue],
+            ).first['n']
+            as int;
+
+    final verificacoes =
+        _db.select(
+              'SELECT COUNT(*) AS n FROM campos_patrimonio c '
+              'JOIN patrimonios p ON p.id = c.patrimonio_id '
+              'WHERE p.inventario_id = ? AND c.campo = ? AND c.valor = ? '
+              'AND c.dispositivo = ? AND c.seq > ?',
+              [
+                inventarioId,
+                CampoPatrimonio.verificado,
+                '1',
+                dispositivoId,
+                entregue,
+              ],
+            ).first['n']
+            as int;
+
+    return TrabalhoNaoEntregue(
+      jaSincronizou: (par['n'] as int) > 0,
+      operacoes: operacoes,
+      verificacoes: verificacoes,
+    );
+  }
+
+  /// Quando este aparelho gravou pela última vez neste inventário.
+  ///
+  /// Serve para perceber que a pessoa voltou depois de horas — no dia
+  /// seguinte, talvez em outra sala — sem gravar nada a mais a cada leitura.
+  DateTime? ultimaEscritaLocal(String inventarioId) {
+    final r = _db.select(
+      'SELECT MAX(criado_em) AS m FROM ops '
+      'WHERE inventario_id = ? AND dispositivo = ?',
+      [inventarioId, dispositivoId],
+    );
+    final m = r.first['m'] as int?;
+    return m == null ? null : DateTime.fromMillisecondsSinceEpoch(m);
   }
 
   /// Últimas alterações do inventário inteiro.

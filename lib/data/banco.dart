@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
+import '../domain/valores.dart';
 import 'schema.dart';
 
 /// Abertura e configuração do banco local.
@@ -16,7 +17,13 @@ import 'schema.dart';
 class Banco {
   final Database db;
 
-  Banco._(this.db);
+  /// Arquivo do banco, ou `null` quando em memória.
+  ///
+  /// É o que permite abrir uma segunda conexão num isolate — a importação de
+  /// planilha grava lá, sem travar a interface.
+  final String? caminho;
+
+  Banco._(this.db, {this.caminho});
 
   static Banco? _instancia;
   static Banco get instancia {
@@ -35,11 +42,16 @@ class Banco {
       await Directory(File(arquivo).parent.path).create(recursive: true);
     }
 
+    return abrirSincrono(arquivo);
+  }
+
+  /// Abre o banco num arquivo conhecido, sem esperar nada da plataforma.
+  static Banco abrirSincrono(String arquivo) {
     final db = sqlite3.open(arquivo);
     _configurar(db);
     _migrar(db);
 
-    final banco = Banco._(db);
+    final banco = Banco._(db, caminho: arquivo);
     banco._garantirIdentidade();
     _instancia = banco;
     return banco;
@@ -64,7 +76,22 @@ class Banco {
     // de segundos, e o dado perdido no pior caso é recuperável por sincronia.
     db.execute('PRAGMA synchronous = NORMAL');
     db.execute('PRAGMA foreign_keys = ON');
+    // Com a importação gravando por uma segunda conexão, a primeira pode
+    // encontrar o banco ocupado. Esperar alguns segundos é melhor que falhar
+    // uma leitura no meio do levantamento.
+    db.execute('PRAGMA busy_timeout = 10000');
     db.execute('PRAGMA temp_store = MEMORY');
+
+    // A comparação de texto do domínio (caixa, acento e espaço ignorados),
+    // disponível no SQL. É o que permite separar OK de divergente numa
+    // consulta — e, com isso, paginar e contar sem trazer as linhas todas
+    // para o Dart.
+    db.createFunction(
+      functionName: 'forma_comparavel',
+      argumentCount: const AllowedArgumentCount(1),
+      deterministic: true,
+      function: (argumentos) => formaComparavel(argumentos[0]?.toString()),
+    );
   }
 
   static void _migrar(Database db) {
@@ -73,12 +100,11 @@ class Banco {
 
     db.execute('BEGIN');
     try {
-      if (atual == 0) {
-        for (final ddl in ddlEsquema) {
+      for (var versao = atual + 1; versao <= versaoEsquema; versao++) {
+        for (final ddl in migracoes[versao]!) {
           db.execute(ddl);
         }
       }
-      // Migrações futuras entram aqui, comparando `atual`.
 
       db.execute('PRAGMA user_version = $versaoEsquema');
       db.execute('COMMIT');
@@ -123,7 +149,27 @@ class Banco {
   /// Sem isto, uma falha no meio da importação deixaria o inventário pela
   /// metade — exatamente o que acontece no SLAP, que insere linha a linha sem
   /// transação depois de já ter apagado as anteriores.
+  ///
+  /// Dentro de outra transação vira um savepoint: a restauração de uma cópia
+  /// aplica vários lotes, cada um transacional, e o conjunto também precisa
+  /// entrar inteiro ou não entrar.
   T transacao<T>(T Function() acao) {
+    if (!db.autocommit) {
+      final ponto = 'ponto_${_savepoints++}';
+      db.execute('SAVEPOINT $ponto');
+      try {
+        final resultado = acao();
+        db.execute('RELEASE $ponto');
+        return resultado;
+      } catch (_) {
+        db.execute('ROLLBACK TO $ponto');
+        db.execute('RELEASE $ponto');
+        rethrow;
+      } finally {
+        _savepoints--;
+      }
+    }
+
     db.execute('BEGIN');
     try {
       final resultado = acao();
@@ -135,8 +181,10 @@ class Banco {
     }
   }
 
+  int _savepoints = 0;
+
   void fechar() {
-    db.dispose();
+    db.close();
     if (identical(_instancia, this)) _instancia = null;
   }
 }

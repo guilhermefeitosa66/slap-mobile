@@ -33,10 +33,10 @@ class Sons {
     if (_pronto) return;
 
     for (final som in Som.values) {
-      final tocador = AudioPlayer()
-        ..setReleaseMode(ReleaseMode.stop)
-        ..setPlayerMode(PlayerMode.lowLatency);
+      final tocador = AudioPlayer();
       try {
+        await tocador.setReleaseMode(ReleaseMode.stop);
+        await tocador.setPlayerMode(PlayerMode.lowLatency);
         await tocador.setSource(AssetSource(som.arquivo));
       } catch (_) {
         // Sem áudio, o levantamento continua pela indicação visual e pela

@@ -6,6 +6,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
+import '../../domain/divergencia.dart';
 import 'relatorios.dart';
 
 /// Exportação dos resultados.
@@ -87,17 +90,21 @@ class _TelaRelatoriosState extends ConsumerState<TelaRelatorios> {
           if (_gerando) const LinearProgressIndicator(),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
               children: [
                 if (progresso.pendentes > 0)
-                  Card(
-                    color: Theme.of(context).colorScheme.secondaryContainer,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        'Ainda há ${progresso.pendentes} patrimônios não '
-                        'verificados. Se o inventário não terminou, eles vão '
-                        'aparecer como não localizados.',
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: CoresResultado.of(context).jaVerificado.fundo,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      'Ainda há ${formatarInteiro(progresso.pendentes)} '
+                      'patrimônios não verificados. Se o inventário não '
+                      'terminou, eles vão aparecer como não localizados.',
+                      style: TextStyle(
+                        color: CoresResultado.of(context).jaVerificado.texto,
                       ),
                     ),
                   ),
@@ -159,10 +166,13 @@ class _TelaRelatoriosState extends ConsumerState<TelaRelatorios> {
     );
   }
 
-  String _quantidade(TipoRelatorio tipo, progresso) => switch (tipo) {
-    TipoRelatorio.ok => '${progresso.ok} itens',
-    TipoRelatorio.divergencias => '${progresso.divergentes} itens',
-    TipoRelatorio.naoLocalizados => '${progresso.naoLocalizados} itens',
-    TipoRelatorio.completo => '${progresso.total} itens',
-  };
+  String _quantidade(TipoRelatorio tipo, ProgressoInventario progresso) =>
+      switch (tipo) {
+        TipoRelatorio.ok => '${formatarInteiro(progresso.ok)} itens',
+        TipoRelatorio.divergencias =>
+          '${formatarInteiro(progresso.divergentes)} itens',
+        TipoRelatorio.naoLocalizados =>
+          '${formatarInteiro(progresso.naoLocalizados)} itens',
+        TipoRelatorio.completo => '${formatarInteiro(progresso.total)} itens',
+      };
 }

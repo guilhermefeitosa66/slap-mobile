@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/app.dart';
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
+import '../../data/banco.dart';
 import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
+import '../../data/schema.dart';
 import '../../domain/patrimonio.dart';
 import 'configuracao_sheet.dart';
 import 'estado_levantamento.dart';
+import 'linha_leitura.dart';
+import 'manter_tela_ligada.dart';
 import 'tela_camera.dart';
 
 /// A tela do levantamento.
@@ -37,9 +43,16 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   /// informação de quem verificou antes.
   Patrimonio? _aguardandoConfirmacao;
 
+  /// Guardado na abertura: no `dispose` o `ref` já não pode ser usado.
+  late final Banco _banco;
+
   @override
   void initState() {
     super.initState();
+    // Se o Android encerrar o aplicativo com o levantamento aberto — com a
+    // câmera, em aparelho com pouca memória, é comum —, ele reabre aqui.
+    _banco = ref.read(bancoProvider)
+      ..gravarConfig(Config.levantamentoAberto, widget.inventarioId);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _garantirConfiguracao(),
     );
@@ -47,6 +60,8 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
   @override
   void dispose() {
+    // Saída normal: da próxima vez o aplicativo abre na lista.
+    _banco.apagarConfig(Config.levantamentoAberto);
     _campo.dispose();
     _foco.dispose();
     super.dispose();
@@ -54,8 +69,25 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
   /// Sem sala definida não há o que aplicar às leituras, então a configuração
   /// aparece antes da tela ficar utilizável.
+  ///
+  /// Com sala definida, mas sem leitura há horas, a sala é confirmada antes:
+  /// quem volta no dia seguinte provavelmente está em outro lugar.
   Future<void> _garantirConfiguracao() async {
-    if (ref.read(configuracaoProvider(widget.inventarioId)) != null) {
+    // Encerrado, a tela só explica o bloqueio: não há sala a configurar.
+    if (_encerrado) return;
+
+    final atual = ref.read(configuracaoProvider(widget.inventarioId));
+    if (atual != null) {
+      final ultima = ref
+          .read(operacoesProvider)
+          .ultimaEscritaLocal(widget.inventarioId);
+      if (precisaConfirmarSala(
+        config: atual,
+        ultimaLeitura: ultima,
+        agora: DateTime.now(),
+      )) {
+        await _confirmarSala(atual, ultima);
+      }
       _devolverFoco();
       return;
     }
@@ -70,6 +102,43 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     _devolverFoco();
   }
 
+  Future<void> _confirmarSala(
+    ConfiguracaoLevantamento config,
+    DateTime? ultima,
+  ) async {
+    final referencia = ultima ?? config.desde;
+    final continuar = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (contexto) => AlertDialog(
+        title: Text('Ainda em ${config.sala}?'),
+        content: Text(
+          '${referencia == null ? 'Faz tempo que nada é lido neste aparelho.' : 'A última leitura neste aparelho foi ${descreverMomento(referencia)}.'} '
+          'Confirme a sala antes de continuar: a sala errada vai para todos '
+          'os itens lidos em seguida.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(contexto, false),
+            child: const Text('Mudar de sala'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(contexto, true),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+            child: Text('Continuar em ${config.sala}'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+
+    if (continuar == true) {
+      ref.read(configuracoesProvider.notifier).reconfirmar(widget.inventarioId);
+    } else {
+      await abrirConfiguracao(context, ref, widget.inventarioId);
+    }
+  }
+
   /// Devolve o foco ao campo depois de cada leitura.
   ///
   /// É o que permite o leitor externo funcionar em fluxo contínuo: o aparelho
@@ -80,9 +149,15 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     FocusScope.of(context).requestFocus(_foco);
   }
 
+  /// O inventário foi encerrado — aqui ou em outro aparelho, chegando por
+  /// sincronização com a tela aberta.
+  bool get _encerrado =>
+      ref.read(inventarioProvider(widget.inventarioId))?.encerrado ?? false;
+
   Future<void> _processar(String codigo) async {
     final texto = codigo.trim();
     _campo.clear();
+    if (_encerrado) return;
 
     if (texto.isEmpty) {
       _devolverFoco();
@@ -147,6 +222,7 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     ref
         .read(historicosProvider.notifier)
         .registrar(widget.inventarioId, leitura);
+    if (mounted) anunciarLeitura(context, leitura);
     if (leitura.resultado != ResultadoLeitura.jaVerificado) {
       setState(() => _aguardandoConfirmacao = null);
     }
@@ -161,20 +237,16 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     await ref.read(sonsProvider).tocar(Som.sucesso);
 
     setState(() => _aguardandoConfirmacao = null);
-    ref
-        .read(historicosProvider.notifier)
-        .registrar(
-          widget.inventarioId,
-
-          LeituraRegistrada(
-            leitura: Leitura(
-              resultado: ResultadoLeitura.sucesso,
-              patrimonio: patrimonio,
-            ),
-            codigoLido: patrimonio.tombo,
-            depois: depois,
-          ),
-        );
+    _registrar(
+      LeituraRegistrada(
+        leitura: Leitura(
+          resultado: ResultadoLeitura.sucesso,
+          patrimonio: patrimonio,
+        ),
+        codigoLido: patrimonio.tombo,
+        depois: depois,
+      ),
+    );
     _devolverFoco();
   }
 
@@ -192,105 +264,157 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
   @override
   Widget build(BuildContext context) {
+    final inventario = ref.watch(inventarioProvider(widget.inventarioId));
+    if (inventario?.encerrado ?? false) {
+      return const LevantamentoEncerrado();
+    }
+
     final config = ref.watch(configuracaoProvider(widget.inventarioId));
     final modo = ref.watch(modoLeituraProvider);
     final historico = ref.watch(historicoProvider(widget.inventarioId));
     final progresso = ref.watch(progressoProvider(widget.inventarioId));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Levantamento'),
-        actions: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Text(
-                '${progresso.verificados}/${progresso.total}',
-                style: Theme.of(context).textTheme.titleMedium,
+    return ManterTelaLigada(
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Levantamento'),
+          actions: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Semantics(
+                  label:
+                      '${progresso.verificados} de ${progresso.total} verificados',
+                  excludeSemantics: true,
+                  child: Text.rich(
+                    TextSpan(
+                      text: formatarInteiro(progresso.verificados),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: '/${formatarInteiro(progresso.total)}',
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (config != null)
-            BarraConfiguracao(
-              config: config,
-              aoTocar: () async {
-                await abrirConfiguracao(context, ref, widget.inventarioId);
+          ],
+        ),
+        body: Column(
+          children: [
+            if (config != null)
+              BarraConfiguracao(
+                config: config,
+                aoTocar: () async {
+                  await abrirConfiguracao(context, ref, widget.inventarioId);
+                  _devolverFoco();
+                },
+              ),
+            _SeletorModo(
+              modo: modo,
+              aoMudar: (novo) {
+                ref.read(modoLeituraProvider.notifier).definir(novo);
                 _devolverFoco();
               },
             ),
-          _SeletorModo(
-            modo: modo,
-            aoMudar: (novo) {
-              ref.read(modoLeituraProvider.notifier).definir(novo);
-              _devolverFoco();
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _campo,
-                    focusNode: _foco,
-                    autofocus: true,
-                    // O teclado numérico cobre a digitação manual de tombo, e
-                    // o leitor externo entra como teclado de qualquer forma.
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.go,
-                    style: const TextStyle(fontSize: 22, letterSpacing: 1.5),
-                    decoration: InputDecoration(
-                      hintText: modo.rotulo,
-                      prefixIcon: const Icon(Icons.keyboard),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.arrow_forward),
-                        onPressed: () => _processar(_campo.text),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _campo,
+                      focusNode: _foco,
+                      autofocus: true,
+                      // O teclado numérico cobre a digitação manual de tombo, e
+                      // o leitor externo entra como teclado de qualquer forma.
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.go,
+                      style: estiloCodigo(
+                        context,
+                        tamanho: 22,
+                      ).copyWith(letterSpacing: 0.9),
+                      decoration: InputDecoration(
+                        hintText: modo.rotulo,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 14,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
+                          ),
+                        ),
+                        suffixIcon: IconButton(
+                          tooltip: 'Procurar',
+                          icon: const Icon(Icons.arrow_forward),
+                          onPressed: () => _processar(_campo.text),
+                        ),
+                      ),
+                      onSubmitted: _processar,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 56,
+                    width: 56,
+                    child: Tooltip(
+                      message: 'Abrir câmera',
+                      child: FilledButton(
+                        onPressed: _abrirCamera,
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(56, 56),
+                        ),
+                        child: const Icon(
+                          Icons.photo_camera_outlined,
+                          size: 26,
+                          semanticLabel: 'Abrir câmera',
+                        ),
                       ),
                     ),
-                    onSubmitted: _processar,
                   ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  height: 56,
-                  width: 56,
-                  child: FilledButton(
-                    onPressed: _abrirCamera,
-                    style: FilledButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(56, 56),
+                ],
+              ),
+            ),
+            if (_aguardandoConfirmacao != null)
+              _ConfirmarSobrescrita(
+                patrimonio: _aguardandoConfirmacao!,
+                aoConfirmar: _confirmarSobrescrita,
+                aoCancelar: () {
+                  setState(() => _aguardandoConfirmacao = null);
+                  _devolverFoco();
+                },
+              ),
+            const Divider(height: 1),
+            Expanded(
+              child: historico.isEmpty
+                  ? const _Instrucoes()
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: historico.length,
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, indent: 50),
+                      itemBuilder: (_, i) =>
+                          LinhaLeitura(registro: historico[i]),
                     ),
-                    child: const Icon(Icons.photo_camera),
-                  ),
-                ),
-              ],
             ),
-          ),
-          if (_aguardandoConfirmacao != null)
-            _ConfirmarSobrescrita(
-              patrimonio: _aguardandoConfirmacao!,
-              aoConfirmar: _confirmarSobrescrita,
-              aoCancelar: () {
-                setState(() => _aguardandoConfirmacao = null);
-                _devolverFoco();
-              },
-            ),
-          const Divider(height: 1),
-          Expanded(
-            child: historico.isEmpty
-                ? const _Instrucoes()
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: historico.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) => LinhaLeitura(registro: historico[i]),
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -305,89 +429,27 @@ class _SeletorModo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      child: SegmentedButton<ModoLeitura>(
-        segments: const [
-          ButtonSegment(
-            value: ModoLeitura.codigoBarras,
-            icon: Icon(Icons.barcode_reader),
-            label: Text('Cód. barras'),
-          ),
-          ButtonSegment(
-            value: ModoLeitura.tombo,
-            icon: Icon(Icons.tag),
-            label: Text('Tombo'),
-          ),
-        ],
-        selected: {modo},
-        onSelectionChanged: (s) => aoMudar(s.first),
-      ),
-    );
-  }
-}
-
-/// Uma leitura da sessão, com o resultado destacado.
-class LinhaLeitura extends StatelessWidget {
-  final LeituraRegistrada registro;
-
-  const LinhaLeitura({super.key, required this.registro});
-
-  @override
-  Widget build(BuildContext context) {
-    final (cor, icone, rotulo) = switch (registro.resultado) {
-      ResultadoLeitura.sucesso => (
-        CoresResultado.sucesso,
-        Icons.check_circle,
-        'Registrado',
-      ),
-      ResultadoLeitura.jaVerificado => (
-        CoresResultado.alerta,
-        Icons.replay_circle_filled,
-        'Já verificado',
-      ),
-      ResultadoLeitura.naoLocalizado => (
-        CoresResultado.erro,
-        Icons.error,
-        'Não localizado',
-      ),
-    };
-
-    final p = registro.patrimonio;
-
-    return ListTile(
-      dense: true,
-      leading: Icon(icone, color: cor),
-      title: Text(
-        p?.descricao ?? 'Código ${registro.codigoLido}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            p == null
-                ? rotulo
-                : 'Tombo ${p.tombo} · $rotulo'
-                      '${p.verificadoPor == null ? '' : ' por ${p.verificadoPor}'}',
-            style: TextStyle(color: cor),
-          ),
-          if (registro.leitura.achadoNoOutroCampo)
-            const Text(
-              'Encontrado no outro campo — cadastro inconsistente',
-              style: TextStyle(fontSize: 11),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<ModoLeitura>(
+          showSelectedIcon: false,
+          expandedInsets: EdgeInsets.zero,
+          segments: const [
+            ButtonSegment(
+              value: ModoLeitura.codigoBarras,
+              icon: IconeCodigoBarras(tamanho: 18),
+              label: Text('Cód. barras'),
             ),
-          if (registro.leitura.temDuplicados)
-            Text(
-              '${registro.leitura.duplicados} itens com este código',
-              style: const TextStyle(fontSize: 11),
+            ButtonSegment(
+              value: ModoLeitura.tombo,
+              icon: Icon(Icons.tag, size: 18),
+              label: Text('Tombo'),
             ),
-          if (p != null && p.ignorado)
-            const Text(
-              'Este item está fora do inventário (ED excluído)',
-              style: TextStyle(fontSize: 11),
-            ),
-        ],
+          ],
+          selected: {modo},
+          onSelectionChanged: (s) => aoMudar(s.first),
+        ),
       ),
     );
   }
@@ -406,36 +468,62 @@ class _ConfirmarSobrescrita extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).jaVerificado;
+    final tema = Theme.of(context);
+
     return Container(
-      width: double.infinity,
-      color: CoresResultado.alerta.withValues(alpha: 0.12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Tombo ${patrimonio.tombo} já foi verificado'
             '${patrimonio.verificadoPor == null ? '' : ' por ${patrimonio.verificadoPor}'}',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: tema.textTheme.titleSmall?.copyWith(
+              color: tom.texto,
+              fontSize: 14,
+            ),
           ),
           if (patrimonio.salaAtual != null)
-            Text('Registrado em: ${patrimonio.salaAtual}'),
-          const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Registrado em: ${patrimonio.salaAtual}',
+                style: tema.textTheme.bodyMedium?.copyWith(
+                  color: tom.texto,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: aoCancelar,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: tom.texto,
+                    side: BorderSide(
+                      color: tom.texto.withValues(alpha: 0.55),
+                      width: 1.5,
+                    ),
+                  ),
                   child: const Text('Manter'),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: FilledButton(
                   onPressed: aoConfirmar,
                   style: FilledButton.styleFrom(
-                    backgroundColor: CoresResultado.alerta,
-                    minimumSize: const Size.fromHeight(44),
+                    backgroundColor: tom.texto,
+                    foregroundColor: tom.fundo,
+                    minimumSize: const Size.fromHeight(alvoMinimo),
                   ),
                   child: const Text('Regravar'),
                 ),
@@ -459,10 +547,9 @@ class _Instrucoes extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.barcode_reader,
-              size: 56,
-              color: Theme.of(context).colorScheme.outline,
+            IconeCodigoBarras(
+              tamanho: 56,
+              cor: Theme.of(context).colorScheme.outline,
             ),
             const SizedBox(height: 16),
             const Text(
@@ -492,3 +579,52 @@ final atalhosLevantamento = <ShortcutActivator, Intent>{
   LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
       const AtalhoConfiguracao(),
 };
+
+/// O inventário está encerrado: nada a ler, e o porquê.
+///
+/// Usado pelo levantamento e pela câmera. Sai da árvore o campo de leitura e
+/// a câmera, e com eles o pedido de tela ligada.
+class LevantamentoEncerrado extends StatelessWidget {
+  const LevantamentoEncerrado({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Levantamento')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_outline,
+                size: 56,
+                color: tema.colorScheme.outline,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Inventário encerrado',
+                style: tema.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Nenhuma leitura é gravada enquanto ele estiver encerrado. '
+                'Para continuar o levantamento, reabra o inventário no painel.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                child: const Text('Voltar ao painel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

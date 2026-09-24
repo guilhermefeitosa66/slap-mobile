@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../app/app.dart';
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../app/tema.dart';
+import '../../core/formato.dart';
 import '../../domain/divergencia.dart';
 import '../../domain/patrimonio.dart';
 
@@ -19,34 +23,117 @@ class TelaItens extends ConsumerStatefulWidget {
 }
 
 class _TelaItensState extends ConsumerState<TelaItens> {
+  /// Itens por página. Uma tela de celular mostra uns dez; cem dão folga para
+  /// rolar rápido sem esperar a próxima página.
+  static const _tamanhoPagina = 100;
+
+  /// Espera depois da última tecla antes de buscar: digitar "cadeira" faz uma
+  /// consulta, não sete.
+  static const _esperaBusca = Duration(milliseconds: 250);
+
   late Classificacao? _filtro = widget.classificacao;
   final _busca = TextEditingController();
+  final _rolagem = ScrollController();
+  Timer? _atraso;
+
+  final _itens = <Patrimonio>[];
+  int _total = 0;
+  bool _fim = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _rolagem.addListener(_aoRolar);
+    _carregar(manterQuantidade: false);
+  }
 
   @override
   void dispose() {
+    _atraso?.cancel();
+    _rolagem.dispose();
     _busca.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    ref.watch(revisaoProvider);
+  /// Volta à primeira página, com o filtro e a busca atuais.
+  ///
+  /// [manterQuantidade] recarrega o que já estava na tela — é o caso de uma
+  /// alteração chegando, em que a lista não deve pular de volta ao topo.
+  void _recarregar({bool manterQuantidade = false}) =>
+      setState(() => _carregar(manterQuantidade: manterQuantidade));
 
-    final itens = ref
+  void _carregar({required bool manterQuantidade}) {
+    final quantidade = manterQuantidade && _itens.length > _tamanhoPagina
+        ? _itens.length
+        : _tamanhoPagina;
+    final repo = ref.read(patrimoniosProvider);
+    final pagina = repo.listar(
+      inventarioId: widget.inventarioId,
+      classificacao: _filtro,
+      busca: _busca.text,
+      limite: quantidade,
+    );
+    final total = repo.contar(
+      inventarioId: widget.inventarioId,
+      classificacao: _filtro,
+      busca: _busca.text,
+    );
+    _itens
+      ..clear()
+      ..addAll(pagina);
+    _total = total;
+    _fim = pagina.length >= total;
+  }
+
+  void _proximaPagina() {
+    if (_fim) return;
+    final pagina = ref
         .read(patrimoniosProvider)
         .listar(
           inventarioId: widget.inventarioId,
           classificacao: _filtro,
           busca: _busca.text,
-          limite: 500,
+          limite: _tamanhoPagina,
+          deslocamento: _itens.length,
         );
+    setState(() {
+      _itens.addAll(pagina);
+      _fim = pagina.length < _tamanhoPagina || _itens.length >= _total;
+    });
+  }
+
+  void _aoRolar() {
+    // A próxima página vem antes do fim, para a rolagem não bater no chão.
+    final posicao = _rolagem.position;
+    if (posicao.pixels > posicao.maxScrollExtent - 800) _proximaPagina();
+  }
+
+  void _aoDigitar(String _) {
+    _atraso?.cancel();
+    _atraso = Timer(_esperaBusca, () {
+      if (mounted) _recarregar();
+    });
+    setState(() {}); // o botão de limpar aparece e some
+  }
+
+  void _filtrar(Classificacao? c) {
+    _filtro = c;
+    _recarregar();
+    if (_rolagem.hasClients) _rolagem.jumpTo(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Operação nova — local ou vinda de outro aparelho — recarrega o que
+    // está na tela, sem perder a posição.
+    ref.listen(revisaoProvider, (_, _) => _recarregar(manterQuantidade: true));
 
     return Scaffold(
       appBar: AppBar(title: Text(_filtro?.rotulo ?? 'Patrimônios')),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
             child: TextField(
               controller: _busca,
               decoration: InputDecoration(
@@ -55,37 +142,56 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                 suffixIcon: _busca.text.isEmpty
                     ? null
                     : IconButton(
+                        tooltip: 'Limpar a busca',
                         icon: const Icon(Icons.clear),
-                        onPressed: () => setState(_busca.clear),
+                        onPressed: () {
+                          _busca.clear();
+                          _recarregar();
+                        },
                       ),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: _aoDigitar,
             ),
           ),
           SizedBox(
-            height: 48,
+            height: 56,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 _Filtro(
                   rotulo: 'Todos',
                   ativo: _filtro == null,
-                  aoTocar: () => setState(() => _filtro = null),
+                  aoTocar: () => _filtrar(null),
                 ),
                 for (final c in Classificacao.values)
                   _Filtro(
                     rotulo: c.rotulo,
                     ativo: _filtro == c,
-                    cor: CoresResultado.de(c),
-                    aoTocar: () => setState(() => _filtro = c),
+                    cor: CoresResultado.of(context).de(c).texto,
+                    aoTocar: () => _filtrar(c),
                   ),
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  _total == 1
+                      ? '1 patrimônio'
+                      : '${formatarInteiro(_total)} patrimônios',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+            ),
+          ),
           const Divider(height: 1),
           Expanded(
-            child: itens.isEmpty
+            child: _itens.isEmpty
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(32),
@@ -93,12 +199,34 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                     ),
                   )
                 : ListView.separated(
-                    itemCount: itens.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) => _LinhaPatrimonio(
-                      patrimonio: itens[i],
-                      aoTocar: () => _abrirDetalhe(itens[i]),
-                    ),
+                    controller: _rolagem,
+                    itemCount: _itens.length + (_fim ? 0 : 1),
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: 1, indent: 50),
+                    itemBuilder: (_, i) {
+                      if (i >= _itens.length) {
+                        // Chegou ao fim do que foi carregado sem o ouvinte de
+                        // rolagem disparar (lista curta que não rola).
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => mounted ? _proximaPagina() : null,
+                        );
+                        return const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: SizedBox.square(
+                              dimension: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      return _LinhaPatrimonio(
+                        patrimonio: _itens[i],
+                        aoTocar: () => _abrirDetalhe(_itens[i]),
+                      );
+                    },
                   ),
           ),
         ],
@@ -131,15 +259,37 @@ class _Filtro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
         label: Text(rotulo),
         selected: ativo,
+        showCheckmark: false,
+        labelStyle: TextStyle(
+          color: ativo ? esquema.onPrimary : esquema.onSurface,
+          fontWeight: ativo ? FontWeight.w600 : FontWeight.w500,
+        ),
+        side: BorderSide(
+          color: ativo ? esquema.primary : esquema.outlineVariant,
+        ),
         onSelected: (_) => aoTocar(),
         avatar: cor == null
             ? null
-            : CircleAvatar(backgroundColor: cor, radius: 6),
+            : ExcludeSemantics(
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: cor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: ativo ? esquema.onPrimary : Colors.transparent,
+                    ),
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -155,41 +305,71 @@ class _LinhaPatrimonio extends StatelessWidget {
   Widget build(BuildContext context) {
     final classificacao = classificar(patrimonio);
     final divergencias = divergenciasDe(patrimonio);
+    final tom = CoresResultado.of(context).de(classificacao);
+    final tema = Theme.of(context);
 
-    return ListTile(
-      leading: Icon(
-        CoresResultado.icone(classificacao),
-        color: CoresResultado.de(classificacao),
-      ),
-      title: Text(
-        patrimonio.descricao ?? 'Sem descrição',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Tombo ${patrimonio.tombo} · ${patrimonio.salaEfetiva ?? "sem sala"}',
-          ),
-          if (divergencias.isNotEmpty)
-            Text(
-              divergencias.map((d) => d.campo.rotulo).join(', '),
-              style: TextStyle(color: CoresResultado.alerta, fontSize: 12),
-            ),
-        ],
-      ),
-      trailing: patrimonio.exigeAtencao
-          ? Tooltip(
-              message: 'Requer providência',
-              child: Icon(
-                Icons.priority_high,
-                color: Theme.of(context).colorScheme.error,
-              ),
-            )
-          : null,
-      isThreeLine: divergencias.isNotEmpty,
+    return InkWell(
       onTap: aoTocar,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                CoresResultado.icone(classificacao),
+                color: tom.texto,
+                size: 22,
+                semanticLabel: classificacao.rotulo,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    patrimonio.descricao ?? 'Sem descrição',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tema.textTheme.bodyMedium?.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tombo ${patrimonio.tombo} · '
+                    '${patrimonio.salaEfetiva ?? "sem sala"}',
+                    style: tema.textTheme.bodySmall,
+                  ),
+                  if (divergencias.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(
+                        divergencias.map((d) => d.campo.rotulo).join(', '),
+                        style: tema.textTheme.bodySmall?.copyWith(
+                          color: tom.texto,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (patrimonio.exigeAtencao)
+              Tooltip(
+                message: 'Requer providência',
+                child: Icon(
+                  Icons.priority_high,
+                  color: tema.colorScheme.error,
+                  semanticLabel: 'Requer providência',
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -228,16 +408,16 @@ class DetalhePatrimonio extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(
-                CoresResultado.icone(classificacao),
-                color: CoresResultado.de(classificacao),
+              IconeEmTom(
+                icone: CoresResultado.icone(classificacao),
+                tom: CoresResultado.of(context).de(classificacao),
+                tamanho: 32,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Text(
                 classificacao.rotulo,
-                style: TextStyle(
-                  color: CoresResultado.de(classificacao),
-                  fontWeight: FontWeight.bold,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: CoresResultado.of(context).de(classificacao).texto,
                 ),
               ),
             ],
@@ -261,25 +441,7 @@ class DetalhePatrimonio extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            for (final d in divergencias)
-              Card(
-                color: CoresResultado.alerta.withValues(alpha: 0.08),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        d.campo.rotulo,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('SUAP: ${d.valorSuap ?? "(vazio)"}'),
-                      Text('Encontrado: ${d.valorEncontrado ?? "(vazio)"}'),
-                    ],
-                  ),
-                ),
-              ),
+            for (final d in divergencias) _CartaoDivergencia(divergencia: d),
           ],
 
           const SizedBox(height: 16),
@@ -334,7 +496,10 @@ class DetalhePatrimonio extends ConsumerWidget {
           ],
 
           const SizedBox(height: 24),
-          if (p.verificado)
+          // Encerrado, o levantamento não muda mais — nem para desfazer.
+          if (p.verificado &&
+              !(ref.read(inventarioProvider(p.inventarioId))?.encerrado ??
+                  false))
             OutlinedButton.icon(
               onPressed: () => _desfazer(context, ref, p),
               icon: const Icon(Icons.undo),
@@ -377,6 +542,45 @@ class _Campo extends StatelessWidget {
             child: Text(rotulo, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(child: Text(valor)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CartaoDivergencia extends StatelessWidget {
+  final Divergencia divergencia;
+
+  const _CartaoDivergencia({required this.divergencia});
+
+  @override
+  Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).jaVerificado;
+    final estilo = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.copyWith(color: tom.texto, fontSize: 13.5);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            divergencia.campo.rotulo,
+            style: estilo?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 3),
+          Text('SUAP: ${divergencia.valorSuap ?? "(vazio)"}', style: estilo),
+          Text(
+            'Encontrado: ${divergencia.valorEncontrado ?? "(vazio)"}',
+            style: estilo,
+          ),
         ],
       ),
     );

@@ -73,11 +73,16 @@ class ConfiguracaoLevantamento {
   /// `before_save` do SLAP.
   final String? responsavel;
 
+  /// Desde quando esta configuração vale — quando foi definida ou, depois de
+  /// um intervalo longo, reconfirmada.
+  final DateTime? desde;
+
   const ConfiguracaoLevantamento({
     required this.sala,
     this.conservacao = EstadoConservacao.bom,
     this.situacao = SituacaoUso.ativo,
     this.responsavel,
+    this.desde,
   });
 
   ConfiguracaoLevantamento copyWith({
@@ -86,12 +91,42 @@ class ConfiguracaoLevantamento {
     SituacaoUso? situacao,
     String? responsavel,
     bool limparResponsavel = false,
+    DateTime? desde,
   }) {
     return ConfiguracaoLevantamento(
       sala: sala ?? this.sala,
       conservacao: conservacao ?? this.conservacao,
       situacao: situacao ?? this.situacao,
       responsavel: limparResponsavel ? null : (responsavel ?? this.responsavel),
+      desde: desde ?? this.desde,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'sala': sala,
+    'conservacao': conservacao.valor,
+    'situacao': situacao.valor,
+    'responsavel': responsavel,
+    'desde': desde?.millisecondsSinceEpoch,
+  };
+
+  /// Lê uma configuração gravada. Devolve `null` se o texto não for uma
+  /// configuração válida — gravação de versão antiga, por exemplo —, e aí o
+  /// levantamento simplesmente pede a sala de novo.
+  static ConfiguracaoLevantamento? fromJson(Map<String, dynamic> j) {
+    final sala = j['sala'];
+    if (sala is! String || sala.trim().isEmpty) return null;
+    final desde = j['desde'];
+    return ConfiguracaoLevantamento(
+      sala: sala,
+      conservacao:
+          EstadoConservacao.de(j['conservacao'] as String?) ??
+          EstadoConservacao.bom,
+      situacao: SituacaoUso.de(j['situacao'] as String?) ?? SituacaoUso.ativo,
+      responsavel: j['responsavel'] as String?,
+      desde: desde is num
+          ? DateTime.fromMillisecondsSinceEpoch(desde.toInt())
+          : null,
     );
   }
 }
@@ -123,7 +158,26 @@ class PatrimonioImportado {
   });
 }
 
+/// Verificado com pelo menos uma diferença do cadastro, em SQL.
+///
+/// É a regra de [divergenciasDe], escrita para o banco: sala e responsável
+/// comparados pela forma comparável (a função `forma_comparavel` que o
+/// [Banco] registra), estado e situação só quando a planilha trouxe o valor
+/// de origem. Um teste confere que as duas dão sempre o mesmo resultado.
+const sqlDivergente =
+    '(forma_comparavel(sala_original) <> '
+    'forma_comparavel(COALESCE(sala_atual, sala_original)) '
+    'OR forma_comparavel(responsavel_original) <> '
+    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)) '
+    'OR (conservacao_original IS NOT NULL AND conservacao IS NOT NULL '
+    'AND conservacao_original <> conservacao) '
+    'OR (situacao_original IS NOT NULL AND situacao IS NOT NULL '
+    'AND situacao_original <> situacao))';
+
 class RepositorioPatrimonios {
+  /// De quantos em quantos itens a importação informa o progresso.
+  static const passoProgresso = 250;
+
   final Banco banco;
   final RepositorioOperacoes ops;
 
@@ -273,7 +327,15 @@ class RepositorioPatrimonios {
   /// numa operação de disco, não em dez mil. O SLAP faz um `INSERT` por linha
   /// sem transação, depois de já ter apagado os itens anteriores — falha no
   /// meio deixa o inventário destruído pela metade.
-  int inserirLote(String inventarioId, List<PatrimonioImportado> itens) {
+  ///
+  /// [aoProgredir] recebe quantos itens já entraram, a cada [passoProgresso].
+  /// A transação continua única: o progresso é só informativo, e uma falha em
+  /// qualquer ponto desfaz tudo.
+  int inserirLote(
+    String inventarioId,
+    List<PatrimonioImportado> itens, {
+    void Function(int feitos)? aoProgredir,
+  }) {
     if (itens.isEmpty) return 0;
 
     return banco.transacao(() {
@@ -285,6 +347,7 @@ class RepositorioPatrimonios {
       );
 
       try {
+        var feitos = 0;
         for (final i in itens) {
           stmt.execute([
             _uuid.v4(),
@@ -302,9 +365,14 @@ class RepositorioPatrimonios {
             chaveBusca(i.tombo),
             i.codigoBarras == null ? null : chaveBusca(i.codigoBarras),
           ]);
+          feitos++;
+          if (aoProgredir != null && feitos % passoProgresso == 0) {
+            aoProgredir(feitos);
+          }
         }
+        aoProgredir?.call(feitos);
       } finally {
-        stmt.dispose();
+        stmt.close();
       }
 
       return itens.length;
@@ -350,7 +418,7 @@ class RepositorioPatrimonios {
           ]);
         }
       } finally {
-        stmt.dispose();
+        stmt.close();
       }
 
       return itens.length;
@@ -369,6 +437,11 @@ class RepositorioPatrimonios {
 
   // --------------------------------------------------------------- listas ---
 
+  /// Uma página da lista de patrimônios, já filtrada e classificada.
+  ///
+  /// A separação entre OK e divergente acontece no SQL, com a mesma regra de
+  /// [divergenciasDe]: cada página vem com o tamanho pedido, e a lista carrega
+  /// sob demanda conforme a rolagem, sem limite fixo de itens.
   List<Patrimonio> listar({
     required String inventarioId,
     Classificacao? classificacao,
@@ -377,54 +450,94 @@ class RepositorioPatrimonios {
     int limite = 200,
     int deslocamento = 0,
   }) {
-    final condicoes = <String>['inventario_id = ?'];
-    final params = <Object?>[inventarioId];
+    final filtro = _filtro(inventarioId, classificacao, sala, busca);
+    final linhas = _db.select(
+      'SELECT * FROM patrimonios WHERE ${filtro.onde} '
+      // O id desempata: sem ordem total, a mesma linha poderia aparecer em
+      // duas páginas, ou em nenhuma.
+      'ORDER BY CAST(ordem AS INTEGER), tombo_chave, id LIMIT ? OFFSET ?',
+      [...filtro.parametros, limite, deslocamento],
+    );
+    return linhas.map(_daLinha).toList();
+  }
 
-    if (classificacao == Classificacao.ignorado) {
-      condicoes.add('ignorado = 1');
-    } else {
-      condicoes.add('ignorado = 0');
-      if (classificacao == Classificacao.naoLocalizado) {
-        condicoes.add('verificado = 0');
-      } else if (classificacao != null) {
-        condicoes.add('verificado = 1');
-      }
+  /// Quantos patrimônios o filtro encontra — o total, não só o que está na
+  /// tela.
+  int contar({
+    required String inventarioId,
+    Classificacao? classificacao,
+    String? sala,
+    String? busca,
+  }) {
+    final filtro = _filtro(inventarioId, classificacao, sala, busca);
+    final r = _db.select(
+      'SELECT COUNT(*) AS n FROM patrimonios WHERE ${filtro.onde}',
+      filtro.parametros,
+    );
+    return r.first['n'] as int;
+  }
+
+  ({String onde, List<Object?> parametros}) _filtro(
+    String inventarioId,
+    Classificacao? classificacao,
+    String? sala,
+    String? busca,
+  ) {
+    final condicoes = <String>['inventario_id = ?'];
+    final parametros = <Object?>[inventarioId];
+
+    switch (classificacao) {
+      case Classificacao.ignorado:
+        condicoes.add('ignorado = 1');
+      case Classificacao.naoLocalizado:
+        condicoes.add('ignorado = 0 AND verificado = 0');
+      case Classificacao.ok:
+        condicoes.add('ignorado = 0 AND verificado = 1 AND NOT $sqlDivergente');
+      case Classificacao.divergente:
+        condicoes.add('ignorado = 0 AND verificado = 1 AND $sqlDivergente');
+      case null:
+        condicoes.add('ignorado = 0');
     }
 
     if (sala != null) {
       condicoes.add('sala_original = ?');
-      params.add(sala);
+      parametros.add(sala);
     }
 
     if (busca != null && busca.trim().isNotEmpty) {
       final chave = chaveBusca(busca);
+      final texto = formaComparavel(busca);
+      final alternativas = <String>[];
+
+      // Descrição sem caixa nem acento: "giratoria" acha "GIRATÓRIA".
+      if (texto.isNotEmpty) {
+        alternativas.add("forma_comparavel(descricao) LIKE ? ESCAPE '\\'");
+        parametros.add('%${_semCuringas(texto)}%');
+      }
+      // Tombo e código pelo começo. Chave vazia — busca só de símbolos —
+      // casaria com tudo, e fica de fora.
+      if (chave.isNotEmpty) {
+        alternativas
+          ..add("tombo_chave LIKE ? ESCAPE '\\'")
+          ..add("codigo_barras_chave LIKE ? ESCAPE '\\'");
+        parametros
+          ..add('${_semCuringas(chave)}%')
+          ..add('${_semCuringas(chave)}%');
+      }
+
       condicoes.add(
-        '(descricao LIKE ? OR tombo_chave LIKE ? OR codigo_barras_chave LIKE ?)',
+        alternativas.isEmpty ? '0' : '(${alternativas.join(' OR ')})',
       );
-      params
-        ..add('%${busca.trim()}%')
-        ..add('$chave%')
-        ..add('$chave%');
     }
 
-    final linhas = _db.select(
-      'SELECT * FROM patrimonios WHERE ${condicoes.join(' AND ')} '
-      'ORDER BY CAST(ordem AS INTEGER), tombo_chave LIMIT ? OFFSET ?',
-      [...params, limite, deslocamento],
-    );
-
-    var itens = linhas.map(_daLinha).toList();
-
-    // OK e divergente não se distinguem em SQL: dependem da comparação com
-    // acento e caixa normalizados, que é regra de domínio.
-    if (classificacao == Classificacao.ok) {
-      itens = itens.where((p) => divergenciasDe(p).isEmpty).toList();
-    } else if (classificacao == Classificacao.divergente) {
-      itens = itens.where((p) => divergenciasDe(p).isNotEmpty).toList();
-    }
-
-    return itens;
+    return (onde: condicoes.join(' AND '), parametros: parametros);
   }
+
+  /// `%` e `_` digitados na busca são texto, não curinga.
+  static String _semCuringas(String texto) => texto
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 
   /// Todos os itens do inventário. Usado na geração de relatórios.
   List<Patrimonio> todos(String inventarioId, {bool incluirIgnorados = false}) {
@@ -446,7 +559,7 @@ class RepositorioPatrimonios {
       'SELECT DISTINCT sala FROM ('
       '  SELECT sala_original AS sala FROM patrimonios WHERE inventario_id = ?1'
       '  UNION SELECT sala_atual FROM patrimonios WHERE inventario_id = ?1'
-      ') WHERE sala IS NOT NULL AND TRIM(sala) <> "" ORDER BY sala',
+      ") WHERE sala IS NOT NULL AND TRIM(sala) <> '' ORDER BY sala",
       [inventarioId],
     );
     return [for (final l in linhas) l['sala'] as String];
@@ -461,7 +574,7 @@ class RepositorioPatrimonios {
       'SELECT DISTINCT r FROM ('
       '  SELECT responsavel_original AS r FROM patrimonios WHERE inventario_id = ?1'
       '  UNION SELECT responsavel_atual FROM patrimonios WHERE inventario_id = ?1'
-      ') WHERE r IS NOT NULL AND TRIM(r) <> "" ORDER BY r',
+      ") WHERE r IS NOT NULL AND TRIM(r) <> '' ORDER BY r",
       [inventarioId],
     );
     return [for (final l in linhas) l['r'] as String];
@@ -474,7 +587,7 @@ class RepositorioPatrimonios {
   /// planilha do SUAP.
   Map<String, int> contagemPorEd(String inventarioId) {
     final linhas = _db.select(
-      'SELECT COALESCE(ed, "") AS ed, COUNT(*) AS n FROM patrimonios '
+      "SELECT COALESCE(ed, '') AS ed, COUNT(*) AS n FROM patrimonios "
       'WHERE inventario_id = ? GROUP BY ed ORDER BY n DESC',
       [inventarioId],
     );
@@ -490,6 +603,8 @@ class RepositorioPatrimonios {
       'SELECT '
       '  SUM(CASE WHEN ignorado = 0 THEN 1 ELSE 0 END) AS total, '
       '  SUM(CASE WHEN ignorado = 0 AND verificado = 1 THEN 1 ELSE 0 END) AS verificados, '
+      '  SUM(CASE WHEN ignorado = 0 AND verificado = 1 AND $sqlDivergente '
+      '      THEN 1 ELSE 0 END) AS divergentes, '
       '  SUM(CASE WHEN ignorado = 1 THEN 1 ELSE 0 END) AS ignorados '
       'FROM patrimonios WHERE inventario_id = ?',
       [inventarioId],
@@ -498,27 +613,14 @@ class RepositorioPatrimonios {
 
     final total = (r.first['total'] as int?) ?? 0;
     final verificados = (r.first['verificados'] as int?) ?? 0;
+    final divergentes = (r.first['divergentes'] as int?) ?? 0;
     final ignorados = (r.first['ignorados'] as int?) ?? 0;
-
-    var ok = 0;
-    var divergentes = 0;
-    final linhas = _db.select(
-      'SELECT * FROM patrimonios WHERE inventario_id = ? AND ignorado = 0 AND verificado = 1',
-      [inventarioId],
-    );
-    for (final l in linhas) {
-      if (divergenciasDe(_daLinha(l)).isEmpty) {
-        ok++;
-      } else {
-        divergentes++;
-      }
-    }
 
     return ProgressoInventario(
       total: total,
       verificados: verificados,
       naoLocalizados: total - verificados,
-      ok: ok,
+      ok: verificados - divergentes,
       divergentes: divergentes,
       ignorados: ignorados,
     );
