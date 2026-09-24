@@ -3,8 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/core/hlc.dart';
+import 'package:slap_mobile/core/version_vector.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
+import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
+import 'package:slap_mobile/data/schema.dart';
 import 'package:slap_mobile/features/sync/cifra.dart';
 import 'package:slap_mobile/features/sync/cliente.dart';
 import 'package:slap_mobile/features/sync/protocolo.dart';
@@ -541,6 +545,245 @@ void main() {
 
       expect(resposta['aceito'], isFalse);
       expect(resposta['motivo'], MotivoRecusa.invalido.name);
+    });
+  });
+
+  group('isolamento entre inventários', () {
+    /// Uma requisição autenticada montada à mão: é o que um aparelho hostil
+    /// faria com a chave de um inventário para falar de outro.
+    Future<({int status, Map<String, dynamic> corpo})> requisitarBruto({
+      required String caminho,
+      required String inventarioNaQuery,
+      required String chaveSync,
+      required Map<String, dynamic> corpo,
+    }) async {
+      final cifra = CifraSync(chaveSync);
+      final texto = cifra.cifrar(
+        corpo,
+        contexto: CifraSync.contextoPedido('POST', caminho),
+      );
+      final cliente = HttpClient();
+      try {
+        final req = await cliente.postUrl(
+          Uri(
+            scheme: 'http',
+            host: paraA.host,
+            port: paraA.porta,
+            path: caminho,
+            queryParameters: {'inventario': inventarioNaQuery},
+          ),
+        );
+        req.headers.set(cabecalhoVersao, '$versaoProtocolo');
+        req.headers.set(
+          HttpHeaders.authorizationHeader,
+          Assinatura.gerar(
+            chaveSync: chaveSync,
+            dispositivoId: b.dispositivoId,
+            metodo: 'POST',
+            caminho: caminho,
+            corpo: texto,
+          ),
+        );
+        req.headers.contentType = ContentType.text;
+        req.write(texto);
+
+        final resposta = await req.close();
+        final retorno = await utf8.decoder.bind(resposta).join();
+        if (resposta.statusCode != HttpStatus.ok) {
+          return (
+            status: resposta.statusCode,
+            corpo: jsonDecode(retorno) as Map<String, dynamic>,
+          );
+        }
+        return (
+          status: resposta.statusCode,
+          corpo: cifra.decifrar(
+            retorno,
+            contexto: CifraSync.contextoResposta('POST', caminho),
+          ),
+        );
+      } finally {
+        cliente.close(force: true);
+      }
+    }
+
+    /// Um segundo inventário no aparelho da Ana, de cuja chave o Bruno não
+    /// sabe nada. É o alvo da invasão.
+    late Inventario segredo;
+
+    setUp(() {
+      segredo = a.inventarios.criar(nome: 'Campus Teresina', ano: 2026);
+      a.patrimonios.inserirRecebidos([
+        patrimonioDeTeste(
+          id: 'item-secreto',
+          inventarioId: segredo.id,
+          tombo: '99999',
+          sala: 'Reitoria',
+        ),
+      ]);
+      a.patrimonios.registrarVerificacao(
+        patrimonio: a.patrimonios.porId('item-secreto')!,
+        config: const ConfiguracaoLevantamento(sala: 'Almoxarifado'),
+        usuarioNome: 'Ana',
+      );
+    });
+
+    test('a chave de um inventário não puxa o log de outro', () async {
+      final resposta = await requisitarBruto(
+        caminho: Rotas.pull,
+        inventarioNaQuery: inventario.id,
+        chaveSync: inventario.chaveSync,
+        corpo: PedidoPull(
+          inventarioId: segredo.id,
+          vetor: VersionVector.vazia,
+        ).toJson(),
+      );
+
+      expect(resposta.status, HttpStatus.badRequest);
+      expect(
+        jsonEncode(resposta.corpo),
+        isNot(contains('Almoxarifado')),
+        reason: 'nada do inventário alheio volta na resposta',
+      );
+    });
+
+    test('a chave de um inventário não escreve noutro', () async {
+      final resposta = await requisitarBruto(
+        caminho: Rotas.push,
+        inventarioNaQuery: inventario.id,
+        chaveSync: inventario.chaveSync,
+        corpo: LoteOperacoes(
+          inventarioId: segredo.id,
+          ops: [
+            Operacao(
+              opId: 'forjada-1',
+              inventarioId: segredo.id,
+              entidade: 'inventario',
+              entidadeId: segredo.id,
+              campo: 'nome',
+              valor: 'Tomado',
+              hlc: Hlc(
+                DateTime.now()
+                    .add(const Duration(minutes: 1))
+                    .millisecondsSinceEpoch,
+                0,
+                b.dispositivoId,
+              ),
+              dispositivo: b.dispositivoId,
+              seq: 1,
+              ctxId: null,
+              usuarioNome: 'Bruno',
+              usuarioMatricula: null,
+              criadoEm: DateTime.now().millisecondsSinceEpoch,
+            ),
+          ],
+        ).toJson(),
+      );
+
+      expect(resposta.status, HttpStatus.badRequest);
+      expect(a.inventarios.porId(segredo.id)!.nome, 'Campus Teresina');
+    });
+
+    test(
+      'operação de outro inventário dentro do lote certo é recusada',
+      () async {
+        // Aqui o corpo declara o inventário da query, e são as operações que
+        // apontam para outro lugar.
+        final resposta = await requisitarBruto(
+          caminho: Rotas.push,
+          inventarioNaQuery: inventario.id,
+          chaveSync: inventario.chaveSync,
+          corpo: LoteOperacoes(
+            inventarioId: inventario.id,
+            ops: [
+              Operacao(
+                opId: 'forjada-2',
+                inventarioId: segredo.id,
+                entidade: 'patrimonio',
+                entidadeId: 'item-secreto',
+                campo: CampoPatrimonio.salaAtual,
+                valor: 'Invadida',
+                hlc: Hlc(
+                  DateTime.now()
+                      .add(const Duration(minutes: 1))
+                      .millisecondsSinceEpoch,
+                  0,
+                  b.dispositivoId,
+                ),
+                dispositivo: b.dispositivoId,
+                seq: 1,
+                ctxId: null,
+                usuarioNome: 'Bruno',
+                usuarioMatricula: null,
+                criadoEm: DateTime.now().millisecondsSinceEpoch,
+              ),
+            ],
+          ).toJson(),
+        );
+
+        expect(resposta.status, HttpStatus.badRequest);
+        expect(a.patrimonios.porId('item-secreto')!.salaAtual, 'Almoxarifado');
+      },
+    );
+
+    test('o cliente recusa uma resposta de outro inventário', () async {
+      // O mesmo buraco do lado de quem pede: sem conferir, um par responderia
+      // com o log de outro inventário a quem tem a chave deste.
+      await entrarNoInventario(b, clienteB, paraA);
+      final hostil = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => hostil.close(force: true));
+
+      final cifra = CifraSync(inventario.chaveSync);
+      unawaited(
+        hostil.forEach((req) async {
+          if (req.uri.path == Rotas.hello) {
+            req.response
+              ..headers.contentType = ContentType.json
+              ..write(
+                jsonEncode(
+                  Apresentacao(
+                    dispositivoId: 'aparelho-hostil',
+                    agora: DateTime.now().millisecondsSinceEpoch,
+                  ).toJson(),
+                ),
+              );
+            await req.response.close();
+            return;
+          }
+          await utf8.decoder.bind(req).join();
+          req.response
+            ..headers.contentType = ContentType.text
+            ..write(
+              cifra.cifrar(
+                LoteOperacoes(
+                  inventarioId: 'outro-inventario-qualquer',
+                  ops: const [],
+                ).toJson(),
+                contexto: CifraSync.contextoResposta('POST', req.uri.path),
+              ),
+            );
+          await req.response.close();
+        }),
+      );
+
+      await expectLater(
+        clienteB.sincronizar(
+          par: Par(
+            dispositivoId: 'aparelho-hostil',
+            host: '127.0.0.1',
+            porta: hostil.port,
+          ),
+          inventarioId: inventario.id,
+          chaveSync: inventario.chaveSync,
+        ),
+        throwsA(
+          isA<FalhaSync>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            contains('outro inventário'),
+          ),
+        ),
+      );
     });
   });
 

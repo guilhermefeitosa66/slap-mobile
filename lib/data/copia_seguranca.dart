@@ -194,7 +194,11 @@ class CopiaDeSeguranca {
                 r['vetor'] as String,
               ),
           };
-          final resultado = ops.aplicarRemotas(lote, contextos: contextos);
+          final resultado = ops.aplicarRemotas(
+            lote,
+            inventarioId: id,
+            contextos: contextos,
+          );
           operacoes += resultado.aplicadas;
           conflitos += resultado.conflitos;
           ops.reaplicarEdsExcluidos(id);

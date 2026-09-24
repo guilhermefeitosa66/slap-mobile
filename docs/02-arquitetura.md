@@ -336,6 +336,23 @@ Três camadas, todas derivadas da `sync_key` que o QR code entrega:
   Na rede vai `base64url(nonce ‖ cifrado ‖ etiqueta)`, e a assinatura cobre esse texto.
 - **Separação de chaves.** A `sync_key` não é usada direto: HKDF-SHA256 deriva dela uma chave para
   a cifra (`slap/sync/cifra`) e outra para a assinatura (`slap/sync/assinatura`).
+- **Isolamento entre inventários.** A chave vale por inventário, e o alcance dela termina no
+  inventário que a query identificou — aquele cuja chave conferiu a assinatura. O corpo que
+  declarar outro é recusado antes de qualquer leitura, nos dois lados da conversa: sem isso,
+  bastava pedir um inventário na query e falar de outro no corpo para ler o log alheio ou
+  renomeá-lo, e o identificador do alvo aparece em claro na query de qualquer outra sincronização.
+  A recusa não para no envelope. Antes de aplicar, o lote inteiro cai se alguma operação é de fora
+  do inventário, e são três jeitos de ser: o `inventory_id` da operação, a operação sobre a
+  entidade `inventario` apontando para outro id e a operação sobre patrimônio que esta réplica
+  sabe ser de outro. Patrimônio desconhecido continua entrando — uma importação feita noutro
+  aparelho depois da entrada cria itens que este nunca recebeu.
+- **Contextos causais são endereçados pelo conteúdo.** A tabela `causal_contexts` é global, sem
+  coluna de inventário. Aceitar o `ctx_id` que o remetente escolhesse permitiria plantar, sob o
+  identificador que uma operação alheia vai citar, um vetor que mente conhecer a escrita do outro
+  — e duas leituras concorrentes viram "atualização", com o conflito sumindo sem ninguém ver. O
+  identificador é recalculado do vetor ao receber, e só entram os contextos que alguma operação do
+  próprio lote cita. Como o identificador é o hash do vetor, quem quisesse plantar teria de já
+  conhecer o que está plantando.
 
 Em claro ficam só a apresentação (`/hello`: identidade do aparelho, nome do usuário, versão e
 horário — o mesmo que o beacon já anuncia) e o identificador do inventário na query, necessário

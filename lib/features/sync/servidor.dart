@@ -206,9 +206,9 @@ class ServidorSync {
 
       switch (caminho) {
         case Rotas.pull:
-          return _atenderPull(canal, conteudo, remoto);
+          return _atenderPull(canal, conteudo, remoto, inventario.id);
         case Rotas.push:
-          return _atenderPush(canal, conteudo, remoto);
+          return _atenderPush(canal, conteudo, remoto, inventario.id);
         case Rotas.pacote:
           return _atenderPacote(canal, inventario, remoto);
         default:
@@ -227,32 +227,36 @@ class ServidorSync {
     _Canal canal,
     Map<String, dynamic> conteudo,
     String remoto,
+    String inventarioId,
   ) async {
     final req = canal.req;
     final pedido = PedidoPull.fromJson(conteudo);
+    if (pedido.inventarioId != inventarioId) {
+      return _erroDeInventario(req);
+    }
     try {
-      ops.conferirCabecas(pedido.inventarioId, pedido.cabecas);
+      ops.conferirCabecas(inventarioId, pedido.cabecas);
     } on IdentidadeDuplicada catch (e) {
       return _erro(req, HttpStatus.conflict, '$e');
     }
-    final faltantes = ops.opsFaltantes(pedido.inventarioId, pedido.vetor);
+    final faltantes = ops.opsFaltantes(inventarioId, pedido.vetor);
 
     // O que o par declara ter de nós é o que está comprovadamente com ele.
     _registrarPar(
       remoto,
-      pedido.inventarioId,
+      inventarioId,
       nossoSeq: pedido.vetor[banco.dispositivoId],
     );
 
     await canal.responder(
       LoteOperacoes(
-        inventarioId: pedido.inventarioId,
+        inventarioId: inventarioId,
         ops: faltantes,
         contextos: ops.contextosDe(faltantes),
         // A nossa vector vai junto: com ela o solicitante já sabe o que nos
         // enviar em seguida, sem precisar de outra viagem para perguntar.
-        vetor: ops.vetorDe(pedido.inventarioId),
-        cabecas: ops.cabecas(pedido.inventarioId),
+        vetor: ops.vetorDe(inventarioId),
+        cabecas: ops.cabecas(inventarioId),
       ).toJson(),
     );
   }
@@ -261,14 +265,25 @@ class ServidorSync {
     _Canal canal,
     Map<String, dynamic> conteudo,
     String remoto,
+    String inventarioId,
   ) async {
     final req = canal.req;
     final lote = LoteOperacoes.fromJson(conteudo);
+    if (lote.inventarioId != inventarioId) {
+      return _erroDeInventario(req);
+    }
 
     final ResultadoAplicacao resultado;
     try {
-      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
-      resultado = ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+      ops.conferirCabecas(inventarioId, lote.cabecas);
+      resultado = ops.aplicarRemotas(
+        lote.ops,
+        inventarioId: inventarioId,
+        contextos: lote.contextos,
+      );
+    } on LoteDeOutroInventario {
+      // Assinado com a chave deste inventário, mas escrevendo em outro.
+      return _erroDeInventario(req);
     } on IdentidadeDuplicada catch (e) {
       // Nada do lote entrou. O outro lado recebe a explicação.
       return _erro(req, HttpStatus.conflict, '$e');
@@ -500,6 +515,16 @@ class ServidorSync {
       ),
     );
   }
+
+  /// O corpo fala de um inventário e a requisição foi autenticada com a chave
+  /// de outro.
+  ///
+  /// Nenhum cliente honesto faz isso: quem monta o pedido põe o mesmo
+  /// identificador nos dois lugares. A resposta não distingue os casos e não
+  /// diz nada sobre o outro inventário — quem tentou não fica sabendo sequer
+  /// se ele existe aqui.
+  Future<void> _erroDeInventario(HttpRequest req) =>
+      _erro(req, HttpStatus.badRequest, 'O corpo não é deste inventário.');
 
   Future<void> _erro(HttpRequest req, int status, String mensagem) async {
     req.response

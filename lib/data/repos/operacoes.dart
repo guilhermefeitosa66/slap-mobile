@@ -135,6 +135,28 @@ class IdentidadeDuplicada implements Exception {
             'sincronização foi recusada para não misturar o trabalho dos dois.';
 }
 
+/// Um lote trouxe operação que não é do inventário sincronizado.
+///
+/// A chave de sincronização vale **por inventário**: quem tem a de A não lê
+/// nem escreve em B. Sem esta conferência, bastaria pedir um inventário na
+/// query — que é o que escolhe a chave — e mandar no corpo operações de
+/// outro. Nada do lote entra quando isto acontece: um lote misturado não é
+/// engano de versão, é tentativa de escrever onde não se tem chave.
+class LoteDeOutroInventario implements Exception {
+  /// Inventário que a requisição autenticou.
+  final String esperado;
+
+  /// Inventário a que a operação recusada pertence.
+  final String recebido;
+
+  LoteDeOutroInventario({required this.esperado, required this.recebido});
+
+  @override
+  String toString() =>
+      'O lote trouxe operação de outro inventário ($recebido, e não '
+      '$esperado). Nada foi aplicado.';
+}
+
 /// Trabalho deste aparelho que ainda não está em nenhum outro.
 class TrabalhoNaoEntregue {
   /// Algum outro aparelho já sincronizou este inventário com este.
@@ -354,16 +376,25 @@ class RepositorioOperacoes {
   /// precisa ser transferido uma vez.
   String registrarContexto(VersionVector vetor) {
     final texto = vetor.codificar();
-    final ctxId = sha256
-        .convert(utf8.encode(texto))
-        .toString()
-        .substring(0, 16);
+    final ctxId = idDeContexto(vetor);
     _db.execute(
       'INSERT OR IGNORE INTO contextos (ctx_id, vetor) VALUES (?, ?)',
       [ctxId, texto],
     );
     return ctxId;
   }
+
+  /// O identificador de um contexto, calculado do conteúdo.
+  ///
+  /// A tabela `contextos` é global — não tem coluna de inventário —, então
+  /// aceitar o `ctx_id` que o remetente disser deixaria plantar um vetor
+  /// qualquer sob o identificador de um contexto de outro inventário, e com
+  /// ele suprimir conflito alheio. Sendo o identificador o hash do vetor,
+  /// quem quisesse plantar teria de já conhecer o vetor que está plantando.
+  static String idDeContexto(VersionVector vetor) => sha256
+      .convert(utf8.encode(vetor.codificar()))
+      .toString()
+      .substring(0, 16);
 
   VersionVector contexto(String? ctxId) {
     if (ctxId == null) return VersionVector.vazia;
@@ -454,8 +485,12 @@ class RepositorioOperacoes {
   /// Detecta concorrência real, registra conflito quando há, e mesmo assim
   /// aplica o vencedor: o banco nunca fica num estado indefinido esperando
   /// alguém decidir.
+  ///
+  /// [inventarioId] é o inventário cuja chave autenticou a troca. Tudo que o
+  /// lote trouxer de fora dele é recusado, e o lote inteiro cai junto.
   ResultadoAplicacao aplicarRemotas(
     List<Operacao> ops, {
+    required String inventarioId,
     Map<String, VersionVector> contextos = const {},
   }) {
     if (ops.isEmpty) {
@@ -468,12 +503,8 @@ class RepositorioOperacoes {
     }
 
     return banco.transacao(() {
-      for (final entrada in contextos.entries) {
-        _db.execute(
-          'INSERT OR IGNORE INTO contextos (ctx_id, vetor) VALUES (?, ?)',
-          [entrada.key, entrada.value.codificar()],
-        );
-      }
+      _conferirInventario(ops, inventarioId);
+      _guardarContextosDoLote(ops, contextos);
 
       var aplicadas = 0;
       var ignoradas = 0;
@@ -531,6 +562,76 @@ class RepositorioOperacoes {
         patrimoniosAfetados: afetados,
       );
     });
+  }
+
+  /// Recusa o lote inteiro se alguma operação é de outro inventário.
+  ///
+  /// São três jeitos de a operação não ser daqui, e os três importam: o
+  /// `inventario_id` da própria operação, a operação que altera os campos de
+  /// **outro** inventário e a que altera um patrimônio que este aparelho sabe
+  /// ser de outro.
+  ///
+  /// Patrimônio desconhecido é aceito: uma importação feita noutro aparelho
+  /// depois da entrada cria itens que este ainda não recebeu, e recusá-los
+  /// impediria o inventário de crescer.
+  void _conferirInventario(List<Operacao> ops, String inventarioId) {
+    final patrimonios = <String>{};
+
+    for (final op in ops) {
+      if (op.inventarioId != inventarioId) {
+        throw LoteDeOutroInventario(
+          esperado: inventarioId,
+          recebido: op.inventarioId,
+        );
+      }
+      if (op.entidade == 'inventario' && op.entidadeId != inventarioId) {
+        throw LoteDeOutroInventario(
+          esperado: inventarioId,
+          recebido: op.entidadeId,
+        );
+      }
+      if (op.entidade == 'patrimonio') patrimonios.add(op.entidadeId);
+    }
+
+    // Em blocos: um lote traz milhares de operações, e uma consulta por
+    // operação custaria mais que aplicá-las.
+    final ids = patrimonios.toList();
+    for (var i = 0; i < ids.length; i += 500) {
+      final bloco = ids.sublist(i, (i + 500).clamp(0, ids.length));
+      final marcadores = List.filled(bloco.length, '?').join(',');
+      final alheios = _db.select(
+        'SELECT inventario_id FROM patrimonios '
+        'WHERE id IN ($marcadores) AND inventario_id <> ? LIMIT 1',
+        [...bloco, inventarioId],
+      );
+      if (alheios.isNotEmpty) {
+        throw LoteDeOutroInventario(
+          esperado: inventarioId,
+          recebido: alheios.first['inventario_id'] as String,
+        );
+      }
+    }
+  }
+
+  /// Guarda os contextos que vieram com o lote.
+  ///
+  /// Duas restrições, e as duas são de isolamento. O `ctx_id` é **recalculado**
+  /// do vetor, e não aceito como veio: a tabela é global, e um identificador
+  /// escolhido pelo remetente plantaria um contexto que faz uma escrita alheia
+  /// parecer conhecida — suprimindo conflito noutro inventário. E só entram os
+  /// contextos que alguma operação do próprio lote cita: o resto não seria
+  /// lido por ninguém, seria só peso no banco de quem recebe.
+  void _guardarContextosDoLote(
+    List<Operacao> ops,
+    Map<String, VersionVector> contextos,
+  ) {
+    if (contextos.isEmpty) return;
+    final citados = ops.map((o) => o.ctxId).whereType<String>().toSet();
+    if (citados.isEmpty) return;
+
+    for (final vetor in contextos.values) {
+      if (citados.contains(idDeContexto(vetor))) registrarContexto(vetor);
+    }
   }
 
   /// Decide o vencedor de um campo. Devolve `true` se registrou conflito.

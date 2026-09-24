@@ -163,7 +163,7 @@ class ClienteSync {
             conflitos: 0,
             patrimoniosAfetados: {},
           )
-        : _aplicar(par, lote);
+        : _aplicar(par, lote, inventarioId);
 
     final enviadas = await _enviar(par, inventarioId, chaveSync, lote.vetor);
 
@@ -223,10 +223,22 @@ class ClienteSync {
   ///
   /// A operação do futuro pode ser de um terceiro, que chegou ao par por
   /// sincronização anterior: o aviso nomeia quem a escreveu, não o par.
-  ResultadoAplicacao _aplicar(Par par, LoteOperacoes lote) {
+  ResultadoAplicacao _aplicar(
+    Par par,
+    LoteOperacoes lote,
+    String inventarioId,
+  ) {
     try {
-      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
-      return ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+      ops.conferirCabecas(inventarioId, lote.cabecas);
+      return ops.aplicarRemotas(
+        lote.ops,
+        inventarioId: inventarioId,
+        contextos: lote.contextos,
+      );
+    } on LoteDeOutroInventario {
+      // O mesmo buraco do lado do servidor, deste lado: a chave deste
+      // inventário autenticou a conversa, e o par mandou operação de outro.
+      throw FalhaSync(_foraDoInventario(par));
     } on IdentidadeDuplicada catch (e) {
       throw FalhaSync('$e');
     } on RelogioForaDeSincronia catch (e) {
@@ -269,8 +281,19 @@ class ClienteSync {
       chaveSync: chaveSync,
     );
 
-    return LoteOperacoes.fromJson(resposta);
+    final lote = LoteOperacoes.fromJson(resposta);
+    // O inventário do corpo tem de ser o que pedimos. Sem esta conferência,
+    // um par responderia o log de outro inventário a quem tem a chave deste.
+    if (lote.inventarioId != inventarioId) {
+      throw FalhaSync(_foraDoInventario(par));
+    }
+    return lote;
   }
+
+  /// O par respondeu sobre um inventário que não é o da conversa.
+  String _foraDoInventario(Par par) =>
+      'A resposta de ${par.rotulo} veio de outro inventário. Nada foi '
+      'aplicado.';
 
   /// Envia o que falta ao par. Devolve quantas foram e o maior `seq` deste
   /// aparelho entre elas, que o par agora tem.

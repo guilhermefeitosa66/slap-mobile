@@ -65,6 +65,7 @@ class RedeSimulada {
     if (faltantes.isNotEmpty) {
       para.ops.aplicarRemotas(
         faltantes,
+        inventarioId: inventarioId,
         contextos: de.ops.contextosDe(faltantes),
       );
     }
