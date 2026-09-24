@@ -239,13 +239,22 @@ class ServidorSync {
     } on IdentidadeDuplicada catch (e) {
       return _erro(req, HttpStatus.conflict, '$e');
     }
-    final faltantes = ops.opsFaltantes(inventarioId, pedido.vetor);
+    final faltantes = ops.opsFaltantes(
+      inventarioId,
+      pedido.vetor,
+      lacunas: pedido.lacunas,
+    );
 
-    // O que o par declara ter de nós é o que está comprovadamente com ele.
+    // O que o par declara ter de nós é o que está comprovadamente com ele —
+    // até o começo da primeira lacuna que ele declarou na nossa sequência.
     _registrarPar(
       remoto,
       inventarioId,
-      nossoSeq: pedido.vetor[banco.dispositivoId],
+      nossoSeq: ops.seqEntregueA(
+        inventarioId,
+        maximoDoPar: pedido.vetor[banco.dispositivoId],
+        lacunasDoPar: pedido.lacunas[banco.dispositivoId],
+      ),
     );
 
     await canal.responder(
@@ -254,8 +263,10 @@ class ServidorSync {
         ops: faltantes,
         contextos: ops.contextosDe(faltantes),
         // A nossa vector vai junto: com ela o solicitante já sabe o que nos
-        // enviar em seguida, sem precisar de outra viagem para perguntar.
+        // enviar em seguida, sem precisar de outra viagem para perguntar. As
+        // lacunas completam o quadro: o que falta a nós no meio da sequência.
         vetor: ops.vetorDe(inventarioId),
+        lacunas: ops.lacunasDe(inventarioId),
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
     );
@@ -293,7 +304,7 @@ class ServidorSync {
       // o de todos, para o futuro.
       final diferenca = e.recebido.millis - e.agoraLocal;
       _avisarRelogio(
-        inventarioId: lote.inventarioId,
+        inventarioId: inventarioId,
         remoto: e.recebido.nodeId,
         diferenca: Duration(milliseconds: diferenca),
       );
@@ -310,12 +321,16 @@ class ServidorSync {
 
     _registrarPar(
       remoto,
-      lote.inventarioId,
-      nossoSeq: lote.vetor[banco.dispositivoId],
+      inventarioId,
+      nossoSeq: ops.seqEntregueA(
+        inventarioId,
+        maximoDoPar: lote.vetor[banco.dispositivoId],
+        lacunasDoPar: lote.lacunas[banco.dispositivoId],
+      ),
     );
     _eventos.add(
       EventoSync(
-        inventarioId: lote.inventarioId,
+        inventarioId: inventarioId,
         dispositivoRemoto: remoto,
         recebidas: resultado.aplicadas,
         conflitos: resultado.conflitos,

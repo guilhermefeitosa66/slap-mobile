@@ -233,6 +233,37 @@ operação enquanto as componentes remotas só mudam quando ocorre uma sincroniz
 Na prática isso gera **uma linha de contexto por sincronização**, não por operação. Uma sessão
 inteira de levantamento compartilha o mesmo `ctx_id`.
 
+**Lacunas: o que a vector não sabe dizer.** `{B: 100}` tanto pode ser "tenho as cem primeiras de
+B" quanto "tenho da 51 à 100" — e a diferença decide se um intervalo perdido volta ou some para
+sempre. Acontece de verdade: B sincroniza só com A, apaga o inventário do aparelho e entra de novo
+por C, que nunca recebeu as operações antigas dele; C passa a anunciar `B: MAX` e ninguém lhe
+manda o que falta no começo.
+
+Por isso todo pedido e todo lote levam, **junto** da vector, as **lacunas** de quem os envia:
+faixas `[de, até]` que faltam abaixo do máximo de cada aparelho. O que sai na resposta é o que
+está acima da vector *ou* dentro dessas faixas, em ordem de `seq` — o buraco fecha antes do que
+está acima dele, mesmo quando o que está acima não cabe num lote só.
+
+Anunciar só o prefixo contíguo, que é a alternativa óbvia, não resolve: o par reenvia tudo acima
+do buraco a cada encontro, e quando isso passa do limite de 5.000 operações de um lote a
+sincronização reenvia as mesmas 5.000 para sempre, sem nunca alcançar o resto. Vetores e contexto
+causal seguem por MAX; só o pedido ganhou as lacunas.
+
+**Limitações aceitas.** Um intervalo que se perdeu em todo lugar — "Apagar mesmo assim", celular
+perdido — continua sendo pedido a cada encontro, e simplesmente não chega: é uma lista curta no
+pedido, não uma retransmissão. Viajam no máximo 64 faixas por aparelho; o que passar disso fica
+para o encontro seguinte, e como as faixas vão das mais antigas para as mais novas, cada encontro
+fecha as primeiras e descobre as próximas. E `peers.our_seq` — até onde o nosso trabalho está no
+par — nunca passa do começo da primeira lacuna que o par tenha na nossa sequência **e que este
+aparelho ainda possa preencher**: prometer o contrário faria a confirmação de apagar a réplica
+dizer que não se perde nada, e contar o que se perdeu em todo lugar avisaria de uma perda que
+ninguém consegue evitar.
+
+Aparelho com uma versão anterior do aplicativo não declara lacunas nem as lê. A sincronização
+continua funcionando entre os dois, com o comportamento antigo: o buraco não é preenchido por
+aquele par. Basta que um dos lados seja atualizado para o intervalo voltar a ser pedido — e
+qualquer outro par atualizado o preenche.
+
 ### 5.4 Detecção de concorrência
 
 Com `VV(op) = ctx(op) ∪ {op.device: op.seq}`:
@@ -271,8 +302,8 @@ servidor: um `HttpServer` do `dart:io` numa porta efêmera.
 
 ```
 GET  /hello                          → identidade, versão e horário do aparelho (em claro)
-POST /sync/pull?inventario={id}      → {vetor, cabeças} → operações que o solicitante não tem
-POST /sync/push?inventario={id}      → {ops[], contextos, vetor, cabeças} → aplica
+POST /sync/pull?inventario={id}      → {vetor, lacunas, cabeças} → o que o solicitante não tem
+POST /sync/push?inventario={id}      → {ops[], contextos, vetor, lacunas, cabeças} → aplica
 GET  /inventario/pacote?inventario={id} → réplica inicial: inventário e dados do SUAP
 ```
 
@@ -280,8 +311,10 @@ Uma sincronização entre A e B é `pull` seguido de `push`, nos dois sentidos. 
 **repassa operações de terceiros**, A↔B propaga o trabalho de C sem que A e C se encontrem —
 o que faz a topologia em malha da spec §43 funcionar de verdade.
 
-O `pull` envia a version vector do solicitante e recebe só o que falta: é a sincronização
-incremental do §40, sem retransmitir o inventário inteiro.
+O `pull` envia a version vector do solicitante e as lacunas dele, e recebe só o que falta: é a
+sincronização incremental do §40, sem retransmitir o inventário inteiro. A resposta traz a vector
+e as lacunas de quem respondeu, e é com elas que o `push` seguinte manda exatamente o que falta ao
+outro — inclusive no meio da sequência (ver §5.3).
 
 ### 5.7 Descoberta
 

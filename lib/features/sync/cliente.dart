@@ -165,18 +165,16 @@ class ClienteSync {
           )
         : _aplicar(par, lote, inventarioId);
 
-    final enviadas = await _enviar(par, inventarioId, chaveSync, lote.vetor);
+    final enviadas = await _enviar(par, inventarioId, chaveSync, lote);
 
-    // Até onde o nosso trabalho está com o par: o que ele declarou ter, ou o
-    // que ele acabou de aceitar do nosso envio.
+    // Até onde o nosso trabalho está com o par: o que ele declarou ter, mais
+    // o que ele acabou de aceitar do nosso envio, e sempre até o começo da
+    // primeira lacuna que ele ainda tem na nossa sequência.
     ops.registrarPar(
       par.dispositivoId,
       inventarioId,
       usuarioNome: par.usuarioNome,
-      nossoSeq: [
-        lote.vetor[ops.dispositivoId],
-        enviadas.nossoSeq,
-      ].reduce((a, b) => a > b ? a : b),
+      nossoSeq: enviadas.nossoSeq,
     );
 
     return ResultadoSync(
@@ -275,7 +273,8 @@ class ClienteSync {
       inventarioId: inventarioId,
       corpo: PedidoPull(
         inventarioId: inventarioId,
-        vetor: ops.vetorParaPedido(inventarioId),
+        vetor: ops.vetorDe(inventarioId),
+        lacunas: ops.lacunasDe(inventarioId),
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
@@ -295,19 +294,23 @@ class ClienteSync {
       'A resposta de ${par.rotulo} veio de outro inventário. Nada foi '
       'aplicado.';
 
-  /// Envia o que falta ao par. Devolve quantas foram e o maior `seq` deste
-  /// aparelho entre elas, que o par agora tem.
+  /// Envia o que falta ao par. Devolve quantas foram e até onde a nossa
+  /// sequência está inteira nele depois do envio.
   Future<({int quantidade, int nossoSeq})> _enviar(
     Par par,
     String inventarioId,
     String chaveSync,
-    VersionVector vetorDoPar,
+    LoteOperacoes doPar,
   ) async {
     // Vai mesmo sem nada a enviar: o lote leva o nosso vetor, e é assim que
     // o par fica sabendo que já recebemos o trabalho dele. Sem isso, quem só
     // forneceu dados nunca saberia se eles chegaram — e a confirmação de
     // apagar o inventário lá avisaria de uma perda que não existe.
-    final faltantes = ops.opsFaltantes(inventarioId, vetorDoPar);
+    final faltantes = ops.opsFaltantes(
+      inventarioId,
+      doPar.vetor,
+      lacunas: doPar.lacunas,
+    );
 
     await _requisitar(
       host: par.host,
@@ -321,19 +324,32 @@ class ClienteSync {
         ops: faltantes,
         contextos: ops.contextosDe(faltantes),
         vetor: ops.vetorDe(inventarioId),
+        lacunas: ops.lacunasDe(inventarioId),
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
     );
 
-    var nossoSeq = 0;
-    for (final op in faltantes) {
-      if (op.dispositivo == ops.dispositivoId && op.seq > nossoSeq) {
-        nossoSeq = op.seq;
-      }
-    }
-    return (quantidade: faltantes.length, nossoSeq: nossoSeq);
+    return (
+      quantidade: faltantes.length,
+      nossoSeq: _prefixoEntregue(inventarioId, doPar, faltantes),
+    );
   }
+
+  /// Até onde a nossa sequência está inteira no par, depois do envio.
+  int _prefixoEntregue(
+    String inventarioId,
+    LoteOperacoes doPar,
+    List<Operacao> enviadas,
+  ) => ops.seqEntregueA(
+    inventarioId,
+    maximoDoPar: doPar.vetor[ops.dispositivoId],
+    lacunasDoPar: doPar.lacunas[ops.dispositivoId],
+    enviadasAgora: {
+      for (final op in enviadas)
+        if (op.dispositivo == ops.dispositivoId) op.seq,
+    },
+  );
 
   /// Pede entrada num inventário a quem o compartilhou.
   ///

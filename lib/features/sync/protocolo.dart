@@ -305,23 +305,35 @@ Cabecas _cabecasDeJson(Object? j) {
 class PedidoPull {
   final String inventarioId;
   final VersionVector vetor;
+
+  /// O que falta abaixo do máximo de cada aparelho (ver [Lacunas]).
+  ///
+  /// Vai junto com o vetor porque ele sozinho não distingue "tenho as cem
+  /// primeiras de B" de "tenho da 51 à 100" — e é essa diferença que decide se
+  /// um intervalo perdido volta ou fica faltando para sempre. Ausente em
+  /// aparelho com versão anterior do aplicativo, que não as declarava.
+  final Lacunas lacunas;
+
   final Cabecas cabecas;
 
   const PedidoPull({
     required this.inventarioId,
     required this.vetor,
+    this.lacunas = Lacunas.vazia,
     this.cabecas = const {},
   });
 
   Map<String, dynamic> toJson() => {
     'inventario': inventarioId,
     'vetor': vetor.codificar(),
+    'lacunas': lacunas.codificar(),
     'cabecas': _cabecasParaJson(cabecas),
   };
 
   factory PedidoPull.fromJson(Map<String, dynamic> j) => PedidoPull(
     inventarioId: j['inventario'] as String,
     vetor: VersionVector.decodificar(j['vetor'] as String?),
+    lacunas: Lacunas.decodificar(j['lacunas']),
     cabecas: _cabecasDeJson(j['cabecas']),
   );
 }
@@ -343,6 +355,13 @@ class LoteOperacoes {
   /// outro lado já tem, podendo enviar só a diferença em seguida.
   final VersionVector vetor;
 
+  /// O que falta a quem envia, abaixo do máximo de cada aparelho.
+  ///
+  /// Acompanha [vetor] pelo mesmo motivo: com ela, quem recebe o lote de um
+  /// `pull` já sabe, no `push` seguinte, não só o que está acima do que o
+  /// outro conhece mas também o que ficou faltando no meio.
+  final Lacunas lacunas;
+
   /// Última operação que quem envia tem de cada aparelho (ver [Cabecas]).
   final Cabecas cabecas;
 
@@ -351,6 +370,7 @@ class LoteOperacoes {
     required this.ops,
     this.contextos = const {},
     this.vetor = VersionVector.vazia,
+    this.lacunas = Lacunas.vazia,
     this.cabecas = const {},
   });
 
@@ -361,6 +381,7 @@ class LoteOperacoes {
       for (final e in contextos.entries) e.key: e.value.codificar(),
     },
     'vetor': vetor.codificar(),
+    'lacunas': lacunas.codificar(),
     'cabecas': _cabecasParaJson(cabecas),
   };
 
@@ -375,6 +396,7 @@ class LoteOperacoes {
         e.key as String: VersionVector.decodificar(e.value as String),
     },
     vetor: VersionVector.decodificar(j['vetor'] as String?),
+    lacunas: Lacunas.decodificar(j['lacunas']),
     cabecas: _cabecasDeJson(j['cabecas']),
   );
 }

@@ -548,6 +548,43 @@ void main() {
     });
   });
 
+  test('a lacuna declarada atravessa a rede e é preenchida', () async {
+    // O que falta no meio da sequência de um terceiro só volta se o pedido
+    // souber dizer qual intervalo é.
+    await entrarNoInventario(b, clienteB, paraA);
+    const carla = 'aparelho-da-carla';
+
+    plantarOperacoes(
+      a,
+      inventarioId: inventario.id,
+      dispositivo: carla,
+      patrimonioId: 'item-1',
+      de: 1,
+      ate: 5,
+    );
+    for (final aparelho in [a, b]) {
+      plantarOperacoes(
+        aparelho,
+        inventarioId: inventario.id,
+        dispositivo: carla,
+        patrimonioId: 'item-1',
+        de: 6,
+        ate: 10,
+      );
+    }
+
+    expect(b.ops.lacunasDe(inventario.id)[carla], isNotEmpty);
+
+    await clienteB.sincronizar(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+    );
+
+    expect(b.ops.lacunasDe(inventario.id)[carla], isEmpty);
+    expect(b.ops.vetorDe(inventario.id)[carla], 10);
+  });
+
   group('isolamento entre inventários', () {
     /// Uma requisição autenticada montada à mão: é o que um aparelho hostil
     /// faria com a chave de um inventário para falar de outro.

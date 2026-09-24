@@ -302,39 +302,99 @@ class RepositorioOperacoes {
     }
   }
 
-  /// O que este aparelho tem do inventário, para pedir a um par o que falta.
+  /// O que falta abaixo do máximo de cada aparelho.
   ///
-  /// Igual a [vetorDe], exceto pela entrada deste aparelho, que só conta a
-  /// parte contígua da sequência. Depois de apagar a réplica e voltar a
-  /// escrever, as operações antigas deste aparelho faltam no começo; pedir
-  /// pelo máximo faria o par achar que já temos tudo, e elas nunca voltariam.
-  VersionVector vetorParaPedido(String inventarioId) {
-    final vetor = vetorDe(inventarioId);
-    final maximo = vetor[dispositivoId];
-    if (maximo == 0) return vetor;
+  /// Acompanha [vetorDe] em todo pedido e em todo lote: o vetor diz até onde
+  /// sabemos, e as lacunas dizem o que ficou faltando no meio do caminho. Sem
+  /// elas, um intervalo perdido — réplica apagada, aparelho que entrou por um
+  /// par que não tinha o começo — nunca é pedido a ninguém, e a divergência
+  /// fica permanente. Ver `docs/02-arquitetura.md`, §5.3.
+  ///
+  /// Custa uma agregação por inventário, e só percorre a sequência do aparelho
+  /// que de fato tem buraco: com a numeração inteira, contar e comparar com o
+  /// máximo já responde.
+  Lacunas lacunasDe(String inventarioId) {
+    final linhas = _db.select(
+      'SELECT dispositivo, COUNT(*) AS n, MAX(seq) AS m FROM ops '
+      'WHERE inventario_id = ? GROUP BY dispositivo',
+      [inventarioId],
+    );
 
-    final quantas =
-        _db.select(
-              'SELECT COUNT(*) AS n FROM ops '
-              'WHERE inventario_id = ? AND dispositivo = ?',
-              [inventarioId, dispositivoId],
-            ).first['n']
-            as int;
-    if (quantas == maximo) return vetor;
+    final faixas = <String, List<Faixa>>{};
+    for (final l in linhas) {
+      // A numeração começa em 1 e não repete (índice único por inventário e
+      // aparelho): tantas operações quanto o maior número é sequência inteira.
+      if (l['n'] as int == l['m'] as int) continue;
+      final dispositivo = l['dispositivo'] as String;
+      faixas[dispositivo] = _faixasQueFaltam(
+        inventarioId,
+        dispositivo,
+        l['m'] as int,
+      );
+    }
+    return Lacunas(faixas);
+  }
 
-    var contiguo = 0;
+  List<Faixa> _faixasQueFaltam(
+    String inventarioId,
+    String dispositivo,
+    int maximo,
+  ) {
+    final faixas = <Faixa>[];
+    var esperado = 1;
     for (final l in _db.select(
       'SELECT seq FROM ops WHERE inventario_id = ? AND dispositivo = ? '
       'ORDER BY seq',
-      [inventarioId, dispositivoId],
+      [inventarioId, dispositivo],
     )) {
-      if (l['seq'] != contiguo + 1) break;
-      contiguo++;
+      final seq = l['seq'] as int;
+      if (seq > esperado) {
+        faixas.add(Faixa(esperado, seq - 1));
+        if (faixas.length >= maximoFaixasPorAparelho) return faixas;
+      }
+      esperado = seq + 1;
     }
-    return VersionVector({
-      for (final d in vetor.dispositivos) d: vetor[d],
-      dispositivoId: contiguo,
-    });
+    if (esperado <= maximo) faixas.add(Faixa(esperado, maximo));
+    return faixas;
+  }
+
+  /// Até onde a nossa sequência está **inteira** num par.
+  ///
+  /// É o que `pares.nosso_seq` pode registrar, e não o número que o par
+  /// declara conhecer: se falta a operação dez no meio, as que vêm depois
+  /// ainda não estão entregues, e prometer o contrário faria a confirmação de
+  /// apagar a réplica dizer que não se perde nada.
+  ///
+  /// Faixa que falta ao par e falta aqui também é intervalo perdido em todo
+  /// lugar, e não conta contra ninguém: não há nada neste aparelho esperando
+  /// para sair. É o que evita um aviso de perda que ninguém consegue resolver.
+  ///
+  /// [enviadasAgora] são os `seq` nossos que acabaram de ir no lote — eles já
+  /// contam como entregues.
+  int seqEntregueA(
+    String inventarioId, {
+    required int maximoDoPar,
+    required List<Faixa> lacunasDoPar,
+    Set<int> enviadasAgora = const {},
+  }) {
+    for (final faixa in lacunasDoPar) {
+      for (final l in _db.select(
+        'SELECT seq FROM ops WHERE inventario_id = ? AND dispositivo = ? '
+        'AND seq >= ? AND seq <= ? ORDER BY seq',
+        [inventarioId, dispositivoId, faixa.de, faixa.ate],
+      )) {
+        final seq = l['seq'] as int;
+        if (!enviadasAgora.contains(seq)) return seq - 1;
+      }
+    }
+
+    // Nada nosso falta no meio. O que mandamos agora estende o que o par já
+    // declarava ter.
+    var entregue = maximoDoPar;
+    while (enviadasAgora.contains(entregue + 1)) {
+      entregue++;
+    }
+    return entregue;
   }
 
   /// Contexto causal corrente: o que sabemos dos **outros** aparelhos.
@@ -897,9 +957,15 @@ class RepositorioOperacoes {
   ///
   /// Inclui operações originadas em terceiros: é isso que faz o trabalho de C
   /// chegar a A através de B, sem que A e C se encontrem.
+  ///
+  /// Sai o que está acima do vetor do par **ou** dentro das [lacunas] que ele
+  /// declarou. Como a ordem é por `seq`, o que falta no meio vai primeiro:
+  /// assim o buraco fecha já no primeiro encontro, mesmo quando o que está
+  /// acima dele não cabe num lote só.
   List<Operacao> opsFaltantes(
     String inventarioId,
     VersionVector vetorDoPar, {
+    Lacunas lacunas = Lacunas.vazia,
     int limite = 5000,
   }) {
     final nosso = vetorDe(inventarioId);
@@ -907,12 +973,20 @@ class RepositorioOperacoes {
 
     for (final dispositivo in nosso.dispositivos) {
       final desde = vetorDoPar[dispositivo];
-      if (nosso[dispositivo] <= desde) continue;
+      final faixas = lacunas[dispositivo];
+      if (nosso[dispositivo] <= desde && faixas.isEmpty) continue;
+
+      final condicoes = <String>['seq > ?'];
+      final valores = <Object?>[inventarioId, dispositivo, desde];
+      for (final faixa in faixas) {
+        condicoes.add('(seq >= ? AND seq <= ?)');
+        valores.addAll([faixa.de, faixa.ate]);
+      }
 
       final linhas = _db.select(
         'SELECT * FROM ops WHERE inventario_id = ? AND dispositivo = ? '
-        'AND seq > ? ORDER BY seq LIMIT ?',
-        [inventarioId, dispositivo, desde, limite - resultado.length],
+        'AND (${condicoes.join(' OR ')}) ORDER BY seq LIMIT ?',
+        [...valores, limite - resultado.length],
       );
       resultado.addAll(linhas.map(Operacao.doBanco));
       if (resultado.length >= limite) break;
