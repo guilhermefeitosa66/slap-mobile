@@ -59,9 +59,12 @@ site: ## Gera o site do GitHub Pages em _site (requer o pacote markdown)
 	@echo
 	@echo "Site: _site/index.html"
 
+# `dart analyze` no lugar de `flutter analyze`: o segundo vigia o pub cache por
+# inotify e estoura o limite padrão do Linux. O CI sobe o limite e roda o
+# `flutter analyze`; aqui o resultado é o mesmo sem precisar de sudo.
 testar: ## Formatação, análise e testes, como no CI
 	$(DART) format --output=none --set-exit-if-changed lib test
-	$(FLUTTER) analyze
+	$(DART) analyze lib test
 	$(FLUTTER) test
 
 limpar: ## Apaga o que os builds geraram (flutter clean)

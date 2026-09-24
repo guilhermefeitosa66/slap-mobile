@@ -16,9 +16,17 @@ Com mais de um aparelho conectado, escolha com `DISPOSITIVO=<id>` (os ids saem e
 `make apk ARGS=--dart-define=SLAP_DESCOBERTA=beacon`.
 
 `flutter analyze` pode falhar em máquinas Linux com "Too many open files": o analisador vigia o
-pub cache por inotify e estoura `fs.inotify.max_user_instances`, que vem em 128 por padrão. Ou
-suba o limite (`sudo sysctl -w fs.inotify.max_user_instances=1024`, como o CI faz), ou use
-`flutter test` como verificação de tipos — ele compila o projeto inteiro.
+pub cache por inotify e estoura `fs.inotify.max_user_instances`, que vem em 128 por padrão. Há
+três saídas, em ordem de conveniência:
+
+```bash
+dart analyze lib test    # não vigia o pub cache: funciona com o limite padrão
+sudo sysctl -w fs.inotify.max_user_instances=1024 && flutter analyze   # o que o CI faz
+flutter test             # compila o projeto inteiro, mas não aplica as regras de lint
+```
+
+**Rodar só `flutter test` não basta antes de commitar.** Ele acha erro de tipo, não aviso de
+lint, e o CI reprova nos dois. `dart analyze lib test` cobre a diferença em segundos.
 
 ## Rodar e instalar
 
