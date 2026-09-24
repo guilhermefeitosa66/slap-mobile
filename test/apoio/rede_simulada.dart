@@ -143,6 +143,7 @@ void plantarOperacoes(
   required int ate,
   String campo = 'sala_atual',
   String valor = 'Almoxarifado',
+  String usuario = 'Plantada',
   int baseMillis = 1700000000000,
 }) {
   final comando = aparelho.banco.db.prepare(
@@ -164,7 +165,7 @@ void plantarOperacoes(
           dispositivo,
           seq,
           null,
-          'Plantada',
+          usuario,
           null,
           baseMillis + seq,
         ]);

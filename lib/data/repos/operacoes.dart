@@ -208,23 +208,184 @@ class RepositorioOperacoes {
   /// O relógio é global ao aparelho, e não por inventário, para que nunca ande
   /// para trás ao alternar entre inventários.
   Hlc _proximoHlc() {
-    final guardado = banco.lerConfig(Config.hlcLocal);
-    final ultimo = guardado == null
-        ? Hlc.zero(dispositivoId)
-        : Hlc.decodificar(guardado);
-    final novo = Hlc.enviar(ultimo);
+    final novo = Hlc.enviar(_hlcLocal);
     banco.gravarConfig(Config.hlcLocal, novo.codificar());
     return novo;
   }
 
   /// Puxa o relógio local para frente ao receber operações de outro aparelho.
   void _absorverHlc(Hlc remoto) {
+    final novo = Hlc.receber(_hlcLocal, remoto);
+    banco.gravarConfig(Config.hlcLocal, novo.codificar());
+  }
+
+  Hlc get _hlcLocal {
     final guardado = banco.lerConfig(Config.hlcLocal);
-    final local = guardado == null
+    return guardado == null
         ? Hlc.zero(dispositivoId)
         : Hlc.decodificar(guardado);
-    final novo = Hlc.receber(local, remoto);
-    banco.gravarConfig(Config.hlcLocal, novo.codificar());
+  }
+
+  /// Anota até onde as operações deste aparelho já saíram daqui.
+  ///
+  /// Chamado de todo lugar por onde elas saem: a resposta do `pull`, o `push`
+  /// e a cópia de segurança. É o limite do reparo de relógio — ver
+  /// [reestamparOperacoesDoFuturo].
+  void registrarEnvio(String inventarioId, Iterable<Operacao> enviadas) {
+    var maior = 0;
+    for (final op in enviadas) {
+      if (op.dispositivo == dispositivoId && op.seq > maior) maior = op.seq;
+    }
+    marcarEnviadoAte(inventarioId, maior);
+  }
+
+  /// Como [registrarEnvio], quando já se sabe o número.
+  void marcarEnviadoAte(String inventarioId, int seq) {
+    if (seq <= 0) return;
+    final chave = Config.seqEnviado(inventarioId);
+    final atual = int.tryParse(banco.lerConfig(chave) ?? '') ?? 0;
+    if (seq > atual) banco.gravarConfig(chave, '$seq');
+  }
+
+  /// Maior operação deste aparelho que comprovadamente já saiu daqui.
+  ///
+  /// O que um par declarou ter também conta, e por isso entra o `nosso_seq`
+  /// dos pares: ele é conservador, mas nunca aponta operação que não saiu.
+  int _maiorSeqEnviado(String inventarioId) {
+    final anotado =
+        int.tryParse(banco.lerConfig(Config.seqEnviado(inventarioId)) ?? '') ??
+        0;
+    final pares =
+        _db.select(
+              'SELECT COALESCE(MAX(nosso_seq), 0) AS s FROM pares '
+              'WHERE inventario_id = ?',
+              [inventarioId],
+            ).first['s']
+            as int;
+    return anotado > pares ? anotado : pares;
+  }
+
+  /// Re-estampa as operações deste aparelho que ficaram no futuro.
+  ///
+  /// Um celular com a data adiantada grava operações com HLC no futuro, e o
+  /// `hlc_local` vai junto. Corrigida a data, cada envio continuava recusado
+  /// inteiro até o tempo real alcançar a data errada — com o ano errado, nunca
+  /// —, a mensagem culpava um relógio que já estava certo e a única saída
+  /// oferecida pelo aplicativo apagava o trabalho ainda não entregue.
+  ///
+  /// **Só com evidência de fora de que o relógio de parede está certo.** Ela
+  /// vem de duas portas: o cliente, depois de a conferência de relógios com o
+  /// par passar, e o servidor, depois de uma assinatura válida dentro da
+  /// janela de tempo. Fazer isto na geração do HLC seria errado: um relógio
+  /// que só voltou para trás reescreveria operações corretas do passado.
+  ///
+  /// **Só o que nunca saiu daqui.** O limite é o maior `seq` próprio já
+  /// enviado a alguém — não o `nosso_seq` confirmado, que chega uma
+  /// sincronização atrasada. E se alguma operação do futuro já saiu, nada é
+  /// reparado: os campos do inventário são last-writer-wins puro, e um reparo
+  /// parcial faria as escritas novas perderem para as antigas que ficaram lá
+  /// fora com a estampa adiantada.
+  ///
+  /// É a única coisa no sistema que altera uma linha de `ops` depois de
+  /// gravada. Vale porque nenhuma réplica jamais viu aquelas linhas: reescrevê-las
+  /// aqui equivale a tê-las escrito agora.
+  ///
+  /// Devolve quantas operações foram re-estampadas.
+  int reestamparOperacoesDoFuturo({DateTime? agora}) {
+    final agoraMs = (agora ?? DateTime.now()).millisecondsSinceEpoch;
+    // A tolerância é a mesma da sincronização: abaixo dela nada é recusado,
+    // e o que está dentro dela é diferença normal entre celulares.
+    final limite = agoraMs + deslocamentoMaximoRelogio.inMilliseconds;
+
+    // Guarda de O(1) para o caminho comum: toda operação local avança o
+    // relógio guardado, então sem ele no futuro não há o que reparar.
+    if (_hlcLocal.millis <= limite) return 0;
+
+    final piso = '${(limite + 1).toString().padLeft(15, '0')}-';
+
+    return banco.transacao(() {
+      final futuras = [
+        for (final l in _db.select(
+          'SELECT * FROM ops WHERE dispositivo = ? AND hlc > ? ORDER BY hlc',
+          [dispositivoId, piso],
+        ))
+          Operacao.doBanco(l),
+      ];
+
+      if (futuras.isEmpty) {
+        // Relógio guardado no futuro sem nenhuma operação lá: sobrou de uma
+        // réplica apagada. Trazê-lo de volta evita que a próxima escrita
+        // nasça no futuro de novo.
+        banco.gravarConfig(
+          Config.hlcLocal,
+          _maiorHlcAte(piso, agoraMs).codificar(),
+        );
+        return 0;
+      }
+
+      // Uma só que já tenha saído daqui basta para não reparar nada.
+      final enviadoPorInventario = <String, int>{};
+      for (final op in futuras) {
+        final enviado = enviadoPorInventario.putIfAbsent(
+          op.inventarioId,
+          () => _maiorSeqEnviado(op.inventarioId),
+        );
+        if (op.seq <= enviado) return 0;
+      }
+
+      var ultimo = _maiorHlcAte(piso, 0);
+      final afetados = <String>{};
+      for (final op in futuras) {
+        ultimo = Hlc.enviar(ultimo, agora: agoraMs);
+        // O `criado_em` vai junto: ele também saiu do relógio errado, e
+        // deixá-lo no futuro faria a marca de "a pessoa voltou depois de
+        // horas" contar a partir de uma data que não existiu.
+        _db.execute('UPDATE ops SET hlc = ?, criado_em = ? WHERE op_id = ?', [
+          ultimo.codificar(),
+          ultimo.millis,
+          op.opId,
+        ]);
+        if (op.entidade == 'patrimonio') afetados.add(op.entidadeId);
+      }
+
+      // Os vencedores de cada campo guardam o HLC junto: sem atualizá-los, a
+      // comparação seguinte usaria a estampa antiga.
+      _reestamparVencedores(futuras.map((o) => o.opId).toList());
+      for (final id in afetados) {
+        _materializar(id);
+      }
+
+      banco.gravarConfig(Config.hlcLocal, ultimo.codificar());
+      return futuras.length;
+    });
+  }
+
+  /// Maior HLC do log abaixo de [piso], ou o relógio de parede se for maior.
+  Hlc _maiorHlcAte(String piso, int agoraMs) {
+    final r = _db.select('SELECT MAX(hlc) AS m FROM ops WHERE hlc < ?', [piso]);
+    final texto = r.isEmpty ? null : r.first['m'] as String?;
+    final doLog = texto == null
+        ? Hlc.zero(dispositivoId)
+        : Hlc.decodificar(texto);
+    final daParede = Hlc(agoraMs, 0, dispositivoId);
+    return doLog.millis >= daParede.millis
+        ? Hlc(doLog.millis, doLog.counter, dispositivoId)
+        : daParede;
+  }
+
+  void _reestamparVencedores(List<String> opIds) {
+    for (var i = 0; i < opIds.length; i += 500) {
+      final bloco = opIds.sublist(i, (i + 500).clamp(0, opIds.length));
+      final marcadores = List.filled(bloco.length, '?').join(',');
+      for (final tabela in ['campos_patrimonio', 'campos_inventario']) {
+        _db.execute(
+          'UPDATE $tabela SET hlc = '
+          '(SELECT hlc FROM ops WHERE ops.op_id = $tabela.op_id) '
+          'WHERE op_id IN ($marcadores)',
+          bloco,
+        );
+      }
+    }
   }
 
   // ------------------------------------------------------ version vectors ---

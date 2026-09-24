@@ -190,6 +190,12 @@ class ServidorSync {
         return _erro(req, HttpStatus.unauthorized, 'Não autorizado.');
       }
 
+      // Assinatura com a chave certa e horário dentro da janela: o relógio do
+      // outro aparelho concorda com o deste. É a evidência de fora que
+      // autoriza reparar as operações que ficaram no futuro por causa de uma
+      // data errada já corrigida.
+      ops.reestamparOperacoesDoFuturo(agora: relogio());
+
       final cifra = CifraSync(inventario.chaveSync);
       final Map<String, dynamic> conteudo;
       try {
@@ -244,6 +250,7 @@ class ServidorSync {
       pedido.vetor,
       lacunas: pedido.lacunas,
     );
+    ops.registrarEnvio(inventarioId, faltantes);
 
     // O que o par declara ter de nós é o que está comprovadamente com ele —
     // até o começo da primeira lacuna que ele declarou na nossa sequência.

@@ -216,6 +216,38 @@ de ativar data e hora automáticas. Três pontos detectam o problema:
 
 Nenhuma operação daquele par é aplicada até a diferença sumir.
 
+**Depois de corrigir a data.** Recusar operação do futuro resolve quem recebe e abandona quem
+escreveu: as operações gravadas com a data adiantada ficam com HLC no futuro, o `hlc_local` vai
+junto, e corrigir a data do celular não conserta nada. Cada envio continuava recusado inteiro até
+o tempo real alcançar a data errada — com o ano errado, nunca —, a mensagem culpava um relógio que
+já estava certo, e a única saída oferecida pelo aplicativo ("Gerar nova identidade") apagava
+justamente o trabalho que ainda não tinha saído dali.
+
+Com **evidência de fora** de que o relógio de parede está certo, o aparelho re-estampa as próprias
+operações do futuro. A evidência vem de duas portas, e as duas são o outro lado concordando com a
+nossa hora: o cliente, depois que a conferência de relógios com o par passa; o servidor, depois de
+uma assinatura válida dentro da janela de tempo. As estampas novas saem do relógio de agora,
+acima de tudo que já está no log e na mesma ordem em que estavam.
+
+Três limites, e cada um evita um estrago diferente:
+
+- **Nunca na geração do HLC.** Um relógio que só voltou para trás faria toda operação correta do
+  passado parecer do futuro, e o reparo reescreveria trabalho legítimo. Sem evidência de fora, o
+  aparelho não tem como distinguir "a minha data estava errada" de "a minha data está errada
+  agora".
+- **Só o que nunca saiu daqui.** O limite é o maior `seq` próprio já entregue a alguém — anotado
+  em `sent_seq` a cada `pull` respondido, a cada `push` e a cada cópia de segurança exportada —, e
+  não o `our_seq` que o par confirmou, que chega uma sincronização atrasada.
+- **Ou tudo, ou nada.** Se alguma operação do futuro já saiu, nada é reparado. Os campos do
+  inventário são last-writer-wins puro, e um reparo parcial faria as escritas novas perderem para
+  as antigas que ficaram lá fora com a estampa adiantada.
+
+É a única coisa no sistema que altera uma linha de `ops` depois de gravada, e o log continua sendo
+imutável no que importa: nenhuma réplica jamais viu aquelas linhas, então reescrevê-las aqui
+equivale a tê-las escrito agora. O que sobra recusado é o que este aparelho não pode consertar —
+operação de terceiro que ele apenas repassa, e operação própria que já saiu. Nesses casos a recusa
+é a resposta certa, e continua sendo dada.
+
 ### 5.3 Version vector e contexto causal
 
 Cada dispositivo numera suas próprias operações com um `seq` monotônico. O estado de

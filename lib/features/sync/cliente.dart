@@ -38,8 +38,17 @@ class RelogioDivergente extends FalhaSync {
   /// Hora que o outro aparelho marca agora, segundo a diferença medida.
   DateTime horaDoOutro(DateTime agora) => agora.add(diferenca);
 
+  /// "O relógio de Ana", mas "O relógio deste aparelho": a preposição muda
+  /// quando o rótulo já vem com demonstrativo.
+  static String _donoDoRelogio(String aparelho) => aparelho == esteAparelho
+      ? 'O relógio deste aparelho'
+      : 'O relógio de $aparelho';
+
+  /// Como este aparelho se nomeia nas mensagens de relógio.
+  static const esteAparelho = 'este aparelho';
+
   static String _mensagem(String aparelho, Duration diferenca) =>
-      'O relógio de $aparelho está ${descreverDuracao(diferenca.abs())} '
+      '${_donoDoRelogio(aparelho)} está ${descreverDuracao(diferenca.abs())} '
       '${diferenca.isNegative ? 'atrasado' : 'adiantado'} em relação a este '
       'aparelho. Nada foi trocado. Ative a data e a hora automáticas nos dois '
       'aparelhos e sincronize de novo.';
@@ -151,6 +160,12 @@ class ClienteSync {
     // Os relógios são conferidos antes de qualquer troca: com diferença
     // grande, nenhum dos dois lados deve aplicar nada do outro.
     await _conferirRelogio(par);
+
+    // O par concorda com o nosso relógio de parede: é a evidência de fora que
+    // autoriza re-estampar as nossas operações que ficaram no futuro, se a
+    // data deste aparelho esteve errada. Antes do pull, para que elas saiam
+    // já com o horário certo.
+    ops.reestamparOperacoesDoFuturo(agora: relogio());
 
     // Uma viagem para puxar: a resposta traz as operações que nos faltam e a
     // version vector do par. Outra para enviar exatamente o que falta a ele.
@@ -329,6 +344,9 @@ class ClienteSync {
       ).toJson(),
       chaveSync: chaveSync,
     );
+
+    // Saíram daqui: a partir de agora elas não podem mais ser re-estampadas.
+    ops.registrarEnvio(inventarioId, faltantes);
 
     return (
       quantidade: faltantes.length,
@@ -598,7 +616,7 @@ class ClienteSync {
       final ehEste = erro.dispositivo == ops.dispositivoId;
       return RelogioDivergente(
         aparelho: ehEste
-            ? 'este aparelho'
+            ? RelogioDivergente.esteAparelho
             : 'aparelho ${erro.dispositivo!.substring(0, 6)}',
         diferenca: Duration(milliseconds: erro.diferencaMs!),
       );
