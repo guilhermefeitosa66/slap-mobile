@@ -80,6 +80,39 @@ class TelaAjustes extends ConsumerWidget {
               ),
             ],
           ),
+          secao('Aparência'),
+          CartaoAgrupado(
+            linhas: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const ListTile(
+                    leading: Icon(Icons.brightness_6_outlined),
+                    title: Text('Tema'),
+                    subtitle: Text(
+                      '"Sistema" acompanha o modo claro ou escuro do celular.',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: SegmentedButton<Tema>(
+                      showSelectedIcon: false,
+                      expandedInsets: EdgeInsets.zero,
+                      segments: [
+                        for (final opcao in Tema.values)
+                          ButtonSegment(
+                            value: opcao,
+                            label: Text(opcao.rotulo),
+                          ),
+                      ],
+                      selected: {preferencias.tema},
+                      onSelectionChanged: (s) => controlador.tema(s.first),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           secao('Cópia de segurança'),
           CartaoAgrupado(
             linhas: [

@@ -9,14 +9,18 @@
 #                     ARGS=--dart-define=SLAP_DESCOBERTA=beacon
 
 FLUTTER ?= flutter
-DART ?= dart
+# O `dart` avulso pode existir no PATH e mesmo assim não rodar (um shim do asdf
+# sem versão escolhida, por exemplo). Quando não roda, usa-se o que vem junto
+# com o Flutter, que sempre existe.
+DART ?= $(shell if dart --version >/dev/null 2>&1; then echo dart; \
+	else echo "$$(dirname "$$(command -v flutter)")/dart"; fi)
 DISPOSITIVO ?=
 ARGS ?=
 
 APK := build/app/outputs/flutter-apk/app-release.apk
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda dependencias verificar desatualizadas rodar apk instalar testar limpar
+.PHONY: ajuda dependencias verificar desatualizadas rodar apk instalar site testar limpar
 
 ajuda: ## Lista as tarefas
 	@echo "Uso: make <tarefa>"
@@ -54,9 +58,17 @@ apk: ## Gera o APK de uso, que instala em qualquer Android 7.0+
 instalar: apk ## Gera o APK e instala por cima no aparelho, sem apagar dados
 	@tool/instalar_apk.sh "$(APK)" "$(DISPOSITIVO)"
 
+site: ## Gera o site do GitHub Pages em _site (requer o pacote markdown)
+	python3 tool/gerar_site.py _site
+	@echo
+	@echo "Site: _site/index.html"
+
+# `dart analyze` no lugar de `flutter analyze`: o segundo vigia o pub cache por
+# inotify e estoura o limite padrão do Linux. O CI sobe o limite e roda o
+# `flutter analyze`; aqui o resultado é o mesmo sem precisar de sudo.
 testar: ## Formatação, análise e testes, como no CI
 	$(DART) format --output=none --set-exit-if-changed lib test
-	$(FLUTTER) analyze
+	$(DART) analyze lib test
 	$(FLUTTER) test
 
 limpar: ## Apaga o que os builds geraram (flutter clean)

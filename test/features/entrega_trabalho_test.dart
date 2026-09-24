@@ -119,14 +119,19 @@ void main() {
       verificar(clone, 'item-3');
       await sincronizar(b);
 
+      // Aqui a identidade duplicada é mesmo a de quem está pedindo: o clone
+      // é um dos dois, e a ele a orientação de gerar identidade nova serve.
       await expectLater(
         sincronizar(clone),
         throwsA(
-          isA<FalhaSync>().having(
-            (e) => e.mensagem,
-            'mensagem',
-            contains('mesma identidade'),
-          ),
+          isA<IdentidadeEmConflito>()
+              .having((e) => e.dispositivo, 'aparelho', b.dispositivoId)
+              .having((e) => e.esteAparelho, 'é o deste aparelho', isTrue)
+              .having(
+                (e) => e.mensagem,
+                'mensagem',
+                contains('identidade deste'),
+              ),
         ),
       );
       expect(a.patrimonios.porId('item-3')!.verificado, isFalse);

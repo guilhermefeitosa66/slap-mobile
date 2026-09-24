@@ -10,6 +10,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/repos/patrimonios.dart';
 import '../domain/divergencia.dart';
@@ -562,6 +563,48 @@ ThemeData _tema(Brightness brilho) {
 
 final temaClaro = _tema(Brightness.light);
 final temaEscuro = _tema(Brightness.dark);
+
+// ------------------------------------------------------- barras do sistema ---
+
+/// Barras de status e de navegação no brilho de [tema]: ícones escuros sobre
+/// o fundo claro, claros sobre o escuro, e a barra de navegação na cor do
+/// fundo, para não sobrar uma faixa preta ou branca embaixo da interface.
+SystemUiOverlayStyle estiloDasBarras(ThemeData tema) {
+  final claro = tema.brightness == Brightness.light;
+  final icones = claro ? Brightness.dark : Brightness.light;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    // No iOS é o brilho do fundo da barra; no Android, o dos ícones.
+    statusBarBrightness: tema.brightness,
+    statusBarIconBrightness: icones,
+    systemStatusBarContrastEnforced: false,
+    systemNavigationBarColor: tema.scaffoldBackgroundColor,
+    systemNavigationBarDividerColor: tema.scaffoldBackgroundColor,
+    systemNavigationBarIconBrightness: icones,
+    systemNavigationBarContrastEnforced: false,
+  );
+}
+
+/// Aplica [estiloDasBarras] ao que estiver embaixo, no tema em vigor.
+///
+/// Envolve o aplicativo inteiro, e não a `AppBar`: a `AppBar` só cobre o
+/// alto da tela, e o Flutter lê a barra de navegação pelo que está embaixo.
+/// Onde há `AppBar`, a barra de status continua seguindo a cor dela — é o
+/// que mantém a câmera, de cabeçalho escuro nos dois temas, com ícones
+/// claros. Por isso o tema não define `AppBarTheme.systemOverlayStyle`.
+class BarrasDoSistema extends StatelessWidget {
+  final Widget child;
+
+  const BarrasDoSistema({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: estiloDasBarras(Theme.of(context)),
+      child: child,
+    );
+  }
+}
 
 /// Estilo de tombo e código: Archivo, com os algarismos tabulares que a fonte
 /// já traz por padrão.

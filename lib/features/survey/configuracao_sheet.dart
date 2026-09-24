@@ -6,6 +6,7 @@ import '../../app/tema.dart';
 import '../../core/formato.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../domain/valores.dart';
+import 'campo_com_sugestoes.dart';
 import 'estado_levantamento.dart';
 
 /// Abre a configuração que será aplicada às próximas leituras.
@@ -57,11 +58,14 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
   late EstadoConservacao _conservacao =
       widget.inicial?.conservacao ?? EstadoConservacao.bom;
   late SituacaoUso _situacao = widget.inicial?.situacao ?? SituacaoUso.ativo;
-  late String? _responsavel = widget.inicial?.responsavel;
+  late final TextEditingController _responsavel = TextEditingController(
+    text: widget.inicial?.responsavel ?? '',
+  );
 
   @override
   void dispose() {
     _sala.dispose();
+    _responsavel.dispose();
     super.dispose();
   }
 
@@ -74,13 +78,17 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
       return;
     }
 
+    // Responsável em branco é "não alterar": o que veio do SUAP permanece,
+    // como no `before_save` do SLAP.
+    final responsavel = _responsavel.text.trim();
+
     Navigator.pop(
       context,
       ConfiguracaoLevantamento(
         sala: sala,
         conservacao: _conservacao,
         situacao: _situacao,
-        responsavel: _responsavel,
+        responsavel: responsavel.isEmpty ? null : responsavel,
       ),
     );
   }
@@ -113,32 +121,13 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             // Texto livre com sugestões: o SLAP só permite escolher uma sala
             // que já exista na planilha, o que impede inventariar num ambiente
             // novo ou corrigir um nome errado.
-            Autocomplete<String>(
-              initialValue: TextEditingValue(text: _sala.text),
-              optionsBuilder: (valor) {
-                final busca = formaComparavel(valor.text);
-                if (busca.isEmpty) return widget.salas.take(20);
-                return widget.salas
-                    .where((s) => formaComparavel(s).contains(busca))
-                    .take(20);
-              },
-              onSelected: (s) => _sala.text = s,
-              fieldViewBuilder: (context, controlador, foco, _) {
-                controlador.addListener(() => _sala.text = controlador.text);
-                return TextField(
-                  controller: controlador,
-                  focusNode: foco,
-                  autofocus: widget.inicial == null,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Sala onde você está',
-                    prefixIcon: Icon(Icons.room_outlined),
-                    helperText:
-                        'Pode ser um nome novo, que não esteja na planilha.',
-                    helperMaxLines: 2,
-                  ),
-                );
-              },
+            CampoComSugestoes(
+              controlador: _sala,
+              sugestoes: widget.salas,
+              rotulo: 'Sala onde você está',
+              icone: Icons.room_outlined,
+              ajuda: 'Pode ser um nome novo, que não esteja na planilha.',
+              autofoco: widget.inicial == null,
             ),
             const SizedBox(height: 20),
 
@@ -170,28 +159,17 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
             ),
             const SizedBox(height: 20),
 
-            const _Rotulo('Responsável'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String?>(
-              initialValue: _responsavel,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.person_outline),
-              ),
-              items: [
-                // Nulo mantém o responsável que veio do SUAP, que é a regra do
-                // SLAP: não informar um novo não esvazia o campo.
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Não alterar o responsável'),
-                ),
-                for (final r in widget.responsaveis)
-                  DropdownMenuItem(
-                    value: r,
-                    child: Text(r, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (v) => setState(() => _responsavel = v),
+            // Também texto livre: a lista do SUAP é legada, e um servidor
+            // novo, que ainda não tem patrimônio na carga, não está nela.
+            CampoComSugestoes(
+              controlador: _responsavel,
+              sugestoes: widget.responsaveis,
+              rotulo: 'Responsável',
+              icone: Icons.person_outline,
+              ajuda:
+                  'Em branco, o responsável da planilha é mantido. '
+                  'Pode ser um nome novo.',
+              rotuloLimpar: 'Limpar o responsável',
             ),
             const SizedBox(height: 24),
 

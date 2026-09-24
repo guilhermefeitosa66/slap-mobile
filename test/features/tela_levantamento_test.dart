@@ -48,7 +48,10 @@ void main() {
 
   tearDown(() => banco.fechar());
 
-  Future<ProviderContainer> abrir(WidgetTester tester) async {
+  Future<ProviderContainer> abrir(
+    WidgetTester tester, {
+    String sala = 'Auditório',
+  }) async {
     final c = await montar(
       tester,
       TelaLevantamento(inventarioId: inventario.id),
@@ -56,14 +59,22 @@ void main() {
       sons: sons,
       preparar: (c) => c
           .read(configuracoesProvider.notifier)
-          .definir(
-            inventario.id,
-            const ConfiguracaoLevantamento(sala: 'Auditório'),
-          ),
+          .definir(inventario.id, ConfiguracaoLevantamento(sala: sala)),
     );
     await tester.pumpAndSettle();
     return c;
   }
+
+  /// O contador da barra do alto, como ele aparece na tela.
+  String contador(WidgetTester tester) => tester
+      .widget<Text>(
+        find.descendant(
+          of: find.byType(ContadorSala),
+          matching: find.byType(Text),
+        ),
+      )
+      .textSpan!
+      .toPlainText();
 
   /// Como o leitor externo: digita o código e manda "Enter".
   Future<void> ler(WidgetTester tester, String codigo) async {
@@ -191,6 +202,83 @@ void main() {
       }
     },
   );
+
+  testWidgets('o contador é o da sala atual, e anda a cada leitura', (
+    tester,
+  ) async {
+    final semantica = tester.ensureSemantics();
+    await abrir(tester, sala: 'biblioteca');
+    expect(contador(tester), '0/2', reason: 'o que a planilha manda procurar');
+
+    await ler(tester, '887101');
+    expect(contador(tester), '1/2');
+
+    await ler(tester, '887102');
+    expect(contador(tester), '2/2');
+    expect(
+      find.bySemanticsLabel('Sala biblioteca: 2 de 2 verificados'),
+      findsOneWidget,
+    );
+    semantica.dispose();
+  });
+
+  testWidgets('sala fora da planilha conta o que foi lido ali, sem fração', (
+    tester,
+  ) async {
+    final semantica = tester.ensureSemantics();
+    final c = await abrir(tester, sala: 'Almoxarifado');
+    expect(contador(tester), '0 lidos', reason: 'nunca "0/0"');
+
+    await ler(tester, '887101');
+    expect(contador(tester), '1 lido');
+    expect(
+      find.bySemanticsLabel('Sala Almoxarifado, fora da planilha: 1 item lido'),
+      findsOneWidget,
+    );
+
+    // Trocar de sala refaz a conta: o item continua verificado na sala de
+    // origem, que é onde ninguém precisa mais procurá-lo.
+    c
+        .read(configuracoesProvider.notifier)
+        .definir(
+          inventario.id,
+          const ConfiguracaoLevantamento(sala: 'BIBLIOTECA'),
+        );
+    await tester.pumpAndSettle();
+    expect(contador(tester), '1/2');
+    semantica.dispose();
+  });
+
+  testWidgets('item de outra sala conta ao lado, fora do denominador', (
+    tester,
+  ) async {
+    repo.inserirLote(inventario.id, const [
+      PatrimonioImportado(
+        tombo: '023201',
+        codigoBarras: '887201',
+        descricao: 'ARMÁRIO',
+        sala: 'Almoxarifado',
+      ),
+    ]);
+    final semantica = tester.ensureSemantics();
+    await abrir(tester, sala: 'Almoxarifado');
+    expect(contador(tester), '0/1');
+
+    // Item da Biblioteca encontrado no Almoxarifado: não entra no que há para
+    // procurar ali, mas a leitura precisa aparecer em algum lugar.
+    await ler(tester, '887101');
+    expect(contador(tester), '0/1 +1');
+    expect(
+      find.bySemanticsLabel(
+        'Sala Almoxarifado: 0 de 1 verificados, mais 1 item de outra sala',
+      ),
+      findsOneWidget,
+    );
+
+    await ler(tester, '887201');
+    expect(contador(tester), '1/1 +1');
+    semantica.dispose();
+  });
 
   testWidgets('sem sala definida, a configuração aparece antes de ler', (
     tester,

@@ -64,6 +64,26 @@ class CopiaDeSeguranca {
     } finally {
       copia.close();
     }
+
+    _marcarLogComoSaido(banco, inventarioId);
+  }
+
+  /// O log saiu deste aparelho, e o que saiu não pode mais ser re-estampado.
+  ///
+  /// Restaurada noutro celular, a cópia leva estas operações com a estampa que
+  /// têm agora. Reescrever aqui uma delas criaria duas versões da mesma
+  /// operação — ver `RepositorioOperacoes.reestamparOperacoesDoFuturo`.
+  static void _marcarLogComoSaido(Banco banco, String? inventarioId) {
+    final ops = RepositorioOperacoes(banco);
+    final linhas = banco.db.select(
+      'SELECT inventario_id, MAX(seq) AS s FROM ops WHERE dispositivo = ?'
+      '${inventarioId == null ? '' : ' AND inventario_id = ?'} '
+      'GROUP BY inventario_id',
+      [banco.dispositivoId, ?inventarioId],
+    );
+    for (final l in linhas) {
+      ops.marcarEnviadoAte(l['inventario_id'] as String, l['s'] as int);
+    }
   }
 
   static void _manterSo(Database copia, String inventarioId) {
@@ -194,7 +214,11 @@ class CopiaDeSeguranca {
                 r['vetor'] as String,
               ),
           };
-          final resultado = ops.aplicarRemotas(lote, contextos: contextos);
+          final resultado = ops.aplicarRemotas(
+            lote,
+            inventarioId: id,
+            contextos: contextos,
+          );
           operacoes += resultado.aplicadas;
           conflitos += resultado.conflitos;
           ops.reaplicarEdsExcluidos(id);
@@ -213,14 +237,19 @@ class CopiaDeSeguranca {
   }
 
   static void _copiarPatrimonios(Database de, Database para, String id) {
+    // A lista é fechada, e não `SELECT *`, para que uma cópia feita por uma
+    // versão anterior do esquema continue restaurável: as colunas que ela
+    // tinha a mais — `conservacao_original` e `situacao_original`, até a
+    // versão 3 — simplesmente não são lidas.
     const colunas =
         'id, inventario_id, ordem, tombo, codigo_barras, ed, descricao, '
-        'responsavel_original, sala_original, valor, conservacao_original, '
-        'situacao_original, tombo_chave, codigo_barras_chave, ignorado';
+        'responsavel_original, sala_original, valor, tombo_chave, '
+        'codigo_barras_chave, ignorado';
     final stmt = para.prepare(
       'INSERT OR IGNORE INTO patrimonios ($colunas) '
-      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
     );
+
     try {
       for (final r in de.select(
         'SELECT $colunas FROM patrimonios WHERE inventario_id = ?',

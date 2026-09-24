@@ -79,6 +79,18 @@ void main() {
       expect(chaveCabecalho('N° PATRIMONIAL'), 'npatrimonial');
     });
 
+    test('"#" sozinho é a coluna de número, como "Nº"', () {
+      // A exportação do SUAP chama a ordem de `#`. Só de pontuação, ela
+      // viraria chave vazia e ficaria sem campo.
+      expect(chaveCabecalho('#'), 'n');
+      expect(chaveCabecalho(' # '), chaveCabecalho('Nº'));
+    });
+
+    test('"#" no meio de outro cabeçalho é só pontuação', () {
+      expect(chaveCabecalho('Item #'), 'item');
+      expect(chaveCabecalho('# Tombo'), 'tombo');
+    });
+
     test('"No." escrito com letra vira outra chave, e isso é proposital', () {
       // Apagar o "o" depois do "n" quebraria qualquer cabeçalho começado por
       // "no" — "nome", por exemplo. As duas grafias são resolvidas no

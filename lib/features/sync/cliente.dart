@@ -3,7 +3,6 @@ import 'dart:io';
 
 import '../../core/formato.dart';
 import '../../core/hlc.dart';
-import '../../core/version_vector.dart';
 import '../../data/repos/operacoes.dart';
 import 'cifra.dart';
 import 'protocolo.dart';
@@ -38,11 +37,50 @@ class RelogioDivergente extends FalhaSync {
   /// Hora que o outro aparelho marca agora, segundo a diferença medida.
   DateTime horaDoOutro(DateTime agora) => agora.add(diferenca);
 
+  /// "O relógio de Ana", mas "O relógio deste aparelho": a preposição muda
+  /// quando o rótulo já vem com demonstrativo.
+  static String _donoDoRelogio(String aparelho) => aparelho == esteAparelho
+      ? 'O relógio deste aparelho'
+      : 'O relógio de $aparelho';
+
+  /// Como este aparelho se nomeia nas mensagens de relógio.
+  static const esteAparelho = 'este aparelho';
+
   static String _mensagem(String aparelho, Duration diferenca) =>
-      'O relógio de $aparelho está ${descreverDuracao(diferenca.abs())} '
+      '${_donoDoRelogio(aparelho)} está ${descreverDuracao(diferenca.abs())} '
       '${diferenca.isNegative ? 'atrasado' : 'adiantado'} em relação a este '
       'aparelho. Nada foi trocado. Ative a data e a hora automáticas nos dois '
       'aparelhos e sincronize de novo.';
+}
+
+/// Dois aparelhos estão escrevendo com a mesma identidade.
+///
+/// A mensagem é montada **aqui**, do ponto de vista de quem vai lê-la. O par
+/// que recusou fala da identidade dele; repetir a frase dele faria o aparelho
+/// honesto entender que o problema é o dele, tocar em "Gerar nova identidade"
+/// e apagar o trabalho que ainda não entregou.
+class IdentidadeEmConflito extends FalhaSync {
+  /// Aparelho cuja identidade está duplicada.
+  final String dispositivo;
+
+  /// A identidade duplicada é a deste aparelho.
+  final bool esteAparelho;
+
+  IdentidadeEmConflito(this.dispositivo, {required this.esteAparelho})
+    : super(
+        IdentidadeDuplicada(dispositivo, esteAparelho: esteAparelho).toString(),
+      );
+}
+
+/// O pedido de entrada não foi atendido.
+///
+/// Recusa, expiração e token repetido são respostas normais do protocolo, e
+/// não falhas de rede: cada uma pede uma coisa diferente de quem está com o
+/// celular na mão.
+class EntradaRecusada extends FalhaSync {
+  final MotivoRecusa motivo;
+
+  EntradaRecusada(this.motivo) : super(motivo.explicacao);
 }
 
 /// Um aparelho encontrado na rede local.
@@ -141,6 +179,12 @@ class ClienteSync {
     // grande, nenhum dos dois lados deve aplicar nada do outro.
     await _conferirRelogio(par);
 
+    // O par concorda com o nosso relógio de parede: é a evidência de fora que
+    // autoriza re-estampar as nossas operações que ficaram no futuro, se a
+    // data deste aparelho esteve errada. Antes do pull, para que elas saiam
+    // já com o horário certo.
+    ops.reestamparOperacoesDoFuturo(agora: relogio());
+
     // Uma viagem para puxar: a resposta traz as operações que nos faltam e a
     // version vector do par. Outra para enviar exatamente o que falta a ele.
     final lote = await _puxar(par, inventarioId, chaveSync);
@@ -152,20 +196,18 @@ class ClienteSync {
             conflitos: 0,
             patrimoniosAfetados: {},
           )
-        : _aplicar(par, lote);
+        : _aplicar(par, lote, inventarioId);
 
-    final enviadas = await _enviar(par, inventarioId, chaveSync, lote.vetor);
+    final enviadas = await _enviar(par, inventarioId, chaveSync, lote);
 
-    // Até onde o nosso trabalho está com o par: o que ele declarou ter, ou o
-    // que ele acabou de aceitar do nosso envio.
+    // Até onde o nosso trabalho está com o par: o que ele declarou ter, mais
+    // o que ele acabou de aceitar do nosso envio, e sempre até o começo da
+    // primeira lacuna que ele ainda tem na nossa sequência.
     ops.registrarPar(
       par.dispositivoId,
       inventarioId,
       usuarioNome: par.usuarioNome,
-      nossoSeq: [
-        lote.vetor[ops.dispositivoId],
-        enviadas.nossoSeq,
-      ].reduce((a, b) => a > b ? a : b),
+      nossoSeq: enviadas.nossoSeq,
     );
 
     return ResultadoSync(
@@ -212,12 +254,24 @@ class ClienteSync {
   ///
   /// A operação do futuro pode ser de um terceiro, que chegou ao par por
   /// sincronização anterior: o aviso nomeia quem a escreveu, não o par.
-  ResultadoAplicacao _aplicar(Par par, LoteOperacoes lote) {
+  ResultadoAplicacao _aplicar(
+    Par par,
+    LoteOperacoes lote,
+    String inventarioId,
+  ) {
     try {
-      ops.conferirCabecas(lote.inventarioId, lote.cabecas);
-      return ops.aplicarRemotas(lote.ops, contextos: lote.contextos);
+      ops.conferirCabecas(inventarioId, lote.cabecas);
+      return ops.aplicarRemotas(
+        lote.ops,
+        inventarioId: inventarioId,
+        contextos: lote.contextos,
+      );
+    } on LoteDeOutroInventario {
+      // O mesmo buraco do lado do servidor, deste lado: a chave deste
+      // inventário autenticou a conversa, e o par mandou operação de outro.
+      throw FalhaSync(_foraDoInventario(par));
     } on IdentidadeDuplicada catch (e) {
-      throw FalhaSync('$e');
+      throw IdentidadeEmConflito(e.dispositivo, esteAparelho: e.esteAparelho);
     } on RelogioForaDeSincronia catch (e) {
       final autor = e.recebido.nodeId;
       throw RelogioDivergente(
@@ -252,28 +306,44 @@ class ClienteSync {
       inventarioId: inventarioId,
       corpo: PedidoPull(
         inventarioId: inventarioId,
-        vetor: ops.vetorParaPedido(inventarioId),
+        vetor: ops.vetorDe(inventarioId),
+        lacunas: ops.lacunasDe(inventarioId),
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
     );
 
-    return LoteOperacoes.fromJson(resposta);
+    final lote = LoteOperacoes.fromJson(resposta);
+    // O inventário do corpo tem de ser o que pedimos. Sem esta conferência,
+    // um par responderia o log de outro inventário a quem tem a chave deste.
+    if (lote.inventarioId != inventarioId) {
+      throw FalhaSync(_foraDoInventario(par));
+    }
+    return lote;
   }
 
-  /// Envia o que falta ao par. Devolve quantas foram e o maior `seq` deste
-  /// aparelho entre elas, que o par agora tem.
+  /// O par respondeu sobre um inventário que não é o da conversa.
+  String _foraDoInventario(Par par) =>
+      'A resposta de ${par.rotulo} veio de outro inventário. Nada foi '
+      'aplicado.';
+
+  /// Envia o que falta ao par. Devolve quantas foram e até onde a nossa
+  /// sequência está inteira nele depois do envio.
   Future<({int quantidade, int nossoSeq})> _enviar(
     Par par,
     String inventarioId,
     String chaveSync,
-    VersionVector vetorDoPar,
+    LoteOperacoes doPar,
   ) async {
     // Vai mesmo sem nada a enviar: o lote leva o nosso vetor, e é assim que
     // o par fica sabendo que já recebemos o trabalho dele. Sem isso, quem só
     // forneceu dados nunca saberia se eles chegaram — e a confirmação de
     // apagar o inventário lá avisaria de uma perda que não existe.
-    final faltantes = ops.opsFaltantes(inventarioId, vetorDoPar);
+    final faltantes = ops.opsFaltantes(
+      inventarioId,
+      doPar.vetor,
+      lacunas: doPar.lacunas,
+    );
 
     await _requisitar(
       host: par.host,
@@ -287,18 +357,109 @@ class ClienteSync {
         ops: faltantes,
         contextos: ops.contextosDe(faltantes),
         vetor: ops.vetorDe(inventarioId),
+        lacunas: ops.lacunasDe(inventarioId),
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
     );
 
-    var nossoSeq = 0;
-    for (final op in faltantes) {
-      if (op.dispositivo == ops.dispositivoId && op.seq > nossoSeq) {
-        nossoSeq = op.seq;
-      }
+    // Saíram daqui: a partir de agora elas não podem mais ser re-estampadas.
+    ops.registrarEnvio(inventarioId, faltantes);
+
+    return (
+      quantidade: faltantes.length,
+      nossoSeq: _prefixoEntregue(inventarioId, doPar, faltantes),
+    );
+  }
+
+  /// Até onde a nossa sequência está inteira no par, depois do envio.
+  int _prefixoEntregue(
+    String inventarioId,
+    LoteOperacoes doPar,
+    List<Operacao> enviadas,
+  ) => ops.seqEntregueA(
+    inventarioId,
+    maximoDoPar: doPar.vetor[ops.dispositivoId],
+    lacunasDoPar: doPar.lacunas[ops.dispositivoId],
+    enviadasAgora: {
+      for (final op in enviadas)
+        if (op.dispositivo == ops.dispositivoId) op.seq,
+    },
+  );
+
+  /// Pede entrada num inventário a quem o compartilhou.
+  ///
+  /// É a única requisição que sai daqui sem assinatura, porque a chave que a
+  /// assinaria é exatamente o que está sendo pedido. O que autoriza é uma
+  /// pessoa tocando em "Aceitar" no outro aparelho; a requisição fica aberta
+  /// até ela decidir, ou até o pedido caducar.
+  ///
+  /// A chave volta cifrada com a chave combinada de um acordo efêmero
+  /// ([AcordoEfemero]), que só existe durante este pedido. Devolve a
+  /// `chave_sync` do inventário; lança [EntradaRecusada] quando a resposta é
+  /// não.
+  Future<String> pedirEntrada({
+    required Par par,
+    required String inventarioId,
+    String? usuarioNome,
+    String? matricula,
+    Duration? validade,
+  }) async {
+    final acordo = AcordoEfemero.gerar();
+    final token = gerarTokenEntrada();
+
+    // A espera é a validade do pedido mais uma folga: quem responde no último
+    // segundo ainda tem a resposta entregue.
+    final espera =
+        (validade ?? validadePedidoPadrao) + const Duration(seconds: 10);
+
+    final resposta = RespostaPedido.fromJson(
+      await _requisitar(
+        host: par.host,
+        porta: par.porta,
+        rotulo: par.rotulo,
+        metodo: 'POST',
+        caminho: Rotas.pedido,
+        inventarioId: inventarioId,
+        corpo: PedidoEntrada(
+          inventarioId: inventarioId,
+          token: token,
+          dispositivo: ops.dispositivoId,
+          chavePublica: acordo.publica,
+          usuarioNome: usuarioNome,
+          matricula: matricula,
+        ).toJson(),
+        tempoLimite: espera,
+      ),
+    );
+
+    if (!resposta.aceito) {
+      throw EntradaRecusada(resposta.motivo ?? MotivoRecusa.invalido);
     }
-    return (quantidade: faltantes.length, nossoSeq: nossoSeq);
+
+    try {
+      final cifra = acordo.combinar(
+        resposta.chavePublica!,
+        rotulo: rotuloEntrega(
+          inventarioId: inventarioId,
+          token: token,
+          publicaPedinte: acordo.publica,
+          publicaOrigem: resposta.chavePublica!,
+        ),
+      );
+      final aberto = cifra.decifrar(
+        resposta.entrega!,
+        contexto: CifraSync.contextoResposta('POST', Rotas.pedido),
+      );
+      final chave = aberto[RespostaPedido.campoChave];
+      if (chave is! String || chave.isEmpty) throw CorpoIlegivel();
+      return chave;
+    } on CorpoIlegivel {
+      throw FalhaSync(
+        'A chave do inventário chegou ilegível de ${par.rotulo}. Os dois '
+        'aparelhos têm a mesma versão do aplicativo?',
+      );
+    }
   }
 
   /// Baixa a réplica inicial de um inventário.
@@ -332,8 +493,10 @@ class ClienteSync {
     Map<String, dynamic>? corpo,
     String? inventarioId,
     String? chaveSync,
+    Duration? tempoLimite,
   }) async {
-    final cliente = HttpClient()..connectionTimeout = tempoLimite;
+    final limite = tempoLimite ?? this.tempoLimite;
+    final cliente = HttpClient()..connectionTimeout = limite;
     final cifra = chaveSync == null ? null : CifraSync(chaveSync);
 
     try {
@@ -360,23 +523,26 @@ class ClienteSync {
               contexto: CifraSync.contextoPedido(metodo, caminho),
             );
 
+      // A versão vai em toda requisição, assinada ou não: o pedido de entrada
+      // também precisa ser recusado por um aparelho de outra versão, antes de
+      // qualquer coisa.
+      req.headers.set(cabecalhoVersao, '$versaoProtocolo');
+
       if (chaveSync != null) {
-        req.headers
-          ..set(cabecalhoVersao, '$versaoProtocolo')
-          ..set(
-            HttpHeaders.authorizationHeader,
-            Assinatura.gerar(
-              chaveSync: chaveSync,
-              dispositivoId: ops.dispositivoId,
-              metodo: metodo,
-              // A assinatura cobre o caminho sem a query, que é o que o
-              // servidor também usa ao conferir, e o corpo como ele
-              // trafega: cifrado.
-              caminho: caminho,
-              corpo: textoCorpo,
-              agora: relogio(),
-            ),
-          );
+        req.headers.set(
+          HttpHeaders.authorizationHeader,
+          Assinatura.gerar(
+            chaveSync: chaveSync,
+            dispositivoId: ops.dispositivoId,
+            metodo: metodo,
+            // A assinatura cobre o caminho sem a query, que é o que o
+            // servidor também usa ao conferir, e o corpo como ele
+            // trafega: cifrado.
+            caminho: caminho,
+            corpo: textoCorpo,
+            agora: relogio(),
+          ),
+        );
       }
 
       if (corpo != null) {
@@ -386,14 +552,14 @@ class ClienteSync {
         req.write(textoCorpo);
       }
 
-      final resposta = await req.close().timeout(tempoLimite);
+      final resposta = await req.close().timeout(limite);
       final texto = await utf8.decoder.bind(resposta).join();
 
       if (resposta.statusCode == HttpStatus.upgradeRequired) {
         throw _versaoRecusada(texto, rotulo ?? host);
       }
       if (resposta.statusCode == HttpStatus.conflict) {
-        throw _relogioRecusado(texto, rotulo ?? host);
+        throw _recusadoComConflito(texto, rotulo ?? host);
       }
       if (resposta.statusCode == HttpStatus.unauthorized) {
         throw FalhaSync(
@@ -444,20 +610,32 @@ class ClienteSync {
     );
   }
 
-  /// Traduz a recusa por relógio do outro lado.
+  /// Traduz uma recusa `409` do outro lado.
   ///
-  /// Quando o par aponta o autor das operações do futuro, o aviso é sobre
-  /// ele; senão, a diferença é entre o relógio do par e o nosso.
-  FalhaSync _relogioRecusado(String texto, String rotulo) {
+  /// São recusas que o par explica: relógio fora de sincronia e identidade
+  /// duplicada. Nos dois casos os dados vêm estruturados e a frase é montada
+  /// aqui, do ponto de vista de quem vai lê-la — quem recusou fala do ponto de
+  /// vista dele.
+  FalhaSync _recusadoComConflito(String texto, String rotulo) {
     final Map<String, dynamic> corpo;
     try {
       corpo = jsonDecode(texto) as Map<String, dynamic>;
     } catch (_) {
       return FalhaSync('Resposta inesperada (409).');
     }
+
+    final identidade = ErroIdentidade.fromJson(corpo);
+    if (identidade != null) {
+      return IdentidadeEmConflito(
+        identidade.dispositivo,
+        esteAparelho: identidade.dispositivo == ops.dispositivoId,
+      );
+    }
+
     final erro = ErroRelogio.fromJson(corpo);
     if (erro == null) {
-      // Outra recusa explicada pelo par — identidade duplicada, por exemplo.
+      // Recusa de um formato que não conhecemos, ou de uma versão anterior:
+      // o texto que o par mandou é o que há.
       final motivo = corpo['erro'];
       return FalhaSync(
         motivo is String ? motivo : 'Resposta inesperada (409).',
@@ -468,7 +646,7 @@ class ClienteSync {
       final ehEste = erro.dispositivo == ops.dispositivoId;
       return RelogioDivergente(
         aparelho: ehEste
-            ? 'este aparelho'
+            ? RelogioDivergente.esteAparelho
             : 'aparelho ${erro.dispositivo!.substring(0, 6)}',
         diferenca: Duration(milliseconds: erro.diferencaMs!),
       );

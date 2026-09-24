@@ -64,7 +64,15 @@ String chaveCabecalho(String bruto) {
   const semAcento = 'aaaaaeeeeiiiiooooouuuucn';
 
   var texto = bruto.toLowerCase().trim();
+
+  // A exportação do SUAP chama a coluna de ordem de `#`. Só de pontuação, ela
+  // viraria chave vazia e ninguém a reivindicaria. Sozinha, `#` é o símbolo de
+  // número — o mesmo que `Nº` —, e vira a mesma chave; no meio de outro
+  // cabeçalho continua sendo pontuação descartada.
+  if (texto == '#') return 'n';
+
   final buffer = StringBuffer();
+
   for (final ch in texto.split('')) {
     final i = comAcento.indexOf(ch);
     buffer.write(i >= 0 ? semAcento[i] : ch);

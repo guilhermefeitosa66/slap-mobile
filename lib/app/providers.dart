@@ -8,6 +8,7 @@ import '../data/repos/operacoes.dart';
 import '../data/repos/patrimonios.dart';
 import '../data/schema.dart';
 import '../domain/divergencia.dart';
+import '../features/sync/anuncio.dart';
 import '../features/sync/cliente.dart';
 import '../features/sync/servidor.dart';
 
@@ -68,6 +69,21 @@ final servidorSyncProvider = Provider<ServidorSync>((ref) {
   );
   ref.onDispose(servidor.dispose);
   return servidor;
+});
+
+/// Anúncio deste aparelho na rede enquanto alguém entra num inventário.
+///
+/// Vive no provedor, e não na folha de compartilhar, porque ele precisa
+/// sobreviver ao fechamento dela: o pedido de entrada costuma chegar quando o
+/// celular já voltou para o bolso.
+final anuncioEntradaProvider = Provider<AnuncioEntrada>((ref) {
+  final anuncio = AnuncioEntrada(
+    servidor: ref.watch(servidorSyncProvider),
+    banco: ref.watch(bancoProvider),
+    usuarioNome: () => ref.read(identidadeProvider).nome,
+  );
+  ref.onDispose(anuncio.dispose);
+  return anuncio;
 });
 
 // ------------------------------------------------------------- identidade ---
@@ -147,6 +163,23 @@ final progressoProvider = Provider.family<ProgressoInventario, String>((
   ref.watch(revisaoProvider);
   return ref.watch(patrimoniosProvider).progresso(id);
 });
+
+/// Progresso de uma sala do inventário.
+///
+/// A sala entra na chave em vez de ser lida da configuração do levantamento:
+/// `lib/app` não conhece `lib/features/survey`, e assim o contador também
+/// serve a quem quiser o número de outra sala. Trocar de sala troca a chave, e
+/// a consulta refaz sozinha.
+final progressoSalaProvider =
+    Provider.family<ProgressoSala, ({String inventarioId, String? sala})>((
+      ref,
+      chave,
+    ) {
+      ref.watch(revisaoProvider);
+      return ref
+          .watch(patrimoniosProvider)
+          .progressoDaSala(chave.inventarioId, chave.sala);
+    });
 
 final conflitosPendentesProvider = Provider.family<int, String>((ref, id) {
   ref.watch(revisaoProvider);

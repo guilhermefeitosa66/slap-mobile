@@ -33,7 +33,7 @@ COMO FUNCIONA
 • Sincronize quando quiser. Se duas pessoas alterarem o mesmo item sem sincronizar, o aplicativo mostra o conflito para decidir — nada se perde em silêncio.
 
 NO FIM
-• Os patrimônios separados em três grupos: os que estão certos, os que precisam de atualização no SUAP (sala, responsável, estado de conservação, situação de uso) e os não localizados.
+• Os patrimônios separados em três grupos: os que estão certos, os que precisam de atualização no SUAP (sala ou responsável) e os não localizados. O estado de conservação e a situação de uso levantados saem nos relatórios.
 • Relatórios em XLSX ou CSV para cada grupo.
 
 PRIVACIDADE
@@ -73,7 +73,9 @@ Tudo é gerado a partir do código, com dados fictícios:
 
 - capturas: `flutter test --run-skipped --tags capturas --update-goldens`
   (`test/capturas/capturas_test.dart`);
-- ícone e imagem de destaque: `python3 tool/gerar_icones.py`.
+- ícone: `python3 tool/gerar_icones.py`;
+- imagem de destaque: `.venv-marca/bin/python tool/gerar_marca.py`, junto com
+  a logomarca (ver [`../marca/README.md`](../marca/README.md)).
 
 ## Classificação e categoria
 

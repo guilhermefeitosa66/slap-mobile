@@ -60,6 +60,37 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Convite de inventário por link (App Link).
+
+                 O endereço é o do site do projeto, e não um esquema próprio:
+                 assim quem recebe o link sem o aplicativo instalado cai numa
+                 página que explica o que é e oferece o APK. Com autoVerify, o
+                 Android confere o /.well-known/assetlinks.json do site e abre
+                 o aplicativo direto; sem a verificação ele ainda funciona,
+                 apenas oferecendo o seletor de aplicativos.
+
+                 Os dados do convite vão no fragmento (#) do endereço, que
+                 nunca chega ao servidor. O Flutter entrega o endereço como
+                 rota inicial (aplicativo fechado) ou por pushRouteInformation
+                 (aplicativo aberto, com o launchMode singleTop acima). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="guilhermefeitosa66.github.io"
+                      android:pathPrefix="/slap-mobile/entrar"/>
+            </intent-filter>
+
+            <!-- Esquema próprio, reserva de quando a verificação do App Link
+                 não acontece (sem rede na primeira abertura, por exemplo). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="slapmobile" android:host="entrar"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

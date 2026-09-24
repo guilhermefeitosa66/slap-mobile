@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/codigo.dart';
 import '../../domain/divergencia.dart';
+import '../../domain/filtro_itens.dart';
 import '../../domain/patrimonio.dart';
 import '../../domain/valores.dart';
 import '../banco.dart';
@@ -141,8 +142,6 @@ class PatrimonioImportado {
   final String? responsavel;
   final String? sala;
   final String? valor;
-  final EstadoConservacao? conservacao;
-  final SituacaoUso? situacao;
 
   const PatrimonioImportado({
     required this.tombo,
@@ -153,8 +152,6 @@ class PatrimonioImportado {
     this.responsavel,
     this.sala,
     this.valor,
-    this.conservacao,
-    this.situacao,
   });
 }
 
@@ -162,17 +159,13 @@ class PatrimonioImportado {
 ///
 /// É a regra de [divergenciasDe], escrita para o banco: sala e responsável
 /// comparados pela forma comparável (a função `forma_comparavel` que o
-/// [Banco] registra), estado e situação só quando a planilha trouxe o valor
-/// de origem. Um teste confere que as duas dão sempre o mesmo resultado.
+/// [Banco] registra). Um teste confere que as duas dão sempre o mesmo
+/// resultado.
 const sqlDivergente =
     '(forma_comparavel(sala_original) <> '
     'forma_comparavel(COALESCE(sala_atual, sala_original)) '
     'OR forma_comparavel(responsavel_original) <> '
-    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)) '
-    'OR (conservacao_original IS NOT NULL AND conservacao IS NOT NULL '
-    'AND conservacao_original <> conservacao) '
-    'OR (situacao_original IS NOT NULL AND situacao IS NOT NULL '
-    'AND situacao_original <> situacao))';
+    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)))';
 
 class RepositorioPatrimonios {
   /// De quantos em quantos itens a importação informa o progresso.
@@ -300,6 +293,63 @@ class RepositorioPatrimonios {
     return porId(patrimonio.id)!;
   }
 
+  /// Altera os campos do levantamento de um item, pelo detalhe dele.
+  ///
+  /// Mesmo caminho de [registrarVerificacao]: uma operação por campo que de
+  /// fato mudou, nenhuma para valor igual — e nenhuma operação se nada mudou.
+  /// Um item ainda não verificado passa a verificado: editar o levantamento
+  /// é verificá-lo manualmente, sem leitor, e o crédito vai a quem salvou.
+  /// Num item já verificado, quem o encontrou permanece; a edição fica no
+  /// histórico, com o seu autor.
+  ///
+  /// [sala] e [responsavel] em branco valem `null`: o valor da planilha
+  /// permanece, como na regra do SLAP para o responsável. Devolve o item como
+  /// ficou.
+  Patrimonio alterarLevantamento({
+    required Patrimonio patrimonio,
+    required String? sala,
+    required String? responsavel,
+    required EstadoConservacao conservacao,
+    required SituacaoUso situacao,
+    String? usuarioNome,
+    String? usuarioMatricula,
+  }) {
+    String? limpo(String? texto) {
+      final t = texto?.trim() ?? '';
+      return t.isEmpty ? null : t;
+    }
+
+    final salaNova = limpo(sala);
+    final responsavelNovo = limpo(responsavel);
+    final campos = <String, String?>{};
+
+    if (!patrimonio.verificado) campos[CampoPatrimonio.verificado] = '1';
+    if (!mesmoTexto(patrimonio.salaAtual, salaNova)) {
+      campos[CampoPatrimonio.salaAtual] = salaNova;
+    }
+    if (!mesmoTexto(patrimonio.responsavelAtual, responsavelNovo)) {
+      campos[CampoPatrimonio.responsavelAtual] = responsavelNovo;
+    }
+    if (patrimonio.conservacao != conservacao) {
+      campos[CampoPatrimonio.conservacao] = conservacao.valor;
+    }
+    if (patrimonio.situacao != situacao) {
+      campos[CampoPatrimonio.situacao] = situacao.valor;
+    }
+
+    if (campos.isEmpty) return patrimonio;
+
+    ops.registrarLocal(
+      inventarioId: patrimonio.inventarioId,
+      entidade: 'patrimonio',
+      entidadeId: patrimonio.id,
+      campos: campos,
+      usuarioNome: usuarioNome,
+      usuarioMatricula: usuarioMatricula,
+    );
+    return porId(patrimonio.id)!;
+  }
+
   /// Desfaz a verificação de um item.
   ///
   /// Ao contrário do `undo` do SLAP, que apaga os campos sem deixar rastro, a
@@ -348,8 +398,8 @@ class RepositorioPatrimonios {
       final stmt = _db.prepare(
         'INSERT INTO patrimonios (id, inventario_id, ordem, tombo, codigo_barras, '
         'ed, descricao, responsavel_original, sala_original, valor, '
-        'conservacao_original, situacao_original, tombo_chave, codigo_barras_chave) '
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'tombo_chave, codigo_barras_chave) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -366,8 +416,6 @@ class RepositorioPatrimonios {
             i.responsavel,
             i.sala,
             i.valor,
-            i.conservacao?.valor,
-            i.situacao?.valor,
             chaveBusca(i.tombo),
             i.codigoBarras == null ? null : chaveBusca(i.codigoBarras),
           ]);
@@ -399,8 +447,8 @@ class RepositorioPatrimonios {
       final stmt = _db.prepare(
         'INSERT OR IGNORE INTO patrimonios (id, inventario_id, ordem, tombo, '
         'codigo_barras, ed, descricao, responsavel_original, sala_original, '
-        'valor, conservacao_original, situacao_original, tombo_chave, '
-        'codigo_barras_chave, ignorado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        'valor, tombo_chave, codigo_barras_chave, ignorado) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -416,8 +464,6 @@ class RepositorioPatrimonios {
             p.responsavelOriginal,
             p.salaOriginal,
             p.valor,
-            p.conservacaoOriginal?.valor,
-            p.situacaoOriginal?.valor,
             chaveBusca(p.tombo),
             p.codigoBarras == null ? null : chaveBusca(p.codigoBarras),
             p.ignorado ? 1 : 0,
@@ -451,18 +497,18 @@ class RepositorioPatrimonios {
   List<Patrimonio> listar({
     required String inventarioId,
     Classificacao? classificacao,
-    String? sala,
+    FiltroItens filtro = FiltroItens.nenhum,
     String? busca,
     int limite = 200,
     int deslocamento = 0,
   }) {
-    final filtro = _filtro(inventarioId, classificacao, sala, busca);
+    final consulta = _filtro(inventarioId, classificacao, filtro, busca);
     final linhas = _db.select(
-      'SELECT * FROM patrimonios WHERE ${filtro.onde} '
+      'SELECT * FROM patrimonios WHERE ${consulta.onde} '
       // O id desempata: sem ordem total, a mesma linha poderia aparecer em
       // duas páginas, ou em nenhuma.
       'ORDER BY CAST(ordem AS INTEGER), tombo_chave, id LIMIT ? OFFSET ?',
-      [...filtro.parametros, limite, deslocamento],
+      [...consulta.parametros, limite, deslocamento],
     );
     return linhas.map(_daLinha).toList();
   }
@@ -472,13 +518,13 @@ class RepositorioPatrimonios {
   int contar({
     required String inventarioId,
     Classificacao? classificacao,
-    String? sala,
+    FiltroItens filtro = FiltroItens.nenhum,
     String? busca,
   }) {
-    final filtro = _filtro(inventarioId, classificacao, sala, busca);
+    final consulta = _filtro(inventarioId, classificacao, filtro, busca);
     final r = _db.select(
-      'SELECT COUNT(*) AS n FROM patrimonios WHERE ${filtro.onde}',
-      filtro.parametros,
+      'SELECT COUNT(*) AS n FROM patrimonios WHERE ${consulta.onde}',
+      consulta.parametros,
     );
     return r.first['n'] as int;
   }
@@ -486,7 +532,7 @@ class RepositorioPatrimonios {
   ({String onde, List<Object?> parametros}) _filtro(
     String inventarioId,
     Classificacao? classificacao,
-    String? sala,
+    FiltroItens campos,
     String? busca,
   ) {
     final condicoes = <String>['inventario_id = ?'];
@@ -505,10 +551,36 @@ class RepositorioPatrimonios {
         condicoes.add('ignorado = 0');
     }
 
-    if (sala != null) {
-      condicoes.add('sala_original = ?');
-      parametros.add(sala);
+    // Sala e responsável são texto digitado: comparados pela forma comparável,
+    // como no resto do sistema. Filtrar por "Coordenação de TI" precisa achar
+    // o item cuja sala foi digitada "COORDENACAO DE TI" — para a divergência
+    // os dois já são a mesma sala, e o filtro não pode discordar disso. A
+    // chave vai normalizada do Dart; a coluna, pela função registrada no
+    // SQLite.
+    void porTexto(String expressao, String? valor) {
+      if (valor == null) return;
+      condicoes.add('forma_comparavel($expressao) = ?');
+      parametros.add(formaComparavel(valor));
     }
+
+    porTexto('sala_original', campos.sala);
+    porTexto(_salaEfetiva, campos.salaAtual);
+    porTexto('responsavel_original', campos.responsavel);
+    porTexto(_responsavelEfetivo, campos.responsavelAtual);
+    porTexto('verificado_por', campos.verificadoPor);
+
+    if (campos.conservacao case final c?) {
+      condicoes.add('conservacao = ?');
+      parametros.add(c.valor);
+    }
+    if (campos.situacao case final s?) {
+      condicoes.add('situacao = ?');
+      parametros.add(s.valor);
+    }
+    // Estado, situação e autor só existem em item encontrado. A condição é
+    // redundante com as de cima — nenhuma das três colunas tem valor sem
+    // verificação —, mas deixa a regra explícita na consulta.
+    if (campos.exigeVerificado) condicoes.add('verificado = 1');
 
     if (busca != null && busca.trim().isNotEmpty) {
       final chave = chaveBusca(busca);
@@ -538,6 +610,12 @@ class RepositorioPatrimonios {
 
     return (onde: condicoes.join(' AND '), parametros: parametros);
   }
+
+  /// Valor que vale hoje: o do levantamento quando existe, senão o do SUAP.
+  /// É o `salaEfetiva`/`responsavelEfetivo` do domínio, escrito para o banco.
+  static const _salaEfetiva = 'COALESCE(sala_atual, sala_original)';
+  static const _responsavelEfetivo =
+      'COALESCE(responsavel_atual, responsavel_original)';
 
   /// `%` e `_` digitados na busca são texto, não curinga.
   static String _semCuringas(String texto) => texto
@@ -586,6 +664,43 @@ class RepositorioPatrimonios {
     return [for (final l in linhas) l['r'] as String];
   }
 
+  /// Valores distintos de uma expressão, sem vazios e em ordem alfabética.
+  ///
+  /// Alimenta os seletores do filtro da lista: cada um só oferece valores que
+  /// de fato existem no inventário, para que escolher nunca dê lista vazia
+  /// sem explicação.
+  List<String> _distintos(String inventarioId, String expressao) {
+    final linhas = _db.select(
+      'SELECT DISTINCT $expressao AS v FROM patrimonios '
+      "WHERE inventario_id = ? AND TRIM(COALESCE($expressao, '')) <> '' "
+      'ORDER BY v',
+      [inventarioId],
+    );
+    return [for (final l in linhas) l['v'] as String];
+  }
+
+  /// Salas como vieram da planilha do SUAP.
+  List<String> salasOriginais(String inventarioId) =>
+      _distintos(inventarioId, 'sala_original');
+
+  /// Salas onde os itens estão agora — o valor efetivo, que é o do
+  /// levantamento quando houve mudança e o do SUAP quando não houve.
+  List<String> salasAtuais(String inventarioId) =>
+      _distintos(inventarioId, _salaEfetiva);
+
+  /// Responsáveis como vieram da planilha do SUAP.
+  List<String> responsaveisOriginais(String inventarioId) =>
+      _distintos(inventarioId, 'responsavel_original');
+
+  /// Responsáveis que valem agora, pelo mesmo critério de [salasAtuais].
+  List<String> responsaveisAtuais(String inventarioId) =>
+      _distintos(inventarioId, _responsavelEfetivo);
+
+  /// Quem registrou verificação neste inventário — deste aparelho e dos que
+  /// já sincronizaram com ele.
+  List<String> verificadores(String inventarioId) =>
+      _distintos(inventarioId, 'verificado_por');
+
   /// Elementos de despesa presentes, com a contagem de itens de cada um.
   ///
   /// É o que alimenta a escolha de EDs a ignorar. A lista vem do arquivo, e
@@ -632,6 +747,50 @@ class RepositorioPatrimonios {
     );
   }
 
+  /// Progresso de uma sala: o que a planilha aponta para ela e quanto disso
+  /// já foi verificado.
+  ///
+  /// A sala vem digitada na configuração do levantamento, então a comparação é
+  /// a do domínio — caixa, acento e espaço sobrando ignorados —, e não
+  /// igualdade crua: `Coordenação de TI` e `COORDENACAO DE TI` são a mesma
+  /// sala. Isso custa o índice `idx_patr_sala`, que é sobre o valor original:
+  /// a consulta varre as linhas do inventário (pelo prefixo `inventario_id`) e
+  /// normaliza cada sala. É a mesma varredura que [progresso] já faz para
+  /// separar OK de divergente, com a mesma ordem de grandeza — alguns milhares
+  /// de linhas por leitura, em banco local.
+  ///
+  /// [sala] em branco devolve [ProgressoSala.vazio]: sem sala configurada não
+  /// há o que contar.
+  ProgressoSala progressoDaSala(String inventarioId, String? sala) {
+    final chave = formaComparavel(sala);
+    if (chave.isEmpty) return ProgressoSala.vazio;
+
+    // As duas formas comparáveis saem numa subconsulta para serem calculadas
+    // uma vez por linha, e não uma vez por `CASE`.
+    final r = _db.select(
+      'SELECT '
+      '  SUM(CASE WHEN origem = ?2 THEN 1 ELSE 0 END) AS total, '
+      '  SUM(CASE WHEN origem = ?2 AND verificado = 1 THEN 1 ELSE 0 END) '
+      '    AS verificados, '
+      '  SUM(CASE WHEN verificado = 1 AND origem <> ?2 AND efetiva = ?2 '
+      '      THEN 1 ELSE 0 END) AS de_outras '
+      'FROM ('
+      '  SELECT verificado, '
+      '    forma_comparavel(sala_original) AS origem, '
+      '    forma_comparavel(COALESCE(sala_atual, sala_original)) AS efetiva '
+      '  FROM patrimonios WHERE inventario_id = ?1 AND ignorado = 0'
+      ')',
+      [inventarioId, chave],
+    );
+    if (r.isEmpty) return ProgressoSala.vazio;
+
+    return ProgressoSala(
+      total: (r.first['total'] as int?) ?? 0,
+      verificados: (r.first['verificados'] as int?) ?? 0,
+      deOutrasSalas: (r.first['de_outras'] as int?) ?? 0,
+    );
+  }
+
   // ---------------------------------------------------------------- mapa ---
 
   static Patrimonio _daLinha(Row r) => Patrimonio(
@@ -645,11 +804,8 @@ class RepositorioPatrimonios {
     responsavelOriginal: r['responsavel_original'] as String?,
     salaOriginal: r['sala_original'] as String?,
     valor: r['valor'] as String?,
-    conservacaoOriginal: EstadoConservacao.de(
-      r['conservacao_original'] as String?,
-    ),
-    situacaoOriginal: SituacaoUso.de(r['situacao_original'] as String?),
     ignorado: (r['ignorado'] as int) == 1,
+
     verificado: (r['verificado'] as int) == 1,
     salaAtual: r['sala_atual'] as String?,
     responsavelAtual: r['responsavel_atual'] as String?,

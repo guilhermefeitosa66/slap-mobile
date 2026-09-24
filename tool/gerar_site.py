@@ -1,21 +1,37 @@
 #!/usr/bin/env python3
 """Gera o site estático publicado no GitHub Pages.
 
-As lojas pedem a política de privacidade numa URL estável. A fonte da verdade
-é docs/privacidade.md; este script só a converte para HTML, com a paleta e as
-fontes do aplicativo, para a página publicada nunca divergir do texto versionado.
+O site apresenta o aplicativo — o que é, como se parece, como se usa e como
+instalar — e publica a política de privacidade numa URL estável, que as lojas
+exigem. A fonte da verdade dos textos longos continua no repositório: a
+política vem de docs/privacidade.md, as capturas de docs/imagens/ e a
+logomarca de docs/marca/. Este script só monta as páginas, com a paleta e as
+fontes do aplicativo, para o site nunca divergir do que está versionado.
 
     python3 tool/gerar_site.py [pasta de saída, padrão _site]
 
 Saída:
-    index.html              apresentação curta, com os links
-    privacidade/index.html  a política
-    fontes/, icone.png      o que as páginas usam
+    index.html                   apresentação, como usar, capturas, instalação
+    privacidade/index.html       a política
+    entrar/index.html            reserva do link de entrada num inventário
+    .well-known/assetlinks.json  verificação do App Link (ver abaixo)
+    fontes/, imagens/, marca/    o que as páginas usam
+    icone.png
+
+O convite de entrada num inventário é um App Link para /slap-mobile/entrar.
+Para o Android abrir o aplicativo direto, em vez de oferecer o seletor, o site
+precisa servir o assetlinks.json com a impressão digital SHA-256 da chave de
+release. Ela não está no repositório: grave-a em docs/loja/impressao-digital.txt
+(só os 32 pares hexadecimais separados por dois-pontos) na máquina que guarda a
+chave, ou passe SLAP_IMPRESSAO_DIGITAL no ambiente do workflow. Sem ela o site
+sai sem o arquivo, e o link continua funcionando pelo seletor de aplicativos.
 
 Depende do pacote `markdown` (pip install markdown).
 """
 
 import html
+import json
+import os
 import re
 import shutil
 import sys
@@ -26,9 +42,18 @@ from markdown.extensions.toc import slugify_unicode
 
 RAIZ = Path(__file__).resolve().parent.parent
 REPOSITORIO = "https://github.com/guilhermefeitosa66/slap-mobile"
+RELEASE = f"{REPOSITORIO}/releases/latest"
+SITE = "https://guilhermefeitosa66.github.io/slap-mobile/"
+PACOTE_ANDROID = "io.github.guilhermefeitosa66.slap_mobile"
 
 # docs/privacidade.md e o que ele cita por caminho relativo.
 FONTE_POLITICA = RAIZ / "docs" / "privacidade.md"
+PASTA_IMAGENS = RAIZ / "docs" / "imagens"
+PASTA_MARCA = RAIZ / "docs" / "marca"
+
+# Impressão digital SHA-256 da chave de release, para o assetlinks.json.
+FONTE_IMPRESSAO = RAIZ / "docs" / "loja" / "impressao-digital.txt"
+IMPRESSAO_DIGITAL = re.compile(r"^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$")
 
 FONTES = {
     "Archivo-SemiBold.ttf": ("Archivo", 600),
@@ -36,56 +61,188 @@ FONTES = {
     "PublicSans-SemiBold.ttf": ("Public Sans", 600),
 }
 
-# Mesmos tokens de lib/app/tema.dart (PaletaClara / PaletaEscura).
+# Capturas de tela usadas nas páginas: arquivo em docs/imagens/ e o texto
+# alternativo. Quem gera as capturas é docs/imagens/README.md.
+CAPTURAS = {
+    "identidade": "Tela de identificação: nome e matrícula, sem senha",
+    "inventarios": "Lista de inventários do aparelho",
+    "importacao": "Conferência das colunas da planilha do SUAP antes de importar",
+    "painel": "Painel do inventário: progresso e os três grupos de patrimônios",
+    "compartilhar": "Compartilhar o inventário por QR code ou link",
+    "configuracao": "Configuração das leituras: sala, responsável, estado e situação",
+    "levantamento": "Levantamento: leitura registrada, com a lista das últimas leituras",
+    "camera": "Leitura do código de barras pela câmera",
+    "sincronizacao": "Sincronização com os outros aparelhos da rede local",
+    "itens": "Todos os itens, com busca e filtros por sala, responsável e situação",
+    "filtros": "Filtro por sala, responsável, estado, situação e quem verificou",
+    "detalhe": "Detalhe de um patrimônio: dados da planilha e do levantamento",
+    "relatorios": "Relatórios em XLSX ou CSV, um por grupo",
+}
+
+# Logomarca horizontal em fundo claro, para o cabeçalho e a abertura.
+LOGO = "horizontal-claro.png"
+
+# Mesmos tokens de lib/app/tema.dart (PaletaClara e CoresResultado.claro).
+# O site é só em tema claro: é a cara do aplicativo na loja e no README.
 ESTILO = """
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --fundo: #F7F6F3; --superficie: #FFFFFF; --tinta: #14201E;
   --tinta-secundaria: #55625F; --teal: #0F5C52; --teal-claro: #DCE9E6;
-  --borda: #E2E0DA;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fundo: #111816; --superficie: #1A2220; --tinta: #E9EDEB;
-    --tinta-secundaria: #A9B5B2; --teal: #8FCFC2; --teal-claro: #1E3A35;
-    --borda: #2C3633;
-  }
+  --sobre-teal-claro: #0B3B34; --borda: #E2E0DA; --trilho: #EDEBE4;
+  --verde-fundo: #DFF0E4; --verde-texto: #0F5C2E;
+  --laranja-fundo: #FBE8D6; --laranja-texto: #8A4408;
+  --vermelho-fundo: #FAE0DE; --vermelho-texto: #7E1214;
+  --raio: 16px; --largura: 1080px;
 }
 FONTES
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
   margin: 0; background: var(--fundo); color: var(--tinta);
   font: 400 17px/1.6 "Public Sans", system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
-main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
-h1, h2, h3 { font-family: "Archivo", system-ui, sans-serif; font-weight: 600;
-  line-height: 1.25; word-spacing: 0.08em; }
-h1 { font-size: 2rem; margin: 0 0 0.5rem; }
-h2 { font-size: 1.35rem; margin: 2.25rem 0 0.5rem; padding-top: 1.25rem;
-  border-top: 1px solid var(--borda); }
-h3 { font-size: 1.1rem; margin: 1.75rem 0 0.25rem; }
-p, ul { margin: 0.75rem 0; }
-li { margin: 0.35rem 0; }
+img { max-width: 100%; height: auto; display: block; }
 a { color: var(--teal); text-underline-offset: 0.15em; }
-a:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; border-radius: 2px; }
+a:focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { font-family: "Archivo", system-ui, sans-serif; font-weight: 600;
+  line-height: 1.2; letter-spacing: -0.01em; margin: 0; }
+h1 { font-size: clamp(2rem, 5.5vw, 3.4rem); }
+h2 { font-size: clamp(1.6rem, 3.5vw, 2.2rem); }
+h3 { font-size: 1.15rem; }
+p { margin: 0.6rem 0 0; }
 strong { font-weight: 600; }
-em:first-child:last-child { color: var(--tinta-secundaria); font-style: normal; }
-code { font-size: 0.9em; }
-.topo { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem;
+.largura { max-width: var(--largura); margin: 0 auto; padding: 0 1.25rem; }
+.centro { text-align: center; }
+.secundario { color: var(--tinta-secundaria); }
+.lede { font-size: 1.15rem; color: var(--tinta-secundaria); max-width: 44rem; }
+.centro .lede { margin-left: auto; margin-right: auto; }
+.sobretitulo { display: inline-block; font-family: "Archivo", sans-serif; font-weight: 600;
+  font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--teal); margin-bottom: 0.75rem; }
+.botao { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 48px;
+  padding: 0.7rem 1.3rem; border-radius: 999px; font-weight: 600; text-decoration: none;
+  border: 1px solid var(--teal); transition: background 0.15s, color 0.15s; }
+.botao-cheio { background: var(--teal); color: #fff; }
+.botao-cheio:hover { background: #0B3B34; }
+.botao-vazado { background: transparent; color: var(--teal); }
+.botao-vazado:hover { background: var(--teal-claro); }
+.botao-pequeno { min-height: 40px; padding: 0.4rem 1rem; }
+
+header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 0.92);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--borda); }
+.navegacao { display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; min-height: 64px; }
+.marca { display: flex; align-items: center; gap: 0.6rem; color: var(--tinta);
+  text-decoration: none; font-family: "Archivo", sans-serif; font-weight: 600; }
+.marca img { height: 36px; width: auto; }
+.navegacao nav { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+  justify-content: flex-end; }
+/* `:not(.botao)` porque esta regra é mais específica que .botao-cheio e
+   apagaria o branco do rótulo sobre o teal. */
+.navegacao nav a:not(.botao) { color: var(--tinta-secundaria); text-decoration: none;
+  font-weight: 600; font-size: 0.95rem; }
+.navegacao nav a:not(.botao):hover { color: var(--teal); }
+@media (max-width: 720px) { .navegacao nav .discreto { display: none; } }
+
+.abertura { padding: 4rem 0 3rem; }
+.abertura-grade { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 3rem;
+  align-items: center; }
+.abertura h1 span { color: var(--teal); }
+.chamadas { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
+.nota { font-size: 0.9rem; color: var(--tinta-secundaria); margin-top: 1rem; }
+.celular { border-radius: 28px; border: 1px solid var(--borda); background: var(--superficie);
+  box-shadow: 0 24px 48px -24px rgba(20, 32, 30, 0.35); overflow: hidden; }
+.abertura .celular { max-width: 340px; margin: 0 auto; }
+@media (max-width: 860px) {
+  .abertura { padding: 2.5rem 0 2rem; }
+  .abertura-grade { grid-template-columns: 1fr; gap: 2rem; }
+  .abertura .celular { max-width: 280px; }
+}
+
+section { padding: 3.5rem 0; }
+section + section { border-top: 1px solid var(--borda); }
+.grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem; margin-top: 2rem; }
+.cartao { background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: var(--raio); padding: 1.5rem; }
+.cartao .icone { width: 44px; height: 44px; border-radius: 12px; display: grid;
+  place-items: center; background: var(--teal-claro); color: var(--sobre-teal-claro);
+  margin-bottom: 1rem; }
+.cartao .icone svg { width: 24px; height: 24px; }
+.cartao p { color: var(--tinta-secundaria); font-size: 0.98rem; }
+
+.retornos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem; margin-top: 2rem; }
+.retorno { border-radius: var(--raio); padding: 1.25rem 1.5rem; font-weight: 600; }
+.retorno small { display: block; font-weight: 400; margin-top: 0.25rem; }
+.retorno-verde { background: var(--verde-fundo); color: var(--verde-texto); }
+.retorno-laranja { background: var(--laranja-fundo); color: var(--laranja-texto); }
+.retorno-vermelho { background: var(--vermelho-fundo); color: var(--vermelho-texto); }
+
+.passos { list-style: none; counter-reset: passo; padding: 0; margin: 2rem 0 0;
+  display: grid; gap: 1.25rem; }
+.passo { display: grid; grid-template-columns: 56px 1fr 220px; gap: 1.25rem;
+  align-items: center; background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: var(--raio); padding: 1.25rem; }
+.passo::before { counter-increment: passo; content: counter(passo);
+  font-family: "Archivo", sans-serif; font-weight: 600; font-size: 1.4rem;
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--teal); color: #fff; }
+.passo p { color: var(--tinta-secundaria); font-size: 0.98rem; }
+.passo .celular { max-width: 220px; border-radius: 20px; }
+@media (max-width: 760px) {
+  .passo { grid-template-columns: 48px 1fr; }
+  .passo::before { width: 48px; height: 48px; font-size: 1.2rem; }
+  .passo .celular { grid-column: 1 / -1; max-width: 240px; margin: 0 auto; }
+}
+
+.galeria { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem; margin-top: 2rem; }
+.galeria figure { margin: 0; }
+.galeria figcaption { font-size: 0.9rem; color: var(--tinta-secundaria);
+  margin-top: 0.6rem; text-align: center; }
+.galeria .celular { border-radius: 22px; }
+
+.instalar ol { padding-left: 1.25rem; margin: 1rem 0 0; }
+.instalar li { margin: 0.5rem 0; }
+.instalar code { background: var(--trilho); padding: 0.1em 0.4em; border-radius: 6px;
+  font-size: 0.92em; }
+.duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 2rem; }
+@media (max-width: 760px) { .duas-colunas { grid-template-columns: 1fr; } }
+
+footer { border-top: 1px solid var(--borda); padding: 2.5rem 0 3rem;
+  color: var(--tinta-secundaria); font-size: 0.92rem; }
+footer .navegacao { min-height: 0; align-items: flex-start; }
+footer nav a:not(.botao) { color: var(--tinta-secundaria); margin-left: 1.25rem; }
+
+/* Páginas de texto (política, reserva do link). */
+.texto { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+.texto h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+.texto h2 { font-size: 1.35rem; margin: 2.25rem 0 0.5rem; padding-top: 1.25rem;
+  border-top: 1px solid var(--borda); }
+.texto h3 { font-size: 1.1rem; margin: 1.75rem 0 0.25rem; }
+.texto p, .texto ul { margin: 0.75rem 0; }
+.texto li { margin: 0.35rem 0; }
+.texto em:first-child:last-child { color: var(--tinta-secundaria); font-style: normal; }
+.texto code { font-size: 0.9em; }
+.texto .topo { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem;
   color: var(--tinta); text-decoration: none; font-family: "Archivo", sans-serif;
-  font-weight: 600; word-spacing: 0.08em; }
-.topo img { width: 40px; height: 40px; border-radius: 10px; }
-.apresentacao img { width: 96px; height: 96px; border-radius: 22px; }
-.apresentacao p { color: var(--tinta-secundaria); font-size: 1.1rem; }
-.links { list-style: none; padding: 0; margin: 2rem 0; }
-.links li { margin: 0; }
-.links a { display: block; padding: 0.9rem 1rem; margin: 0.5rem 0;
-  background: var(--superficie); border: 1px solid var(--borda); border-radius: 12px;
-  text-decoration: none; font-weight: 600; min-height: 48px; }
-.links a:hover { background: var(--teal-claro); }
-footer { margin-top: 3rem; color: var(--tinta-secundaria); font-size: 0.9rem; }
+  font-weight: 600; }
+.texto .topo img { width: 40px; height: 40px; border-radius: 10px; }
+.texto footer { border: 0; padding: 3rem 0 0; }
 """
+
+# Ícones das características, em linha para não depender de arquivo externo.
+ICONES = {
+    "offline": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-1-9.9A7 7 0 0 0 3 10a4 4 0 0 0 1 8h13z"/><path d="m3 3 18 18"/></svg>',
+    "rede": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="7" height="12" rx="1.5"/><rect x="15" y="5" width="7" height="12" rx="1.5"/><path d="M9 13h6"/></svg>',
+    "som": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5.5a9 9 0 0 1 0 13"/></svg>',
+    "config": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+    "conflito": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h13l-3-3M21 17H8l3 3"/><path d="M12 11v2M12 16h.01"/></svg>',
+    "relatorio": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>',
+}
 
 
 def estilo(prefixo: str) -> str:
@@ -107,13 +264,14 @@ def pagina(titulo: str, descricao: str, corpo: str, prefixo: str = "") -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(titulo)}</title>
 <meta name="description" content="{html.escape(descricao)}">
+<meta property="og:title" content="{html.escape(titulo)}">
+<meta property="og:description" content="{html.escape(descricao)}">
+<meta property="og:image" content="{SITE}imagens/painel.png">
 <link rel="icon" href="{prefixo}icone.png">
 <style>{estilo(prefixo)}</style>
 </head>
 <body>
-<main>
 {corpo}
-</main>
 </body>
 </html>
 """
@@ -135,55 +293,407 @@ def converter(texto: str) -> str:
     )
 
 
+def captura(nome: str, classe: str = "celular", carregamento: str = "lazy") -> str:
+    """Uma captura de tela, com o texto alternativo de CAPTURAS."""
+    alt = html.escape(CAPTURAS[nome])
+    # 720 × 1603 é o que tool/reduzir_capturas.py produz; as dimensões evitam
+    # o salto do layout enquanto a imagem carrega.
+    return (
+        f'<div class="{classe}"><img src="imagens/{nome}.png" alt="{alt}" '
+        f'width="720" height="1603" loading="{carregamento}"></div>'
+    )
+
+
+def cabecalho(logo: str) -> str:
+    return f"""<header>
+<div class="largura navegacao">
+<a class="marca" href="#inicio"><img src="{logo}" alt="SLAP Mobile"></a>
+<nav>
+<a class="discreto" href="#por-que">Por quê</a>
+<a class="discreto" href="#como-usar">Como usar</a>
+<a class="discreto" href="#capturas">Capturas</a>
+<a href="#instalar">Instalar</a>
+<a class="discreto" href="{REPOSITORIO}">GitHub</a>
+<a class="botao botao-cheio botao-pequeno" href="{RELEASE}">Baixar o APK</a>
+</nav>
+</div>
+</header>"""
+
+
+def abertura() -> str:
+    return f"""<section class="abertura" id="inicio">
+<div class="largura abertura-grade">
+<div>
+<span class="sobretitulo">Software livre para o inventário do IFPI</span>
+<h1>Inventário patrimonial <span>sem internet e sem servidor.</span></h1>
+<p class="lede">Cada celular carrega o inventário inteiro, funciona sozinho e sincroniza
+direto com os outros pela rede Wi-Fi local. Leia os códigos de barras, ouça o resultado e
+exporte os relatórios prontos para o SUAP.</p>
+<div class="chamadas">
+<a class="botao botao-cheio" href="{RELEASE}">Baixar o APK</a>
+<a class="botao botao-vazado" href="{REPOSITORIO}">Ver o código no GitHub</a>
+</div>
+<p class="nota">Software livre · Apache-2.0 · Android 7.0 ou mais novo · sem conta, sem anúncios</p>
+</div>
+{captura("levantamento", carregamento="eager")}
+</div>
+</section>"""
+
+
+def por_que() -> str:
+    cartoes = [
+        ("offline", "Funciona sem rede",
+         "Sem servidor, sem conta e sem internet. Importe a planilha exportada do SUAP "
+         "e comece a levantar — dentro do almoxarifado, no subsolo ou no campus sem sinal."),
+        ("rede", "Sincroniza entre os celulares",
+         "Os aparelhos do mesmo inventário trocam o que cada um levantou, direto entre "
+         "eles, pela rede Wi-Fi local. Não há aparelho principal: todos têm a cópia inteira."),
+        ("som", "Três retornos, sem olhar a tela",
+         "Cada leitura responde com som, vibração, cor e texto próprios. Dá para percorrer "
+         "uma sala inteira com o leitor numa mão e a etiqueta na outra."),
+        ("config", "Configure uma vez, leia dezenas",
+         "Sala, responsável, estado de conservação e situação de uso valem para as "
+         "próximas leituras, até você mudar. É de onde vem a velocidade."),
+        ("conflito", "Nada se perde em silêncio",
+         "Duas pessoas alteraram o mesmo item sem sincronizar? O aplicativo mostra o "
+         "conflito para alguém decidir, e a decisão vale em todos os aparelhos."),
+        ("relatorio", "Relatórios prontos",
+         "Itens corretos, itens que precisam de atualização no SUAP e itens não "
+         "localizados, em XLSX ou CSV — iguais em qualquer aparelho do inventário."),
+    ]
+    grade = "\n".join(
+        f'<div class="cartao"><div class="icone">{ICONES[icone]}</div>'
+        f"<h3>{titulo}</h3><p>{texto}</p></div>"
+        for icone, titulo, texto in cartoes
+    )
+    return f"""<section id="por-que">
+<div class="largura centro">
+<span class="sobretitulo">Por quê</span>
+<h2>Feito para o levantamento em campo</h2>
+<p class="lede">O sistema anterior dependia de um servidor e do navegador: sem rede, sem
+inventário. Aqui o celular é o inventário.</p>
+<div class="grade">
+{grade}
+</div>
+<div class="retornos">
+<div class="retorno retorno-verde">Registrado<small>encontrado e gravado com a configuração atual</small></div>
+<div class="retorno retorno-laranja">Já verificado<small>lido antes; nada é sobrescrito sem confirmação</small></div>
+<div class="retorno retorno-vermelho">Não localizado<small>não está na planilha deste inventário</small></div>
+</div>
+</div>
+</section>"""
+
+
+def como_usar() -> str:
+    passos = [
+        ("identidade", "Identifique-se",
+         "Nome e matrícula, sem senha. Ficam no aparelho e acompanham cada patrimônio que "
+         "você verificar, para o relatório dizer quem conferiu o quê."),
+        ("importacao", "Crie o inventário e importe a planilha do SUAP",
+         "XLSX ou CSV, como sai da exportação. As colunas são reconhecidas pelo nome e você "
+         "confere o resultado antes de importar. Importar de novo acrescenta; nunca apaga o "
+         "que já foi levantado."),
+        ("compartilhar", "Chame os colegas",
+         "Toque em Compartilhar e mostre o QR code ou envie o link. No outro celular, "
+         "Novo → Ler o QR code de outro aparelho. Você aceita cada pedido de entrada; os dois "
+         "precisam estar na mesma rede Wi-Fi."),
+        ("configuracao", "Diga onde você está",
+         "Sala, responsável, estado de conservação e situação de uso. A configuração vale "
+         "para todas as leituras seguintes, até você mudar de sala."),
+        ("levantamento", "Leia os códigos",
+         "Pela câmera, com um leitor externo ou digitando o tombo. Verde é registrado, "
+         "laranja é já verificado, vermelho é não localizado — com som e vibração para cada um."),
+        ("sincronizacao", "Sincronize quando quiser",
+         "Os aparelhos da mesma rede se encontram sozinhos. Se houver conflito, ele aparece "
+         "para alguém decidir; a decisão vale para todos."),
+        ("relatorios", "Confira e exporte",
+         "Três grupos: o que está certo, o que precisa de atualização no SUAP e o que não "
+         "foi localizado. Cada um sai em XLSX ou CSV."),
+    ]
+    lista = "\n".join(
+        f'<li class="passo"><div><h3>{titulo}</h3><p>{texto}</p></div>{captura(nome)}</li>'
+        for nome, titulo, texto in passos
+    )
+    return f"""<section id="como-usar">
+<div class="largura">
+<div class="centro">
+<span class="sobretitulo">Como usar</span>
+<h2>Do arquivo do SUAP ao relatório, em sete passos</h2>
+<p class="lede">Uma pessoa importa; as outras entram pelo QR code ou pelo link. Cada uma
+levanta uma sala. No fim, os relatórios são os mesmos em todos os aparelhos.</p>
+</div>
+<ol class="passos">
+{lista}
+</ol>
+</div>
+</section>"""
+
+
+def capturas() -> str:
+    nomes = [
+        "inventarios",
+        "painel",
+        "camera",
+        "itens",
+        "filtros",
+        "detalhe",
+    ]
+    figuras = "\n".join(
+        f"<figure>{captura(nome)}<figcaption>{html.escape(CAPTURAS[nome])}</figcaption></figure>"
+        for nome in nomes
+    )
+    return f"""<section id="capturas">
+<div class="largura centro">
+<span class="sobretitulo">Capturas</span>
+<h2>O aplicativo por dentro</h2>
+<p class="lede">Tema claro e escuro, TalkBack e fonte ampliada. Os nomes nas imagens são
+fictícios; o resto é um inventário real.</p>
+<div class="galeria">
+{figuras}
+</div>
+</div>
+</section>"""
+
+
+def instalar() -> str:
+    return f"""<section id="instalar" class="instalar">
+<div class="largura">
+<div class="centro">
+<span class="sobretitulo">Instalar</span>
+<h2>Um arquivo, nenhum cadastro</h2>
+<p class="lede">Enquanto o aplicativo não está na Play Store, ele é instalado pelo APK
+publicado no GitHub. Precisa de Android 7.0 ou mais novo.</p>
+</div>
+<div class="duas-colunas">
+<div class="cartao">
+<h3>No celular</h3>
+<ol>
+<li>Abra a <a href="{RELEASE}">versão mais recente</a> e baixe o arquivo
+<code>arm64-v8a.apk</code>. Só use o <code>armeabi-v7a</code> se o primeiro der
+"aplicativo não instalado".</li>
+<li>Ao abrir o arquivo, o Android pede permissão para instalar de fonte desconhecida:
+toque em <strong>Configurações</strong>, ative <strong>Permitir desta fonte</strong> e volte.</li>
+<li>Toque em <strong>Instalar</strong>. Na primeira abertura, informe seu nome e comece.</li>
+</ol>
+<p class="secundario">Para atualizar, instale o APK novo por cima: os inventários ficam.
+O passo a passo completo, com a conferência do arquivo, está em
+<a href="{REPOSITORIO}/blob/main/docs/instalacao.md">docs/instalacao.md</a>.</p>
+</div>
+<div class="cartao">
+<h3>Privacidade</h3>
+<p>Sem conta, sem servidor e sem anúncios. Os dados do inventário ficam no aparelho e só
+trafegam, cifrados, entre os celulares do mesmo inventário, pela rede local. A cópia de
+segurança é um arquivo que você guarda onde quiser.</p>
+<p>A leitura de códigos usa uma biblioteca do Google que envia a ele diagnósticos do
+próprio funcionamento; nenhuma foto, código lido ou dado do inventário sai do aparelho.</p>
+<p><a class="botao botao-vazado botao-pequeno" href="privacidade/">Ler a política de privacidade</a></p>
+</div>
+</div>
+</div>
+</section>"""
+
+
+def rodape() -> str:
+    return f"""<footer>
+<div class="largura navegacao">
+<div>SLAP Mobile · software livre sob a licença Apache-2.0<br>
+Feito para o inventário patrimonial do Instituto Federal do Piauí.</div>
+<nav>
+<a href="{REPOSITORIO}">Código-fonte</a>
+<a href="{REPOSITORIO}/issues">Issues</a>
+<a href="privacidade/">Privacidade</a>
+</nav>
+</div>
+</footer>"""
+
+
+def pagina_inicial(logo: str) -> str:
+    return pagina(
+        "SLAP Mobile — inventário patrimonial sem internet",
+        "Inventário patrimonial offline e distribuído: cada celular carrega os dados, "
+        "funciona sozinho e sincroniza com os outros pela rede local, sem servidor.",
+        "\n".join([
+            cabecalho(logo),
+            "<main>",
+            abertura(),
+            por_que(),
+            como_usar(),
+            capturas(),
+            instalar(),
+            "</main>",
+            rodape(),
+        ]),
+    )
+
+
+def pagina_politica() -> str:
+    texto = FONTE_POLITICA.read_text(encoding="utf-8")
+    titulo = re.search(r"^# (.+)$", texto, re.MULTILINE).group(1).strip()
+    topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
+    rodape_politica = (
+        f'<footer>Fonte: <a href="{REPOSITORIO}/blob/main/docs/privacidade.md">'
+        "docs/privacidade.md</a> no repositório.</footer>"
+    )
+    return pagina(
+        titulo,
+        "Quais dados o SLAP Mobile guarda, para onde vão e por quê.",
+        f'<main class="texto">{topo}{converter(texto)}{rodape_politica}</main>',
+        prefixo="../",
+    )
+
+
+def pagina_entrar() -> str:
+    """Reserva do link de entrada num inventário.
+
+    Com o aplicativo instalado e o App Link verificado, o Android abre o
+    aplicativo direto e esta página nunca aparece. Sem o aplicativo, ela
+    explica o que o link é e oferece o APK; os dados do convite ficam no
+    fragmento da URL, que o navegador não envia a servidor nenhum.
+    """
+    topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
+    # O nome do inventário vem no fragmento da URL, que o navegador não envia a
+    # servidor nenhum. Escrito com textContent: é texto de quem mandou o link,
+    # nunca marcação.
+    script = """<script>
+(function () {
+  var bruto = location.hash.replace(/^#/, '');
+  if (!bruto) return;
+  var campos = {};
+  bruto.split('&').forEach(function (par) {
+    var i = par.indexOf('=');
+    if (i < 0) return;
+    try {
+      campos[par.slice(0, i)] = decodeURIComponent(par.slice(i + 1).replace(/\\+/g, ' '));
+    } catch (e) { /* percentual malformado: ignora o campo */ }
+  });
+  if (!campos.n) return;
+  var alvo = document.getElementById('convite');
+  alvo.textContent = campos.a ? campos.n + ' · ' + campos.a : campos.n;
+  alvo.hidden = false;
+})();
+</script>"""
+    corpo = f"""<main class="texto">{topo}
+<h1>Convite para um inventário</h1>
+<p id="convite" class="lede" hidden></p>
+<p>Este link abre um inventário no SLAP Mobile, o aplicativo de inventário patrimonial
+que funciona sem internet. Quem enviou o link vai aceitar sua entrada no aparelho dele; os
+dois celulares precisam estar na mesma rede Wi-Fi.</p>
+<h2>O aplicativo não abriu?</h2>
+<ol>
+<li>Instale o SLAP Mobile: <a class="botao botao-cheio botao-pequeno" href="{RELEASE}">Baixar o APK</a></li>
+<li>Abra o aplicativo uma vez e informe seu nome.</li>
+<li>Toque no link de novo. Se o Android perguntar com o que abrir, escolha o SLAP Mobile.</li>
+</ol>
+<p><em>O convite não contém a chave do inventário: ele só identifica o inventário e o
+aparelho de quem convidou. A chave é entregue depois que a pessoa aceita o pedido.</em></p>
+<footer>Como instalar fora da loja: <a href="{REPOSITORIO}/blob/main/docs/instalacao.md">docs/instalacao.md</a>.</footer>
+</main>
+{script}"""
+    return pagina(
+        "Convite para um inventário — SLAP Mobile",
+        "Este link abre um inventário no SLAP Mobile. Instale o aplicativo e toque no link de novo.",
+        corpo,
+        prefixo="../",
+    )
+
+
+def impressao_digital() -> str | None:
+    """A impressão digital SHA-256 da chave de release, se estiver disponível.
+
+    Vem do ambiente (o workflow a injeta de um segredo) ou de um arquivo local,
+    que fica fora do repositório. Um valor malformado é recusado em vez de
+    gerar um assetlinks.json inválido, que faria o Android desistir da
+    verificação sem dizer por quê.
+    """
+    bruto = os.environ.get("SLAP_IMPRESSAO_DIGITAL")
+    if not bruto and FONTE_IMPRESSAO.exists():
+        bruto = FONTE_IMPRESSAO.read_text(encoding="utf-8")
+
+    if not bruto:
+        return None
+
+    valor = bruto.strip().upper()
+    if not IMPRESSAO_DIGITAL.match(valor):
+        print(
+            "Aviso: impressão digital malformada, o assetlinks.json não será "
+            "gerado. Esperado: 32 pares hexadecimais separados por dois-pontos.",
+            file=sys.stderr,
+        )
+        return None
+    return valor
+
+
+def gravar_assetlinks(saida: Path) -> bool:
+    """O arquivo que autoriza o aplicativo a abrir os links deste domínio.
+
+    Sem ele o convite continua funcionando: o Android mostra o seletor de
+    aplicativos em vez de abrir o SLAP Mobile direto.
+    """
+    digital = impressao_digital()
+    if digital is None:
+        return False
+
+    conteudo = [
+        {
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": PACOTE_ANDROID,
+                "sha256_cert_fingerprints": [digital],
+            },
+        }
+    ]
+    pasta = saida / ".well-known"
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / "assetlinks.json").write_text(
+        json.dumps(conteudo, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
+
+
 def gerar(saida: Path) -> None:
     if saida.exists():
         shutil.rmtree(saida)
-    (saida / "privacidade").mkdir(parents=True)
-    (saida / "fontes").mkdir()
+    for pasta in ("privacidade", "entrar", "fontes", "imagens", "marca"):
+        (saida / pasta).mkdir(parents=True)
 
     for arquivo in FONTES:
         shutil.copy(RAIZ / "assets" / "fontes" / arquivo, saida / "fontes" / arquivo)
     shutil.copy(RAIZ / "docs" / "loja" / "icone-512.png", saida / "icone.png")
 
-    texto = FONTE_POLITICA.read_text(encoding="utf-8")
-    titulo = re.search(r"^# (.+)$", texto, re.MULTILINE).group(1).strip()
-    topo = (
-        '<a class="topo" href="../">'
-        '<img src="../icone.png" alt="">SLAP Mobile</a>'
-    )
-    rodape = (
-        f'<footer>Fonte: <a href="{REPOSITORIO}/blob/main/docs/privacidade.md">'
-        "docs/privacidade.md</a> no repositório.</footer>"
-    )
-    (saida / "privacidade" / "index.html").write_text(
-        pagina(
-            titulo,
-            "Quais dados o SLAP Mobile guarda, para onde vão e por quê.",
-            topo + converter(texto) + rodape,
-            prefixo="../",
-        ),
-        encoding="utf-8",
-    )
+    faltando = []
+    for nome in CAPTURAS:
+        origem = PASTA_IMAGENS / f"{nome}.png"
+        if origem.exists():
+            shutil.copy(origem, saida / "imagens" / f"{nome}.png")
+        else:
+            faltando.append(f"docs/imagens/{nome}.png")
 
-    apresentacao = f"""<div class="apresentacao">
-<img src="icone.png" alt="">
-<h1>SLAP Mobile</h1>
-<p>Inventário patrimonial offline e distribuído. Cada celular carrega os dados, funciona
-sozinho e sincroniza direto com os outros pela rede local — sem servidor e sem internet.</p>
-</div>
-<ul class="links">
-<li><a href="privacidade/">Política de privacidade</a></li>
-<li><a href="{REPOSITORIO}/releases">Baixar o aplicativo</a></li>
-<li><a href="{REPOSITORIO}">Código-fonte</a></li>
-</ul>"""
-    (saida / "index.html").write_text(
-        pagina(
-            "SLAP Mobile",
-            "Inventário patrimonial offline e distribuído.",
-            apresentacao,
-        ),
-        encoding="utf-8",
-    )
+    logo = "icone.png"
+    if (PASTA_MARCA / LOGO).exists():
+        shutil.copy(PASTA_MARCA / LOGO, saida / "marca" / LOGO)
+        logo = f"marca/{LOGO}"
+    else:
+        faltando.append(f"docs/marca/{LOGO}")
+
+    (saida / "index.html").write_text(pagina_inicial(logo), encoding="utf-8")
+    (saida / "privacidade" / "index.html").write_text(pagina_politica(), encoding="utf-8")
+    (saida / "entrar" / "index.html").write_text(pagina_entrar(), encoding="utf-8")
+
+    if not gravar_assetlinks(saida):
+        print(
+            "Aviso: sem a impressão digital da chave de release, o site sai sem "
+            ".well-known/assetlinks.json. O convite continua funcionando, mas o "
+            "Android vai oferecer o seletor de aplicativos em vez de abrir o "
+            "SLAP Mobile direto. Ver o cabeçalho deste script.",
+            file=sys.stderr,
+        )
+
+    if faltando:
+        print("Aviso: imagens ausentes, o site sai com espaços vazios:", file=sys.stderr)
+        for f in faltando:
+            print(f"  {f}", file=sys.stderr)
 
 
 if __name__ == "__main__":

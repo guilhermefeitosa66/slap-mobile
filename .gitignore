@@ -60,6 +60,7 @@ credentials.json
 /android/app/profile
 /android/app/release
 /android/.gradle/
+/android/.kotlin/
 /android/local.properties
 /ios/Flutter/Flutter.framework
 /ios/Flutter/Flutter.podspec
@@ -133,3 +134,6 @@ __pycache__/
 
 # Site gerado por tool/gerar_site.py (publicado pelo workflow Site).
 /_site/
+
+# Ambiente Python da logomarca (docs/marca/README.md)
+.venv*/
