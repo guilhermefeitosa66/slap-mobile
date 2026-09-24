@@ -131,3 +131,43 @@ class ProgressoInventario {
 
   bool get concluido => total > 0 && verificados == total;
 }
+
+/// Números de acompanhamento de uma sala durante o levantamento.
+///
+/// É o que responde "quanto falta aqui?", a pergunta de quem está dentro do
+/// ambiente — o progresso do inventário inteiro quase não se move numa sala e
+/// não ajuda a decidir quando sair dela.
+class ProgressoSala {
+  /// Itens que a planilha do SUAP aponta para esta sala, sem os de ED
+  /// excluído. É a estimativa do que procurar no ambiente.
+  final int total;
+
+  /// Desses, quantos já foram verificados — inclusive os encontrados em outra
+  /// sala, que também não precisam mais ser procurados aqui.
+  final int verificados;
+
+  /// Itens registrados nesta sala que a planilha aponta para outra.
+  ///
+  /// Fora do denominador por definição: ninguém os procuraria aqui. Contam à
+  /// parte porque, numa sala que recebeu muita coisa, são a única prova na
+  /// tela de que as leituras entraram.
+  final int deOutrasSalas;
+
+  const ProgressoSala({
+    required this.total,
+    required this.verificados,
+    required this.deOutrasSalas,
+  });
+
+  static const ProgressoSala vazio = ProgressoSala(
+    total: 0,
+    verificados: 0,
+    deOutrasSalas: 0,
+  );
+
+  /// Sala que não consta da planilha: não há denominador, e mostrar `0/0`
+  /// diria que o trabalho ali está terminado antes de começar.
+  bool get semBase => total == 0;
+
+  int get pendentes => total - verificados;
+}

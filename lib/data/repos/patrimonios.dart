@@ -677,6 +677,50 @@ class RepositorioPatrimonios {
     );
   }
 
+  /// Progresso de uma sala: o que a planilha aponta para ela e quanto disso
+  /// já foi verificado.
+  ///
+  /// A sala vem digitada na configuração do levantamento, então a comparação é
+  /// a do domínio — caixa, acento e espaço sobrando ignorados —, e não
+  /// igualdade crua: `Coordenação de TI` e `COORDENACAO DE TI` são a mesma
+  /// sala. Isso custa o índice `idx_patr_sala`, que é sobre o valor original:
+  /// a consulta varre as linhas do inventário (pelo prefixo `inventario_id`) e
+  /// normaliza cada sala. É a mesma varredura que [progresso] já faz para
+  /// separar OK de divergente, com a mesma ordem de grandeza — alguns milhares
+  /// de linhas por leitura, em banco local.
+  ///
+  /// [sala] em branco devolve [ProgressoSala.vazio]: sem sala configurada não
+  /// há o que contar.
+  ProgressoSala progressoDaSala(String inventarioId, String? sala) {
+    final chave = formaComparavel(sala);
+    if (chave.isEmpty) return ProgressoSala.vazio;
+
+    // As duas formas comparáveis saem numa subconsulta para serem calculadas
+    // uma vez por linha, e não uma vez por `CASE`.
+    final r = _db.select(
+      'SELECT '
+      '  SUM(CASE WHEN origem = ?2 THEN 1 ELSE 0 END) AS total, '
+      '  SUM(CASE WHEN origem = ?2 AND verificado = 1 THEN 1 ELSE 0 END) '
+      '    AS verificados, '
+      '  SUM(CASE WHEN verificado = 1 AND origem <> ?2 AND efetiva = ?2 '
+      '      THEN 1 ELSE 0 END) AS de_outras '
+      'FROM ('
+      '  SELECT verificado, '
+      '    forma_comparavel(sala_original) AS origem, '
+      '    forma_comparavel(COALESCE(sala_atual, sala_original)) AS efetiva '
+      '  FROM patrimonios WHERE inventario_id = ?1 AND ignorado = 0'
+      ')',
+      [inventarioId, chave],
+    );
+    if (r.isEmpty) return ProgressoSala.vazio;
+
+    return ProgressoSala(
+      total: (r.first['total'] as int?) ?? 0,
+      verificados: (r.first['verificados'] as int?) ?? 0,
+      deOutrasSalas: (r.first['de_outras'] as int?) ?? 0,
+    );
+  }
+
   // ---------------------------------------------------------------- mapa ---
 
   static Patrimonio _daLinha(Row r) => Patrimonio(

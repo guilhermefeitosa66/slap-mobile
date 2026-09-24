@@ -31,6 +31,9 @@ continuar", a leitura, e depois "Manter" na confirmação.
   de uma vez, em vez de três paradas.
 - **A faixa de configuração é um botão com a configuração inteira no rótulo** — sala, estado,
   situação, responsável e desde quando vale —, e diz que tocar altera.
+- **O contador do levantamento diz de qual sala é o número** ("Sala Biblioteca: 12 de 40
+  verificados, mais 2 itens de outras salas"). Sem a sala no rótulo, `12/40` não significa nada
+  fora da tela; numa sala que não está na planilha não há fração, e o rótulo explica por quê.
 - **O foco volta ao campo de leitura por código** depois de cada leitura. É foco de entrada, que o
   leitor externo usa; o cursor do TalkBack não é arrastado, e o resultado chega pelo anúncio.
 - **Barras de progresso têm valor falado** ("Progresso, 60,2%").

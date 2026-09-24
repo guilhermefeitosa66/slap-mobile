@@ -164,6 +164,23 @@ final progressoProvider = Provider.family<ProgressoInventario, String>((
   return ref.watch(patrimoniosProvider).progresso(id);
 });
 
+/// Progresso de uma sala do inventário.
+///
+/// A sala entra na chave em vez de ser lida da configuração do levantamento:
+/// `lib/app` não conhece `lib/features/survey`, e assim o contador também
+/// serve a quem quiser o número de outra sala. Trocar de sala troca a chave, e
+/// a consulta refaz sozinha.
+final progressoSalaProvider =
+    Provider.family<ProgressoSala, ({String inventarioId, String? sala})>((
+      ref,
+      chave,
+    ) {
+      ref.watch(revisaoProvider);
+      return ref
+          .watch(patrimoniosProvider)
+          .progressoDaSala(chave.inventarioId, chave.sala);
+    });
+
 final conflitosPendentesProvider = Provider.family<int, String>((ref, id) {
   ref.watch(revisaoProvider);
   return ref.watch(conflitosProvider).contarPendentes(id);
