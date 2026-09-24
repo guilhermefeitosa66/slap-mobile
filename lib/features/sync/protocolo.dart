@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
@@ -43,6 +44,10 @@ class Rotas {
   static const pull = '/sync/pull';
   static const push = '/sync/push';
   static const pacote = '/inventario/pacote';
+
+  /// Pedido de entrada num inventário. É a única rota que **não** é assinada:
+  /// quem pede ainda não tem a chave — é justamente o que está pedindo.
+  static const pedido = '/inventario/pedido';
 }
 
 /// Assinatura das requisições de sincronização.
@@ -507,4 +512,334 @@ class ConviteInventario {
       return null;
     }
   }
+}
+
+// ------------------------------------------------- entrada por link (#55) ---
+
+/// Endereço do site do projeto, onde mora a página de reserva do link.
+const String hostSite = 'guilhermefeitosa66.github.io';
+
+/// Caminho do convite no site. É o `pathPrefix` do App Link no manifesto.
+const String caminhoEntrar = '/slap-mobile/entrar';
+
+/// Esquema próprio, reserva de quando o Android não verificou o App Link.
+const String esquemaProprio = 'slapmobile';
+
+/// Rota interna que recebe o convite, para os dois formatos de link.
+const String rotaEntrar = '/entrar';
+
+/// Convite que viaja por link, sem a chave do inventário.
+///
+/// **O link não dá acesso a nada.** Ele diz qual é o inventário, como se
+/// chama e em qual aparelho está; a chave de sincronização só é entregue
+/// depois que quem compartilha aceita o pedido de entrada. Um link
+/// encaminhado por engano, ou reencaminhado a quem não devia, não abre o
+/// inventário de ninguém.
+///
+/// O endereço é o do site do projeto (App Link), e não um esquema próprio,
+/// porque assim quem recebe o link sem o aplicativo instalado cai numa página
+/// que explica o que é e oferece o APK — um `slapmobile://` daria erro no
+/// navegador.
+///
+/// Os dados vão no **fragmento** (`#`), e não na query: o fragmento nunca é
+/// enviado ao servidor. Mesmo que o link seja aberto no navegador, o GitHub
+/// Pages não vê o identificador do inventário nem o nome do campus nos
+/// registros dele. A leitura também aceita os mesmos parâmetros na query, para
+/// o caso de um aplicativo de mensagens reescrever o endereço pelo caminho.
+class ConviteLink {
+  final String inventarioId;
+  final String nome;
+  final int ano;
+
+  /// Aparelho que compartilhou — é a ele que o pedido de entrada é enviado.
+  final String? dispositivoOrigem;
+
+  const ConviteLink({
+    required this.inventarioId,
+    required this.nome,
+    required this.ano,
+    this.dispositivoOrigem,
+  });
+
+  factory ConviteLink.de(Inventario inv, {required String dispositivo}) =>
+      ConviteLink(
+        inventarioId: inv.id,
+        nome: inv.nome,
+        ano: inv.ano,
+        dispositivoOrigem: dispositivo,
+      );
+
+  String get titulo => '$nome — $ano';
+
+  /// O link que vai na folha de compartilhamento do sistema.
+  String codificar() => 'https://$hostSite$caminhoEntrar#${_parametros()}';
+
+  /// A mesma informação no esquema próprio, reserva do App Link.
+  String codificarEsquemaProprio() =>
+      '$esquemaProprio://entrar#${_parametros()}';
+
+  String _parametros() {
+    final partes = <String, String>{
+      'v': '$versaoProtocolo',
+      'id': inventarioId,
+      'n': nome,
+      'a': '$ano',
+      if (dispositivoOrigem != null) 'd': dispositivoOrigem!,
+    };
+    return [
+      for (final e in partes.entries)
+        '${e.key}=${Uri.encodeQueryComponent(e.value)}',
+    ].join('&');
+  }
+
+  /// Lê um convite de qualquer um dos endereços possíveis.
+  ///
+  /// Aceita o endereço completo do site, o esquema próprio e a rota que o
+  /// go_router entrega ao aplicativo (`/slap-mobile/entrar#…` com o
+  /// aplicativo fechado, `/entrar#…` pelo esquema próprio). Devolve `null`
+  /// quando o endereço não é um convite — abrir um link qualquer no aplicativo
+  /// é o caso comum, e não é erro.
+  static ConviteLink? decodificar(String endereco) {
+    try {
+      return deUri(Uri.parse(endereco.trim()));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Como [decodificar], a partir de um [Uri] já montado — é o que o
+  /// go_router entrega em `GoRouterState.uri`.
+  static ConviteLink? deUri(Uri uri) {
+    if (!_ehEntrada(uri)) return null;
+
+    // Fragmento primeiro, query depois: o fragmento é o lugar certo, a query
+    // é tolerância a quem reescreve o endereço no caminho.
+    final fragmento = _fragmentoBruto(uri);
+    final campos = <String, String>{
+      ...uri.queryParameters,
+      ...fragmento.isEmpty
+          ? const <String, String>{}
+          : Uri.splitQueryString(fragmento),
+    };
+
+    final id = campos['id'];
+    if (campos['v'] == null || id == null || id.isEmpty) return null;
+
+    return ConviteLink(
+      inventarioId: id,
+      nome: campos['n']?.trim().isNotEmpty == true
+          ? campos['n']!.trim()
+          : 'Inventário',
+      ano: int.tryParse(campos['a'] ?? '') ?? DateTime.now().year,
+      dispositivoOrigem: campos['d']?.isNotEmpty == true ? campos['d'] : null,
+    );
+  }
+
+  /// O fragmento como ele veio, ainda codificado.
+  ///
+  /// `Uri.fragment` devolve o fragmento **decodificado**, e aí um nome de
+  /// inventário com `&` já teria virado separador antes de a divisão em
+  /// campos acontecer — "Reitoria & Anexo" viraria dois campos. O texto
+  /// original está no próprio endereço, depois do `#`.
+  static String _fragmentoBruto(Uri uri) {
+    final texto = uri.toString();
+    final corte = texto.indexOf('#');
+    return corte < 0 ? '' : texto.substring(corte + 1);
+  }
+
+  /// O endereço aponta para a entrada em inventário?
+  static bool _ehEntrada(Uri uri) {
+    final caminho = uri.path.endsWith('/')
+        ? uri.path.substring(0, uri.path.length - 1)
+        : uri.path;
+
+    if (uri.scheme == esquemaProprio) {
+      // `slapmobile://entrar` põe "entrar" no host, e não no caminho.
+      return uri.host == 'entrar' || caminho == rotaEntrar;
+    }
+    if (uri.scheme == 'https' || uri.scheme == 'http') {
+      return uri.host == hostSite && caminho == caminhoEntrar;
+    }
+    // Rota interna, sem esquema nem host.
+    return caminho == caminhoEntrar || caminho == rotaEntrar;
+  }
+}
+
+/// Quanto tempo um pedido de entrada espera resposta.
+///
+/// Curto de propósito: o diálogo aparece por cima de qualquer tela, e um
+/// pedido que ficasse pendurado atrapalharia o levantamento de quem está com
+/// o celular na mão. Um minuto é o bastante para olhar o nome e decidir.
+const Duration validadePedidoPadrao = Duration(minutes: 1);
+
+/// Token de uso único de um pedido de entrada.
+///
+/// `Random.secure()`, 32 bytes: é o que impede alguém na mesma rede de
+/// aproveitar um pedido alheio que acabou de ser aceito.
+String gerarTokenEntrada() {
+  final aleatorio = Random.secure();
+  return base64Url.encode(List.generate(32, (_) => aleatorio.nextInt(256)));
+}
+
+/// Rótulo que amarra a chave derivada àquele pedido.
+///
+/// Entram o inventário, o token e as duas chaves públicas, sempre na mesma
+/// ordem nos dois lados. Assim a chave combinada não serve para outro pedido,
+/// nem uma resposta de um pedido pode ser devolvida em outro.
+String rotuloEntrega({
+  required String inventarioId,
+  required String token,
+  required String publicaPedinte,
+  required String publicaOrigem,
+}) => 'slap/entrada/$inventarioId/$token|$publicaPedinte|$publicaOrigem';
+
+/// Pedido de entrada num inventário, enviado a quem compartilhou.
+///
+/// Vai em claro: é a única requisição do protocolo que não pode ser assinada,
+/// porque quem pede ainda não tem a chave. Por isso ele não leva nada além do
+/// necessário para a pessoa do outro lado decidir — nome, matrícula e o
+/// aparelho —, e a chave pública efêmera com que a resposta será cifrada.
+class PedidoEntrada {
+  final String inventarioId;
+  final String token;
+  final String dispositivo;
+  final String? usuarioNome;
+  final String? matricula;
+
+  /// Parte pública do acordo efêmero de quem pede (ver `AcordoEfemero`).
+  final String chavePublica;
+
+  const PedidoEntrada({
+    required this.inventarioId,
+    required this.token,
+    required this.dispositivo,
+    required this.chavePublica,
+    this.usuarioNome,
+    this.matricula,
+  });
+
+  /// Como o pedido aparece no diálogo de aceite.
+  String get rotulo {
+    final nome = usuarioNome?.trim();
+    final aparelho = dispositivo.length > 6
+        ? dispositivo.substring(0, 6)
+        : dispositivo;
+    return nome == null || nome.isEmpty
+        ? 'Alguém (aparelho $aparelho)'
+        : '$nome (aparelho $aparelho)';
+  }
+
+  Map<String, dynamic> toJson() => {
+    'v': versaoProtocolo,
+    'inventario': inventarioId,
+    'token': token,
+    'dispositivo': dispositivo,
+    'usuario': ?usuarioNome,
+    'matricula': ?matricula,
+    'pub': chavePublica,
+  };
+
+  /// Lê um pedido. Devolve `null` quando o corpo não tem o formato esperado —
+  /// a rota é aberta, e qualquer um na rede pode bater nela.
+  static PedidoEntrada? fromJson(Map<String, dynamic> j) {
+    final inventarioId = j['inventario'];
+    final token = j['token'];
+    final dispositivo = j['dispositivo'];
+    final publica = j['pub'];
+    if (inventarioId is! String ||
+        token is! String ||
+        dispositivo is! String ||
+        publica is! String ||
+        token.isEmpty ||
+        dispositivo.isEmpty ||
+        publica.isEmpty) {
+      return null;
+    }
+    return PedidoEntrada(
+      inventarioId: inventarioId,
+      token: token,
+      dispositivo: dispositivo,
+      chavePublica: publica,
+      usuarioNome: j['usuario'] as String?,
+      matricula: j['matricula'] as String?,
+    );
+  }
+}
+
+/// Por que um pedido de entrada não foi atendido.
+enum MotivoRecusa {
+  /// Quem compartilha tocou em "Recusar".
+  recusado,
+
+  /// Um minuto sem resposta: ninguém olhou o aparelho a tempo.
+  expirou,
+
+  /// O token já tinha sido usado. Cada pedido vale uma vez só.
+  tokenRepetido,
+
+  /// Pedido malformado, ou inventário que este aparelho não tem.
+  invalido;
+
+  String get explicacao => switch (this) {
+    MotivoRecusa.recusado =>
+      'O pedido foi recusado no aparelho que compartilhou o inventário.',
+    MotivoRecusa.expirou =>
+      'Ninguém respondeu ao pedido a tempo. Peça para a pessoa ficar com o '
+          'aplicativo aberto e tente de novo.',
+    MotivoRecusa.tokenRepetido =>
+      'Este pedido já tinha sido enviado. Tente entrar de novo.',
+    MotivoRecusa.invalido => 'O aparelho não reconheceu o pedido de entrada.',
+  };
+
+  static MotivoRecusa de(String? nome) {
+    for (final m in values) {
+      if (m.name == nome) return m;
+    }
+    return MotivoRecusa.invalido;
+  }
+}
+
+/// Resposta ao pedido de entrada.
+///
+/// No aceite leva a chave do inventário **cifrada** com a chave combinada do
+/// acordo efêmero; na recusa, só o motivo.
+class RespostaPedido {
+  final bool aceito;
+  final MotivoRecusa? motivo;
+
+  /// Parte pública do acordo efêmero de quem compartilha.
+  final String? chavePublica;
+
+  /// `{'chave': <chave_sync>}` cifrado com a chave combinada.
+  final String? entrega;
+
+  const RespostaPedido.aceito({
+    required String this.chavePublica,
+    required String this.entrega,
+  }) : aceito = true,
+       motivo = null;
+
+  const RespostaPedido.recusado(MotivoRecusa this.motivo)
+    : aceito = false,
+      chavePublica = null,
+      entrega = null;
+
+  Map<String, dynamic> toJson() => {
+    'aceito': aceito,
+    'motivo': ?motivo?.name,
+    'pub': ?chavePublica,
+    'entrega': ?entrega,
+  };
+
+  factory RespostaPedido.fromJson(Map<String, dynamic> j) {
+    final publica = j['pub'];
+    final entrega = j['entrega'];
+    if (j['aceito'] == true && publica is String && entrega is String) {
+      return RespostaPedido.aceito(chavePublica: publica, entrega: entrega);
+    }
+    return RespostaPedido.recusado(MotivoRecusa.de(j['motivo'] as String?));
+  }
+
+  /// Nome do campo que leva a chave dentro do envelope cifrado.
+  static const campoChave = 'chave';
 }

@@ -1,6 +1,6 @@
 # Política de privacidade do SLAP Mobile
 
-_Última atualização: 23 de setembro de 2026._
+_Última atualização: 24 de setembro de 2026._
 
 O SLAP Mobile é um aplicativo de inventário patrimonial, software livre
 ([código-fonte](https://github.com/guilhermefeitosa66/slap-mobile)). Esta página diz quais dados ele
@@ -37,14 +37,29 @@ Android e do iCloud). Para apagar: *apagar o inventário* no aplicativo, ou desi
 ## Para onde os dados vão
 
 **Outros aparelhos do mesmo inventário.** A sincronização é feita direto entre os celulares, pela
-rede local, sem servidor e sem passar pela internet. Só participa quem leu o QR code do inventário,
-que carrega a chave dele; todo o conteúdo trocado vai cifrado com essa chave (AES-256-GCM) e
-ninguém sem ela consegue ler ou alterar.
+rede local, sem servidor e sem passar pela internet. Só participa quem entrou no inventário — pelo
+QR code ou por um convite aceito; todo o conteúdo trocado vai cifrado com a chave do inventário
+(AES-256-GCM) e ninguém sem ela consegue ler ou alterar.
 
-**A rede local, enquanto a tela de sincronização está aberta.** Para os colegas acharem o seu
+**O link de convite não contém a chave do inventário.** Ele leva apenas o identificador do
+inventário, o nome, o ano e o identificador do aparelho que compartilhou — nenhum dado de
+patrimônio, nenhum nome de pessoa. Um link encaminhado a quem não devia não dá acesso a nada: a
+chave só é entregue depois que alguém, no aparelho que compartilhou, aceita o pedido. Esses dados
+vão depois do `#` do endereço, a parte que o navegador **não envia ao servidor**: abrir o link
+sem o aplicativo instalado leva a uma página do projeto que não recebe nem registra nada disso.
+
+**O pedido de entrada.** Quando você abre um convite, o seu aparelho envia ao aparelho que
+compartilhou o **seu nome**, a **sua matrícula** (se você a informou) e o **identificador do seu
+aparelho**, para que a pessoa do outro lado saiba quem está pedindo e decida. O pedido não sai da
+rede local, vale um minuto e serve uma vez só. Sem o aceite, nada mais é trocado; com ele, a chave
+do inventário chega cifrada com um segredo combinado na hora entre os dois aparelhos, que é
+descartado em seguida.
+
+**A rede local, enquanto você sincroniza ou compartilha.** Para os colegas acharem o seu
 aparelho, ele se anuncia na rede Wi-Fi com o **nome que você informou** e o **identificador do
 aparelho**. Esse anúncio não é cifrado: outros aparelhos conectados à mesma rede podem ver esses
-dois dados — e só eles, nenhum dado do inventário. O anúncio para quando você sai da tela; o
+dois dados — e só eles, nenhum dado do inventário. O anúncio para pouco depois de você sair da
+tela; o
 aparelho segue atendendo a sincronização até o aplicativo ser fechado, e quem o procurar
 diretamente na rede ainda consegue ver o nome e o identificador.
 

@@ -45,6 +45,17 @@ class RelogioDivergente extends FalhaSync {
       'aparelhos e sincronize de novo.';
 }
 
+/// O pedido de entrada não foi atendido.
+///
+/// Recusa, expiração e token repetido são respostas normais do protocolo, e
+/// não falhas de rede: cada uma pede uma coisa diferente de quem está com o
+/// celular na mão.
+class EntradaRecusada extends FalhaSync {
+  final MotivoRecusa motivo;
+
+  EntradaRecusada(this.motivo) : super(motivo.explicacao);
+}
+
 /// Um aparelho encontrado na rede local.
 class Par {
   final String dispositivoId;
@@ -301,6 +312,81 @@ class ClienteSync {
     return (quantidade: faltantes.length, nossoSeq: nossoSeq);
   }
 
+  /// Pede entrada num inventário a quem o compartilhou.
+  ///
+  /// É a única requisição que sai daqui sem assinatura, porque a chave que a
+  /// assinaria é exatamente o que está sendo pedido. O que autoriza é uma
+  /// pessoa tocando em "Aceitar" no outro aparelho; a requisição fica aberta
+  /// até ela decidir, ou até o pedido caducar.
+  ///
+  /// A chave volta cifrada com a chave combinada de um acordo efêmero
+  /// ([AcordoEfemero]), que só existe durante este pedido. Devolve a
+  /// `chave_sync` do inventário; lança [EntradaRecusada] quando a resposta é
+  /// não.
+  Future<String> pedirEntrada({
+    required Par par,
+    required String inventarioId,
+    String? usuarioNome,
+    String? matricula,
+    Duration? validade,
+  }) async {
+    final acordo = AcordoEfemero.gerar();
+    final token = gerarTokenEntrada();
+
+    // A espera é a validade do pedido mais uma folga: quem responde no último
+    // segundo ainda tem a resposta entregue.
+    final espera =
+        (validade ?? validadePedidoPadrao) + const Duration(seconds: 10);
+
+    final resposta = RespostaPedido.fromJson(
+      await _requisitar(
+        host: par.host,
+        porta: par.porta,
+        rotulo: par.rotulo,
+        metodo: 'POST',
+        caminho: Rotas.pedido,
+        inventarioId: inventarioId,
+        corpo: PedidoEntrada(
+          inventarioId: inventarioId,
+          token: token,
+          dispositivo: ops.dispositivoId,
+          chavePublica: acordo.publica,
+          usuarioNome: usuarioNome,
+          matricula: matricula,
+        ).toJson(),
+        tempoLimite: espera,
+      ),
+    );
+
+    if (!resposta.aceito) {
+      throw EntradaRecusada(resposta.motivo ?? MotivoRecusa.invalido);
+    }
+
+    try {
+      final cifra = acordo.combinar(
+        resposta.chavePublica!,
+        rotulo: rotuloEntrega(
+          inventarioId: inventarioId,
+          token: token,
+          publicaPedinte: acordo.publica,
+          publicaOrigem: resposta.chavePublica!,
+        ),
+      );
+      final aberto = cifra.decifrar(
+        resposta.entrega!,
+        contexto: CifraSync.contextoResposta('POST', Rotas.pedido),
+      );
+      final chave = aberto[RespostaPedido.campoChave];
+      if (chave is! String || chave.isEmpty) throw CorpoIlegivel();
+      return chave;
+    } on CorpoIlegivel {
+      throw FalhaSync(
+        'A chave do inventário chegou ilegível de ${par.rotulo}. Os dois '
+        'aparelhos têm a mesma versão do aplicativo?',
+      );
+    }
+  }
+
   /// Baixa a réplica inicial de um inventário.
   Future<PacoteInventario> baixarPacote({
     required Par par,
@@ -332,8 +418,10 @@ class ClienteSync {
     Map<String, dynamic>? corpo,
     String? inventarioId,
     String? chaveSync,
+    Duration? tempoLimite,
   }) async {
-    final cliente = HttpClient()..connectionTimeout = tempoLimite;
+    final limite = tempoLimite ?? this.tempoLimite;
+    final cliente = HttpClient()..connectionTimeout = limite;
     final cifra = chaveSync == null ? null : CifraSync(chaveSync);
 
     try {
@@ -360,23 +448,26 @@ class ClienteSync {
               contexto: CifraSync.contextoPedido(metodo, caminho),
             );
 
+      // A versão vai em toda requisição, assinada ou não: o pedido de entrada
+      // também precisa ser recusado por um aparelho de outra versão, antes de
+      // qualquer coisa.
+      req.headers.set(cabecalhoVersao, '$versaoProtocolo');
+
       if (chaveSync != null) {
-        req.headers
-          ..set(cabecalhoVersao, '$versaoProtocolo')
-          ..set(
-            HttpHeaders.authorizationHeader,
-            Assinatura.gerar(
-              chaveSync: chaveSync,
-              dispositivoId: ops.dispositivoId,
-              metodo: metodo,
-              // A assinatura cobre o caminho sem a query, que é o que o
-              // servidor também usa ao conferir, e o corpo como ele
-              // trafega: cifrado.
-              caminho: caminho,
-              corpo: textoCorpo,
-              agora: relogio(),
-            ),
-          );
+        req.headers.set(
+          HttpHeaders.authorizationHeader,
+          Assinatura.gerar(
+            chaveSync: chaveSync,
+            dispositivoId: ops.dispositivoId,
+            metodo: metodo,
+            // A assinatura cobre o caminho sem a query, que é o que o
+            // servidor também usa ao conferir, e o corpo como ele
+            // trafega: cifrado.
+            caminho: caminho,
+            corpo: textoCorpo,
+            agora: relogio(),
+          ),
+        );
       }
 
       if (corpo != null) {
@@ -386,7 +477,7 @@ class ClienteSync {
         req.write(textoCorpo);
       }
 
-      final resposta = await req.close().timeout(tempoLimite);
+      final resposta = await req.close().timeout(limite);
       final texto = await utf8.decoder.bind(resposta).join();
 
       if (resposta.statusCode == HttpStatus.upgradeRequired) {

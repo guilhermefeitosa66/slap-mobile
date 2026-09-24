@@ -313,6 +313,9 @@ Quem escaneia passa a conhecer a chave, encontra o par na rede e puxa o bundle i
 Isso responde três coisas de uma vez: quem participa do inventário, como a réplica inicial chega
 ao aparelho (§38) e como autorizar a sincronização.
 
+Quem lê o QR também passa pelo pedido de entrada, e é do aceite que vem a chave que ele usa: um só
+fluxo de entrada, dois jeitos de chegar a ele. Ver §5.11.
+
 ### 5.9 Segurança
 
 Três camadas, todas derivadas da `sync_key` que o QR code entrega:
@@ -355,6 +358,80 @@ pelo HLC, com o vencedor guardado em `campos_inventario` (esquema v2). Até a v1
 aplicada sem comparar: uma antiga chegando depois desfazia a mais nova — com o encerramento, isso
 reabriria um inventário encerrado. Não há registro de conflito aqui, porque não há o que a pessoa
 decidir.
+
+### 5.11 Entrada por link e pedido de entrada
+
+O QR code resolve quem está ao lado. Para quem está a um prédio de distância, o convite vai por
+link — e é aí que a chave de sincronização deixa de poder viajar junto.
+
+**O link não leva a chave.** Ele identifica o inventário e o aparelho de origem, nada mais:
+
+```
+https://guilhermefeitosa66.github.io/slap-mobile/entrar#v=2&id=<uuid>&n=<nome>&a=<ano>&d=<aparelho>
+```
+
+Um link encaminhado por engano, reencaminhado adiante ou deixado num grupo de mensagens não dá
+acesso a nada. A chave só é entregue depois que uma pessoa, no aparelho de origem, toca em
+"Aceitar".
+
+**Por que um endereço do site e não um esquema próprio.** Com `slapmobile://` o link daria erro em
+quem não tem o aplicativo instalado. Sendo o endereço do site do projeto (App Link, `autoVerify` no
+manifesto), quem não tem o aplicativo cai numa página que explica o que é aquilo e oferece o APK. O
+esquema próprio continua existindo como reserva, para o caso de o Android não ter conseguido
+verificar o App Link.
+
+**Por que os dados vão no fragmento.** O fragmento (`#`) nunca é enviado ao servidor. Mesmo que
+alguém abra o link no navegador, o GitHub Pages não vê nos registros dele o identificador do
+inventário nem o nome do campus. O go_router preserva o fragmento em `GoRouterState.uri`, e o
+Android entrega o endereço como `path?query#fragment` — rota inicial com o aplicativo fechado,
+`pushRouteInformation` com ele aberto (daí o `launchMode="singleTop"`). A leitura aceita os mesmos
+parâmetros na query, como tolerância a aplicativo de mensagens que reescreve endereços.
+
+**Pedido de entrada.** Quem abre o link encontra o aparelho de origem pela descoberta e envia:
+
+```
+POST /inventario/pedido?inventario={id}  → {token, dispositivo, usuário, matrícula, pública efêmera}
+```
+
+É a **única rota não assinada** do protocolo, porque a chave que a assinaria é exatamente o que
+está sendo pedido. O que autoriza não é criptografia: é uma pessoa. O pedido aparece como diálogo
+sobre qualquer tela — o `OuvintePedidos` fica acima do `Navigator`, no `builder` do
+`MaterialApp.router`, e por isso não depende de qual tela está aberta — dizendo quem está pedindo e
+de qual aparelho. A requisição fica aberta até a resposta; sem ela, **caduca em um minuto**. O
+token é de uso único: um pedido aceito não pode ser reapresentado por quem estava ouvindo a rede.
+
+**Entrega da chave.** O canal cifrado de sempre deriva da própria `chave_sync`, que quem está
+entrando ainda não tem — ele não serve para entregá-la. No aceite, os dois lados fazem um acordo
+Diffie-Hellman com pares de chaves criados na hora, trocam só a parte pública e chegam ao mesmo
+segredo sem que ele trafegue; dele sai, por HKDF, a chave AES-256-GCM que envelopa a `chave_sync`.
+A derivação inclui o inventário, o token e as duas públicas, de modo que a chave combinada não
+serve para outro pedido. Os pares são descartados em seguida: quem gravou a rede não decifra o
+pedido nem mais tarde.
+
+A curva é a **P-256 (`prime256v1`), e não a X25519** da proposta original: o `pointycastle`, já
+usado aqui para o AES-GCM, não oferece X25519, e trazer uma segunda biblioteca de criptografia só
+por causa dela deixaria duas implementações para auditar no lugar de uma. A chave pública recebida
+é conferida contra a equação da curva antes do acordo, o que barra o ataque de curva inválida.
+
+**O que isto não resolve.** Um atacante que consiga se pôr no meio da conversa na mesma rede local
+pode trocar as duas públicas e ler a entrega — o acordo é anônimo, como o resto do transporte (ver
+§5.9). O que o barra é o aceite: quem compartilha vê o nome e o aparelho de quem pede e recusa o
+que não reconhece.
+
+**O mesmo aceite vale para o QR code.** O QR continua carregando a chave — quem o mostra está com a
+pessoa ao lado —, mas quem o lê também envia o pedido, e a chave que ele usa é a que vem do aceite.
+Um só fluxo de entrada, dois jeitos de chegar a ele.
+
+**Enquanto isso, do lado de quem compartilha.** A folha de compartilhar liga o servidor e o anúncio
+na rede, e o anúncio continua por alguns minutos depois que ela fecha — a sequência real é "mando o
+link, guardo o celular, a pessoa abre a mensagem". O que não dá para contornar é o Android encerrar
+o processo em segundo plano; por isso a folha avisa, em uma linha, que os dois aparelhos precisam
+estar na mesma rede Wi-Fi e que o aplicativo deve ficar aberto até o outro entrar.
+
+**O que o site precisa servir** (ver `tool/gerar_site.py`): a página `/slap-mobile/entrar`, que
+explica o convite e oferece o APK a quem não tem o aplicativo, e o
+`/.well-known/assetlinks.json` com a impressão digital SHA-256 da chave de release, sem o qual o
+Android não verifica o App Link e oferece o seletor de aplicativos em vez de abrir direto.
 
 ---
 

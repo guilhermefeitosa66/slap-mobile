@@ -126,3 +126,121 @@ Uint8List hkdfSha256(
   final t1 = Hmac(sha256, prk).convert([...info, 1]).bytes;
   return Uint8List.fromList(t1);
 }
+
+/// Acordo de chave efêmero, para entregar a `chave_sync` a quem ainda não a
+/// tem.
+///
+/// O canal cifrado da sincronização deriva da própria `chave_sync`: ele não
+/// serve para *entregar* a chave, porque quem está entrando ainda não tem com
+/// que decifrar nada. O pedido de entrada resolve isso com um acordo
+/// Diffie-Hellman de curva elíptica feito na hora: cada lado gera um par de
+/// chaves que existe só para aquele pedido, troca a parte pública em claro, e
+/// os dois chegam ao mesmo segredo sem que ele jamais trafegue.
+///
+/// **A curva é a P-256 (`prime256v1`), e não a X25519** da especificação
+/// original: o `pointycastle` 4.0, já usado aqui para o AES-GCM, não oferece
+/// X25519, e acrescentar uma segunda biblioteca de criptografia só por causa
+/// dela seria pior — duas implementações para auditar no lugar de uma.
+///
+/// Do segredo combinado sai, por HKDF, uma [CifraSync] comum: a chave viaja
+/// no mesmo envelope AES-256-GCM do resto do protocolo, com o rótulo do
+/// pedido autenticado junto. Como os dois pares são descartados depois, quem
+/// tiver gravado a rede não decifra o pedido nem mais tarde.
+///
+/// **O que isto não resolve:** um atacante que consiga se pôr no meio da
+/// conversa na mesma rede local pode trocar as duas chaves públicas e ler a
+/// entrega. O que o impede é o aceite: quem compartilha vê o nome e o
+/// aparelho de quem pede, e recusa o que não reconhece.
+class AcordoEfemero {
+  /// P-256 (NIST) — a curva de `ECDHBasicAgreement` disponível no
+  /// `pointycastle`.
+  static final ECDomainParameters curva = ECDomainParameters('prime256v1');
+
+  final ECPrivateKey _privada;
+  final ECPublicKey _publica;
+
+  AcordoEfemero._(this._privada, this._publica);
+
+  /// Um par de chaves novo, válido para um único pedido de entrada.
+  factory AcordoEfemero.gerar() {
+    final semente = Uint8List.fromList(
+      List.generate(32, (_) => _aleatorio.nextInt(256)),
+    );
+    final sorteio = FortunaRandom()..seed(KeyParameter(semente));
+    final gerador = ECKeyGenerator()
+      ..init(ParametersWithRandom(ECKeyGeneratorParameters(curva), sorteio));
+    final par = gerador.generateKeyPair();
+    return AcordoEfemero._(
+      par.privateKey as ECPrivateKey,
+      par.publicKey as ECPublicKey,
+    );
+  }
+
+  static final _aleatorio = Random.secure();
+
+  /// A parte pública, em base64url. É o que vai em claro no pedido e na
+  /// resposta — sozinha não abre nada.
+  String get publica => base64Url.encode(_publica.Q!.getEncoded(false));
+
+  /// Combina com a pública do outro lado e devolve o canal cifrado do pedido.
+  ///
+  /// O [rotulo] entra na derivação e amarra a chave àquele pedido: inventário,
+  /// token e as duas públicas, na mesma ordem dos dois lados. Trocar qualquer
+  /// um deles produz uma chave diferente, e o GCM recusa a mensagem.
+  ///
+  /// Lança [CorpoIlegivel] quando a pública recebida não é um ponto válido
+  /// desta curva — o que também barra a tentativa de arrancar o segredo
+  /// mandando um ponto de outra curva.
+  CifraSync combinar(String publicaRemota, {required String rotulo}) {
+    final ponto = _pontoDe(publicaRemota);
+    final acordo = ECDHBasicAgreement()..init(_privada);
+    final segredo = acordo.calculateAgreement(ECPublicKey(ponto, curva));
+    final material = hkdfSha256(
+      _paraBytes(segredo, (curva.curve.fieldSize + 7) ~/ 8),
+      info: utf8.encode(rotulo),
+    );
+    return CifraSync(base64Url.encode(material));
+  }
+
+  static ECPoint _pontoDe(String publica) {
+    try {
+      final ponto = curva.curve.decodePoint(base64Url.decode(publica));
+      if (ponto == null || ponto.isInfinity || !_naCurva(ponto)) {
+        throw CorpoIlegivel();
+      }
+      return ponto;
+    } on FormatException {
+      throw CorpoIlegivel();
+    } on ArgumentError {
+      throw CorpoIlegivel();
+    }
+  }
+
+  /// Confere `y² = x³ + ax + b`. O `decodePoint` monta o ponto sem verificar,
+  /// e um ponto fora da curva é o começo do ataque de curva inválida.
+  static bool _naCurva(ECPoint p) {
+    final x = p.x;
+    final y = p.y;
+    final a = curva.curve.a;
+    final b = curva.curve.b;
+    if (x == null || y == null || a == null || b == null) return false;
+    final esquerda = (y * y).toBigInteger();
+    final direita = (x * x * x + a * x + b).toBigInteger();
+    return esquerda == direita;
+  }
+
+  /// Coordenada do segredo em bytes, com o tamanho fixo do campo.
+  ///
+  /// Sem o preenchimento à esquerda, um segredo que por acaso começasse com
+  /// zero produziria material de tamanho diferente nos dois lados, e a chave
+  /// derivada não bateria — uma falha em uma entrada a cada 256.
+  static Uint8List _paraBytes(BigInt valor, int tamanho) {
+    final bytes = Uint8List(tamanho);
+    var resto = valor;
+    for (var i = tamanho - 1; i >= 0; i--) {
+      bytes[i] = (resto & BigInt.from(0xff)).toInt();
+      resto = resto >> 8;
+    }
+    return bytes;
+  }
+}
