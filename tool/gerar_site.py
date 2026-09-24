@@ -936,8 +936,7 @@ publicado no GitHub. Precisa de Android 7.0 ou mais novo.</p>
 <h3>No celular</h3>
 <ol>
 <li>Abra a <a href="{RELEASE}">versão mais recente</a> e baixe o arquivo
-<code>arm64-v8a.apk</code>. Só use o <code>armeabi-v7a</code> se o primeiro der
-"aplicativo não instalado".</li>
+<code>.apk</code>. É um só, e serve a qualquer celular Android.</li>
 <li>Ao abrir o arquivo, o Android pede permissão para instalar de fonte desconhecida:
 toque em <strong>Configurações</strong>, ative <strong>Permitir desta fonte</strong> e volte.</li>
 <li>Toque em <strong>Instalar</strong>. Na primeira abertura, informe seu nome e comece.</li>

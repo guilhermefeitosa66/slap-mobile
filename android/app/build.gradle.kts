@@ -67,6 +67,27 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+
+            // Um APK só, para as duas arquiteturas ARM. Quem vai instalar não
+            // tem como saber se o celular dele é `arm64-v8a` ou `armeabi-v7a`,
+            // e escolher errado dá "aplicativo não instalado" sem explicação —
+            // custo maior que os megabytes a mais de carregar as duas.
+            //
+            // Sem x86: são emuladores e alguns Chromebooks, que não fazem
+            // inventário em campo. O `--target-platform` do Flutter não basta,
+            // porque as bibliotecas nativas dos plugins entram pelo Gradle.
+            //
+            // Só no release. O debug continua com todas, que é o que permite
+            // rodar no emulador x86_64 durante o desenvolvimento.
+            //
+            // A exclusão é no empacotamento, e não em `ndk.abiFilters`: as
+            // bibliotecas nativas chegam prontas, dentro dos AAR dos plugins e
+            // do motor do Flutter, e `abiFilters` não as alcança.
+            packaging {
+                jniLibs {
+                    excludes += setOf("lib/x86/**", "lib/x86_64/**")
+                }
+            }
         }
     }
 }

@@ -6,14 +6,13 @@ Precisa de **Android 7.0 ou mais novo**.
 ## 1. Baixar
 
 No celular, abra a página da
-[versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest) e toque no
-arquivo:
+[versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest) e toque em
+**`slap-….apk`**. É um arquivo só, e ele serve a qualquer celular Android — não há o que escolher.
 
-- **`slap-…-arm64-v8a.apk`** — serve para praticamente todo celular dos últimos anos. Comece por
-  ele.
-- `slap-…-armeabi-v7a.apk` — só se o primeiro der "aplicativo não instalado" ou "incompatível":
-  é para celulares antigos, de 32 bits.
-- `slap-…-x86_64.apk` — emuladores e alguns Chromebooks.
+O `SHA256SUMS.txt` ao lado dele serve para conferir o arquivo, e é opcional (ver abaixo).
+
+> O arquivo tem cerca de 50 MB porque traz dentro as duas arquiteturas ARM, de 32 e de 64 bits.
+> Emuladores e Chromebooks com processador Intel ou AMD não são atendidos.
 
 ## 2. Permitir a instalação
 

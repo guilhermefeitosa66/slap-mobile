@@ -56,21 +56,19 @@ Confira os passos atuais na documentação do Google antes: o processo é novo e
 
    | Arquivo | Para quê |
    |---|---|
-   | `slap-X.Y.Z-arm64-v8a.apk` | praticamente todo celular dos últimos anos |
-   | `slap-X.Y.Z-armeabi-v7a.apk` | celulares antigos, de 32 bits |
-   | `slap-X.Y.Z-x86_64.apk` | emuladores e alguns Chromebooks |
+   | `slap-X.Y.Z.apk` | o arquivo que se baixa: um só, com as duas arquiteturas ARM |
    | `slap-X.Y.Z.aab` | envio à Play Store |
    | `SHA256SUMS.txt` | somas para quem baixa conferir o arquivo |
    | `notas.md` | notas da versão, com a impressão digital preenchida |
 
-   E confere a assinatura de cada APK: nenhum com a chave de debug, todos com o mesmo
-   certificado. A impressão digital impressa no fim tem de ser a anotada em
+   E confere o APK: nem chave de debug, nem x86 dentro, e as duas arquiteturas ARM presentes —
+   é isso que o torna o único arquivo a baixar. A impressão digital impressa no fim tem de ser a anotada em
    [assinatura.md](assinatura.md#onde-ela-está-e-quem-tem-acesso).
 
 3. **Testar num aparelho que já tem a versão anterior**, instalando por cima:
 
    ```bash
-   adb install -r build/release/vX.Y.Z/slap-X.Y.Z-arm64-v8a.apk
+   adb install -r build/release/vX.Y.Z/slap-X.Y.Z.apk
    ```
 
    Se instalar sem desinstalar, a assinatura é a mesma e os dados ficaram. Depois, o mínimo:
@@ -82,7 +80,7 @@ Confira os passos atuais na documentação do Google antes: o processo é novo e
    git tag -a vX.Y.Z -m "SLAP X.Y.Z" && git push origin vX.Y.Z
    ```
 
-5. **Release no GitHub**, a partir da tag: os três APKs, o `SHA256SUMS.txt` e as notas da versão.
+5. **Release no GitHub**, a partir da tag: o APK, o `SHA256SUMS.txt` e as notas da versão.
    As notas são escritas antes, em `docs/notas/vX.Y.Z.md` — o que o aplicativo faz, o que mudou,
    o que ainda não faz —, no mesmo commit da versão; o script recusa gerar sem elas e grava em
    `build/release/vX.Y.Z/notas.md` a cópia com a impressão digital do certificado preenchida

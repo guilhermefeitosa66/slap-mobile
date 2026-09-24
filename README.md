@@ -38,8 +38,9 @@ Os aparelhos da mesma rede trocam o que cada um levantou, direto entre eles.
 
 ## Instalar
 
-Baixe o APK `arm64-v8a` da [versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest),
-autorize a instalação de fonte desconhecida e instale. Precisa de Android 7.0 ou mais novo. Para
+Baixe o APK da [versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest)
+— é um arquivo só, para qualquer celular Android —, autorize a instalação de fonte desconhecida e
+instale. Precisa de Android 7.0 ou mais novo. Para
 atualizar, instale por cima; **não desinstale**, porque desinstalar apaga o que ainda não foi
 sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md).
 

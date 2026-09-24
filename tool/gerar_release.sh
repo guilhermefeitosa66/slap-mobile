@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Gera os arquivos de uma release assinada: um APK por arquitetura, o App
-# Bundle para a Play Store e as somas SHA-256, em build/release/v<versão>/.
+# Gera os arquivos de uma release assinada: o APK, o App Bundle para a Play
+# Store e as somas SHA-256, em build/release/v<versão>/.
+#
+# Um APK só, com as duas arquiteturas ARM dentro. Quem vai instalar não tem
+# como saber se o celular é `arm64-v8a` ou `armeabi-v7a`, e escolher errado dá
+# "aplicativo não instalado" sem explicação. O x86 fica de fora pelo
+# empacotamento, em android/app/build.gradle.kts.
 #
 # Roda só na máquina de quem guarda a chave — nunca no CI. Recusa gerar com a
 # chave de debug, com mudanças não commitadas, ou com uma tag da versão que
@@ -49,7 +54,7 @@ fi
 
 printf 'Release %s (código %s), commit %s\n\n' "$versao" "$codigo" "${commit:0:12}"
 
-flutter build apk --release --split-per-abi
+flutter build apk --release
 flutter build appbundle --release
 
 destino="build/release/$tag"
@@ -60,14 +65,22 @@ mkdir -p "$destino"
 concluido=""
 trap '[[ -n "$concluido" ]] || rm -rf "$destino"' EXIT
 
-apks=()
-for origem in build/app/outputs/flutter-apk/app-*-release.apk; do
-  [[ -e "$origem" ]] || falhar "o build não gerou APKs em build/app/outputs/flutter-apk/."
-  abi="${origem#build/app/outputs/flutter-apk/app-}"
-  abi="${abi%-release.apk}"
-  cp "$origem" "$destino/slap-$versao-$abi.apk"
-  apks+=("$destino/slap-$versao-$abi.apk")
+origem="build/app/outputs/flutter-apk/app-release.apk"
+[[ -f "$origem" ]] || falhar "o build não gerou $origem."
+cp "$origem" "$destino/slap-$versao.apk"
+apks=("$destino/slap-$versao.apk")
+
+# O APK precisa servir aos dois ARM e a nenhum x86: é o que o torna o único
+# arquivo a baixar. Conferir aqui evita publicar um pacote que não instala
+# metade dos celulares por causa de uma mudança de configuração do Gradle.
+arquiteturas="$(unzip -Z1 "$origem" 'lib/*' 2>/dev/null | cut -d/ -f2 | sort -u | tr '\n' ' ')"
+for exigida in armeabi-v7a arm64-v8a; do
+  [[ "$arquiteturas" == *"$exigida"* ]] ||
+    falhar "o APK saiu sem $exigida (tem: ${arquiteturas:-nenhuma})."
 done
+[[ "$arquiteturas" != *x86* ]] ||
+  falhar "o APK saiu com x86 (tem: $arquiteturas)."
+printf 'APK único, arquiteturas: %s\n' "$arquiteturas"
 bundle="build/app/outputs/bundle/release/app-release.aab"
 [[ -f "$bundle" ]] || falhar "o build não gerou $bundle."
 cp "$bundle" "$destino/slap-$versao.aab"

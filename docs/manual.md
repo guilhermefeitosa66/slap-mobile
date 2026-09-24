@@ -467,9 +467,9 @@ outro lugar e pode voltar por uma troca de dados.
 ### O aplicativo não instala
 
 O caminho completo, com os avisos que o Android mostra e o que responder a cada um, está em
-[instalacao.md](instalacao.md). Os dois pontos mais frequentes: é preciso autorizar a
-instalação a partir do aplicativo que abriu o arquivo (o navegador, normalmente), e o APK é o
-`arm64-v8a` — o `armeabi-v7a` só serve a celulares antigos.
+[instalacao.md](instalacao.md). O ponto mais frequente: é preciso autorizar a instalação a partir
+do aplicativo que abriu o arquivo — o navegador, normalmente. O APK é um só, e serve a qualquer
+celular Android.
 
 ### Os aparelhos não se encontram
 
