@@ -152,7 +152,39 @@ header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 
 .navegacao nav a:not(.botao) { color: var(--tinta-secundaria); text-decoration: none;
   font-weight: 600; font-size: 0.95rem; }
 .navegacao nav a:not(.botao):hover { color: var(--teal); }
-@media (max-width: 720px) { .navegacao nav .discreto { display: none; } }
+
+/* Menu sanduíche: só no celular, onde os sete itens não cabem numa linha. */
+.sanduiche { display: none; }
+@media (max-width: 720px) {
+  .navegacao { flex-wrap: nowrap; }
+  .sanduiche { display: grid; place-content: center; gap: 5px;
+    width: 48px; height: 48px; padding: 0; cursor: pointer;
+    background: var(--superficie); border: 1px solid var(--borda);
+    border-radius: 12px; }
+  .sanduiche:focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; }
+  .sanduiche span { display: block; width: 22px; height: 2px; border-radius: 2px;
+    background: var(--tinta); }
+  /* As três barras viram um X quando o menu está aberto. */
+  header.aberto .sanduiche span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  header.aberto .sanduiche span:nth-child(2) { opacity: 0; }
+  header.aberto .sanduiche span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  /* O painel desce do cabeçalho e ocupa a largura da tela. */
+  .navegacao nav { display: none; position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 0;
+    padding: 0.25rem 1.25rem 1.25rem; background: var(--superficie);
+    border-bottom: 1px solid var(--borda);
+    box-shadow: 0 20px 32px -24px rgba(20, 32, 30, 0.55); }
+  header.aberto .navegacao nav { display: flex; }
+  /* Dentro do painel cabem todos: nada fica escondido por falta de espaço. */
+  .navegacao nav .discreto { display: block; }
+  .navegacao nav a:not(.botao) { padding: 0.9rem 0; font-size: 1rem;
+    color: var(--tinta); border-bottom: 1px solid var(--trilho); }
+  .navegacao nav .botao { margin-top: 1.1rem; justify-content: center; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sanduiche span { transition: transform 0.18s ease, opacity 0.18s ease; }
+}
 
 .abertura { padding: 4rem 0 3rem; }
 .abertura-grade { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 3rem;
@@ -541,6 +573,55 @@ SCRIPT_INDICE = """<script>
 </script>"""
 
 
+# O menu do celular. Um botão que revela, e nada mais: fecha pela tecla Esc,
+# pelo toque fora, e ao escolher um item — que na página inicial leva a uma
+# seção logo abaixo, e deixar o painel cobrindo o destino seria estranho.
+SCRIPT_MENU = """<script>
+(function () {
+  var cabecalho = document.querySelector('header');
+  var botao = cabecalho && cabecalho.querySelector('.sanduiche');
+  var menu = document.getElementById('menu');
+  if (!botao || !menu) return;
+
+  function abrir(sim) {
+    cabecalho.classList.toggle('aberto', sim);
+    botao.setAttribute('aria-expanded', sim ? 'true' : 'false');
+    botao.setAttribute('aria-label', sim ? 'Fechar o menu' : 'Abrir o menu');
+  }
+
+  botao.addEventListener('click', function () {
+    var abrindo = botao.getAttribute('aria-expanded') !== 'true';
+    abrir(abrindo);
+    if (abrindo) {
+      var primeiro = menu.querySelector('a');
+      if (primeiro) primeiro.focus();
+    }
+  });
+
+  menu.addEventListener('click', function (e) {
+    if (e.target.closest('a')) abrir(false);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && cabecalho.classList.contains('aberto')) {
+      abrir(false);
+      botao.focus();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!cabecalho.contains(e.target)) abrir(false);
+  });
+
+  // Voltando à largura de computador, o painel não fica preso aberto.
+  var largo = window.matchMedia('(min-width: 721px)');
+  var aoMudar = function (e) { if (e.matches) abrir(false); };
+  if (largo.addEventListener) largo.addEventListener('change', aoMudar);
+  else largo.addListener(aoMudar);
+})();
+</script>"""
+
+
 def estilo(prefixo: str) -> str:
     faces = "\n".join(
         f'@font-face {{ font-family: "{familia}"; font-weight: {peso}; '
@@ -668,10 +749,18 @@ def captura(nome: str, grupo: str, carregamento: str = "lazy") -> str:
 
 
 def cabecalho(logo: str) -> str:
+    """A barra do topo.
+
+    No celular ela não cabe: com sete itens, quebrava em duas linhas e os
+    primeiros links iam parar acima da logomarca. Ali os links ficam atrás do
+    botão sanduíche, que é o gesto que todo mundo já conhece.
+    """
     return f"""<header>
 <div class="largura navegacao">
 <a class="marca" href="#inicio"><img src="{logo}" alt="SLAP Mobile"></a>
-<nav>
+<button type="button" class="sanduiche" aria-expanded="false" aria-controls="menu"
+ aria-label="Abrir o menu"><span></span><span></span><span></span></button>
+<nav id="menu">
 <a class="discreto" href="#por-que">Por quê</a>
 <a class="discreto" href="#como-usar">Como usar</a>
 <a class="discreto" href="#capturas">Capturas</a>
@@ -903,6 +992,7 @@ def pagina_inicial(logo: str) -> str:
             "</main>",
             rodape(),
             SCRIPT_LUPA,
+            SCRIPT_MENU,
         ]),
     )
 
