@@ -133,3 +133,6 @@ __pycache__/
 
 # Site gerado por tool/gerar_site.py (publicado pelo workflow Site).
 /_site/
+
+# Ambiente Python da logomarca (docs/marca/README.md)
+.venv*/

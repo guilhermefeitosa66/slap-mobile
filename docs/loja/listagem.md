@@ -73,7 +73,9 @@ Tudo é gerado a partir do código, com dados fictícios:
 
 - capturas: `flutter test --run-skipped --tags capturas --update-goldens`
   (`test/capturas/capturas_test.dart`);
-- ícone e imagem de destaque: `python3 tool/gerar_icones.py`.
+- ícone: `python3 tool/gerar_icones.py`;
+- imagem de destaque: `.venv-marca/bin/python tool/gerar_marca.py`, junto com
+  a logomarca (ver [`../marca/README.md`](../marca/README.md)).
 
 ## Classificação e categoria
 
