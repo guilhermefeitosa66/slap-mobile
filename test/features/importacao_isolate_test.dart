@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/core/andamento.dart';
 import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
@@ -68,7 +69,7 @@ void main() {
       const Duration(milliseconds: 1),
       (_) => batidas++,
     );
-    final progressos = <ProgressoImportacao>[];
+    final progressos = <Andamento>[];
 
     final resultado = await importarEmSegundoPlano(
       banco: banco,
@@ -91,7 +92,7 @@ void main() {
     for (var i = 1; i < progressos.length; i++) {
       expect(
         progressos[i].feitos,
-        greaterThanOrEqualTo(progressos[i - 1].feitos),
+        greaterThanOrEqualTo(progressos[i - 1].feitos!),
       );
     }
     expect(
@@ -99,6 +100,39 @@ void main() {
       greaterThan(0),
       reason: 'o laço de eventos rodou durante a gravação',
     );
+  });
+
+  test('ler e conferir também informam quanto falta', () async {
+    // Eram as duas etapas mudas da importação: a barra girava sem dizer nada
+    // justamente onde a planilha do campus demora mais.
+    final lendo = <Andamento>[];
+    final (lida, mapeamento) = await lerPlanilhaEmSegundoPlano(
+      nomeArquivo: 'suap.csv',
+      bytes: planilha(5000),
+      aoProgredir: lendo.add,
+    );
+
+    expect(lendo, isNotEmpty);
+    expect(lendo.first.etapa, contains('suap.csv'));
+    expect(lendo.last.feitos, lendo.last.total);
+    expect(lendo.last.fracao, 1);
+    expect(lendo.last.contagem, contains('linhas lidas'));
+    for (var i = 1; i < lendo.length; i++) {
+      expect(lendo[i].feitos, greaterThanOrEqualTo(lendo[i - 1].feitos!));
+    }
+
+    final conferindo = <Andamento>[];
+    final previa = await prepararEmSegundoPlano(
+      lida,
+      mapeamento,
+      aoProgredir: conferindo.add,
+    );
+
+    expect(previa.total, 5000);
+    expect(conferindo, isNotEmpty);
+    expect(conferindo.last.feitos, 5000);
+    expect(conferindo.last.total, 5000);
+    expect(conferindo.last.contagem, contains('linhas conferidas'));
   });
 
   test('falha no meio não deixa importação parcial', () async {
@@ -114,7 +148,7 @@ void main() {
       bytes: planilha(8000),
     );
     final previa = await prepararEmSegundoPlano(lida, mapeamento);
-    final progressos = <ProgressoImportacao>[];
+    final progressos = <Andamento>[];
 
     await expectLater(
       importarEmSegundoPlano(

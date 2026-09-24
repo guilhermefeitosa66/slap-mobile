@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../core/andamento.dart';
 import '../../core/formato.dart';
 import '../../data/banco.dart';
 import '../../data/repos/inventarios.dart';
@@ -60,7 +62,7 @@ Future<Inventario?> duplicarInventario(
   );
   if (dados == null || !context.mounted) return null;
 
-  final progresso = ValueNotifier<ProgressoImportacao?>(null);
+  final progresso = ValueNotifier<Andamento?>(null);
   unawaited(
     showDialog<void>(
       context: context,
@@ -71,19 +73,9 @@ Future<Inventario?> duplicarInventario(
           title: const Text('Duplicando…'),
           content: ValueListenableBuilder(
             valueListenable: progresso,
-            builder: (_, p, _) => Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LinearProgressIndicator(value: p?.fracao),
-                const SizedBox(height: 12),
-                Text(
-                  p == null
-                      ? 'Preparando os patrimônios'
-                      : '${formatarInteiro(p.feitos)} de '
-                            '${formatarInteiro(p.total)} patrimônios',
-                ),
-              ],
+            builder: (_, p, _) => BarraAndamento(
+              andamento: p ?? const Andamento('Preparando os patrimônios…'),
+              padding: const EdgeInsets.only(top: 12),
             ),
           ),
         ),
@@ -118,7 +110,7 @@ Future<Inventario> duplicarEstrutura({
   required Inventario origem,
   required String nome,
   required int ano,
-  void Function(ProgressoImportacao)? aoProgredir,
+  void Function(Andamento)? aoProgredir,
 }) async {
   final itens = [
     for (final p in patrimonios.todos(origem.id, incluirIgnorados: true))
@@ -146,6 +138,7 @@ Future<Inventario> duplicarEstrutura({
       contagemPorEd: const {},
     ),
     aoProgredir: aoProgredir,
+    etapa: 'Copiando os patrimônios…',
   );
   if (origem.edsExcluidos.isNotEmpty) {
     inventarios.definirEdsExcluidos(novo.id, origem.edsExcluidos);

@@ -616,16 +616,22 @@ class _Canal {
 
   _Canal(this.req, this.cifra, this.caminho);
 
+  /// O `Content-Length` é informado de propósito: sem ele a resposta sai em
+  /// pedaços e o outro lado não tem como dizer quanto falta. O pacote inicial
+  /// de um inventário de campus são vários megabytes por Wi-Fi, e é a espera
+  /// mais longa do aplicativo.
   Future<void> responder(Map<String, dynamic> corpo) async {
+    final bytes = utf8.encode(
+      cifra.cifrar(
+        corpo,
+        contexto: CifraSync.contextoResposta(req.method, caminho),
+      ),
+    );
     req.response
       ..statusCode = HttpStatus.ok
       ..headers.contentType = ContentType.text
-      ..write(
-        cifra.cifrar(
-          corpo,
-          contexto: CifraSync.contextoResposta(req.method, caminho),
-        ),
-      );
+      ..contentLength = bytes.length
+      ..add(bytes);
     await req.response.close();
   }
 }

@@ -2,8 +2,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
-import '../../core/formato.dart';
+import '../../core/andamento.dart';
 import 'importacao_em_segundo_plano.dart';
 import 'importador.dart';
 import 'leitor_planilha.dart';
@@ -29,21 +30,26 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
   bool _carregando = false;
   String? _erro;
 
-  /// O que está sendo feito enquanto [_carregando], dito na tela.
-  String? _etapa;
-
-  /// Progresso da gravação; `null` nas etapas que não o informam.
-  ProgressoImportacao? _progresso;
+  /// O que está sendo feito enquanto [_carregando], e quanto já foi.
+  ///
+  /// As três etapas informam contagem: ler o arquivo, conferir as linhas e
+  /// gravar. Com dez mil linhas, as duas primeiras são as demoradas.
+  Andamento? _andamento;
 
   PlanilhaLida? _planilha;
   Mapeamento? _mapeamento;
   PreviaImportacao? _previa;
   final _edsExcluidos = <String>{};
 
+  /// Atualiza a barra, se a tela ainda estiver montada.
+  void _andando(Andamento? andamento) {
+    if (mounted) setState(() => _andamento = andamento);
+  }
+
   Future<void> _escolherArquivo() async {
     setState(() {
       _carregando = true;
-      _etapa = null;
+      _andamento = null;
       _erro = null;
     });
 
@@ -58,7 +64,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
         return;
       }
 
-      setState(() => _etapa = 'Lendo ${arquivo.name}…');
+      _andando(Andamento('Lendo ${arquivo.name}…'));
 
       // Ler os bytes pelo próprio `PlatformFile` mantém a leitura dentro do
       // que o seletor do sistema já autorizou, sem permissão de armazenamento.
@@ -66,6 +72,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
       final (planilha, mapeamento) = await lerPlanilhaEmSegundoPlano(
         nomeArquivo: arquivo.name,
         bytes: await arquivo.readAsBytes(),
+        aoProgredir: _andando,
       );
       if (!mounted) return;
 
@@ -73,7 +80,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
         _planilha = planilha;
         _mapeamento = mapeamento;
         _carregando = false;
-        _etapa = null;
+        _andamento = null;
         _passo = 1;
       });
     } on PlanilhaInvalida catch (e) {
@@ -81,14 +88,14 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
       setState(() {
         _erro = e.mensagem;
         _carregando = false;
-        _etapa = null;
+        _andamento = null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _erro = 'Não foi possível ler o arquivo: $e';
         _carregando = false;
-        _etapa = null;
+        _andamento = null;
       });
     }
   }
@@ -107,16 +114,20 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
 
     setState(() {
       _carregando = true;
-      _etapa = 'Conferindo as linhas…';
+      _andamento = const Andamento('Conferindo as linhas…');
       _erro = null;
     });
-    final previa = await prepararEmSegundoPlano(planilha, mapeamento);
+    final previa = await prepararEmSegundoPlano(
+      planilha,
+      mapeamento,
+      aoProgredir: _andando,
+    );
     if (!mounted) return;
 
     setState(() {
       _previa = previa;
       _carregando = false;
-      _etapa = null;
+      _andamento = null;
       _passo = 2;
     });
   }
@@ -125,8 +136,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
     final previa = _previa!;
     setState(() {
       _carregando = true;
-      _etapa = 'Gravando os patrimônios…';
-      _progresso = null;
+      _andamento = const Andamento('Gravando os patrimônios…');
     });
 
     try {
@@ -135,9 +145,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
         inventarioId: widget.inventarioId,
         previa: previa,
         edsExcluidos: _edsExcluidos,
-        aoProgredir: (p) {
-          if (mounted) setState(() => _progresso = p);
-        },
+        aoProgredir: _andando,
       );
 
       ref
@@ -162,8 +170,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
             'Falha ao importar: $e. Nada foi gravado — a planilha entra '
             'inteira ou não entra.';
         _carregando = false;
-        _etapa = null;
-        _progresso = null;
+        _andamento = null;
       });
     }
   }
@@ -189,7 +196,10 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
                   ),
                 ],
               ),
-            if (_carregando) _Andamento(etapa: _etapa, progresso: _progresso),
+            if (_carregando)
+              BarraAndamento(
+                andamento: _andamento ?? const Andamento('Abrindo o arquivo…'),
+              ),
             Expanded(
               child: switch (_passo) {
                 0 => _PassoArquivo(
@@ -219,38 +229,6 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// O que está acontecendo, com número quando há número para dar.
-class _Andamento extends StatelessWidget {
-  final String? etapa;
-  final ProgressoImportacao? progresso;
-
-  const _Andamento({required this.etapa, required this.progresso});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = progresso;
-    final texto = p == null
-        ? etapa
-        : '${formatarInteiro(p.feitos)} de ${formatarInteiro(p.total)} '
-              'patrimônios gravados';
-
-    return Semantics(
-      liveRegion: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LinearProgressIndicator(value: p?.fracao),
-          if (texto != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text(texto, style: Theme.of(context).textTheme.bodySmall),
-            ),
-        ],
       ),
     );
   }

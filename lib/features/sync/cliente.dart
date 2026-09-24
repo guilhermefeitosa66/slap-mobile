@@ -1,11 +1,30 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import '../../core/andamento.dart';
 import '../../core/formato.dart';
 import '../../core/hlc.dart';
 import '../../data/repos/operacoes.dart';
 import 'cifra.dart';
 import 'protocolo.dart';
+
+/// De quantos em quantos bytes um download informa o andamento.
+const int _passoDownload = 64 * 1024;
+
+/// O andamento de uma transferência, contado em bytes.
+///
+/// Fica fora da classe porque a tela de entrada também o usa para dizer o que
+/// está recebendo antes de a resposta chegar.
+Andamento andamentoDeBytes(String etapa, int recebidos, int? total) =>
+    Andamento(
+      etapa,
+      feitos: recebidos,
+      total: total,
+      detalhe: total == null
+          ? '${formatarBytes(recebidos)} recebidos'
+          : '${formatarBytes(recebidos)} de ${formatarBytes(total)}',
+    );
 
 class FalhaSync implements Exception {
   final String mensagem;
@@ -170,11 +189,18 @@ class ClienteSync {
   /// contexto causal antes de enviarmos as nossas, e o par recebe um lote já
   /// ciente do que ele mesmo escreveu — o que evita marcar como concorrente
   /// algo que acabou de chegar.
+  /// [aoProgredir] acompanha as duas viagens. As operações são a unidade
+  /// natural aqui — é o número que o protocolo já tem —, mas o recebimento
+  /// só sabe quantas são depois que a resposta chega, e até lá o que dá para
+  /// contar são os bytes.
   Future<ResultadoSync> sincronizar({
     required Par par,
     required String inventarioId,
     required String chaveSync,
+    void Function(Andamento)? aoProgredir,
   }) async {
+    aoProgredir?.call(Andamento('Falando com ${par.rotulo}…'));
+
     // Os relógios são conferidos antes de qualquer troca: com diferença
     // grande, nenhum dos dois lados deve aplicar nada do outro.
     await _conferirRelogio(par);
@@ -187,7 +213,12 @@ class ClienteSync {
 
     // Uma viagem para puxar: a resposta traz as operações que nos faltam e a
     // version vector do par. Outra para enviar exatamente o que falta a ele.
-    final lote = await _puxar(par, inventarioId, chaveSync);
+    final lote = await _puxar(
+      par,
+      inventarioId,
+      chaveSync,
+      aoProgredir: aoProgredir,
+    );
 
     final recebidas = lote.ops.isEmpty
         ? const ResultadoAplicacao(
@@ -198,7 +229,22 @@ class ClienteSync {
           )
         : _aplicar(par, lote, inventarioId);
 
-    final enviadas = await _enviar(par, inventarioId, chaveSync, lote);
+    aoProgredir?.call(
+      Andamento(
+        'Recebendo de ${par.rotulo}…',
+        feitos: recebidas.aplicadas,
+        total: recebidas.aplicadas,
+        unidade: 'alterações recebidas',
+      ),
+    );
+
+    final enviadas = await _enviar(
+      par,
+      inventarioId,
+      chaveSync,
+      lote,
+      aoProgredir: aoProgredir,
+    );
 
     // Até onde o nosso trabalho está com o par: o que ele declarou ter, mais
     // o que ele acabou de aceitar do nosso envio, e sempre até o começo da
@@ -295,8 +341,12 @@ class ClienteSync {
   Future<LoteOperacoes> _puxar(
     Par par,
     String inventarioId,
-    String chaveSync,
-  ) async {
+    String chaveSync, {
+    void Function(Andamento)? aoProgredir,
+  }) async {
+    final etapa = 'Recebendo de ${par.rotulo}…';
+    aoProgredir?.call(Andamento(etapa));
+
     final resposta = await _requisitar(
       host: par.host,
       porta: par.porta,
@@ -304,6 +354,10 @@ class ClienteSync {
       metodo: 'POST',
       caminho: Rotas.pull,
       inventarioId: inventarioId,
+      aoReceber: aoProgredir == null
+          ? null
+          : (recebidos, total) =>
+                aoProgredir(andamentoDeBytes(etapa, recebidos, total)),
       corpo: PedidoPull(
         inventarioId: inventarioId,
         vetor: ops.vetorDe(inventarioId),
@@ -333,8 +387,9 @@ class ClienteSync {
     Par par,
     String inventarioId,
     String chaveSync,
-    LoteOperacoes doPar,
-  ) async {
+    LoteOperacoes doPar, {
+    void Function(Andamento)? aoProgredir,
+  }) async {
     // Vai mesmo sem nada a enviar: o lote leva o nosso vetor, e é assim que
     // o par fica sabendo que já recebemos o trabalho dele. Sem isso, quem só
     // forneceu dados nunca saberia se eles chegaram — e a confirmação de
@@ -343,6 +398,18 @@ class ClienteSync {
       inventarioId,
       doPar.vetor,
       lacunas: doPar.lacunas,
+    );
+
+    // Aqui o total é conhecido antes da viagem: são as operações que faltam
+    // ao par, contadas do nosso lado.
+    final etapa = 'Enviando para ${par.rotulo}…';
+    aoProgredir?.call(
+      Andamento(
+        etapa,
+        feitos: 0,
+        total: faltantes.length,
+        unidade: 'alterações enviadas',
+      ),
     );
 
     await _requisitar(
@@ -361,6 +428,15 @@ class ClienteSync {
         cabecas: ops.cabecas(inventarioId),
       ).toJson(),
       chaveSync: chaveSync,
+    );
+
+    aoProgredir?.call(
+      Andamento(
+        etapa,
+        feitos: faltantes.length,
+        total: faltantes.length,
+        unidade: 'alterações enviadas',
+      ),
     );
 
     // Saíram daqui: a partir de agora elas não podem mais ser re-estampadas.
@@ -463,10 +539,16 @@ class ClienteSync {
   }
 
   /// Baixa a réplica inicial de um inventário.
+  ///
+  /// É a espera mais longa do aplicativo: um inventário de campus são
+  /// milhares de patrimônios por Wi-Fi. [aoProgredir] acompanha os bytes que
+  /// chegam, para a tela não ficar só girando.
   Future<PacoteInventario> baixarPacote({
     required Par par,
     required String inventarioId,
     required String chaveSync,
+    void Function(Andamento)? aoProgredir,
+    String etapa = 'Baixando o inventário…',
   }) async {
     final resposta = await _requisitar(
       host: par.host,
@@ -476,6 +558,10 @@ class ClienteSync {
       caminho: Rotas.pacote,
       inventarioId: inventarioId,
       chaveSync: chaveSync,
+      aoReceber: aoProgredir == null
+          ? null
+          : (recebidos, total) =>
+                aoProgredir(andamentoDeBytes(etapa, recebidos, total)),
     );
     return PacoteInventario.fromJson(resposta);
   }
@@ -494,6 +580,7 @@ class ClienteSync {
     String? inventarioId,
     String? chaveSync,
     Duration? tempoLimite,
+    void Function(int recebidos, int? total)? aoReceber,
   }) async {
     final limite = tempoLimite ?? this.tempoLimite;
     final cliente = HttpClient()..connectionTimeout = limite;
@@ -553,7 +640,7 @@ class ClienteSync {
       }
 
       final resposta = await req.close().timeout(limite);
-      final texto = await utf8.decoder.bind(resposta).join();
+      final texto = await _lerCorpo(resposta, aoReceber);
 
       if (resposta.statusCode == HttpStatus.upgradeRequired) {
         throw _versaoRecusada(texto, rotulo ?? host);
@@ -587,6 +674,38 @@ class ClienteSync {
     } finally {
       cliente.close(force: true);
     }
+  }
+
+  /// Lê a resposta em pedaços, contando o que já chegou.
+  ///
+  /// `join()` esconde o download inteiro atrás de um único `await`, e com ele
+  /// não há nada para mostrar no meio. O total vem do `Content-Length`, que o
+  /// servidor informa; sem ele, a contagem continua valendo e só a fração
+  /// fica de fora.
+  ///
+  /// O aviso é espaçado de propósito: um pedaço de rede chega a cada poucos
+  /// quilobytes, e redesenhar a tela a cada um custaria mais que o download.
+  Future<String> _lerCorpo(
+    HttpClientResponse resposta,
+    void Function(int recebidos, int? total)? aoReceber,
+  ) async {
+    if (aoReceber == null) return utf8.decoder.bind(resposta).join();
+
+    final total = resposta.contentLength < 0 ? null : resposta.contentLength;
+    final acumulado = BytesBuilder(copy: false);
+    var avisados = 0;
+
+    aoReceber(0, total);
+    await for (final pedaco in resposta) {
+      acumulado.add(pedaco);
+      if (acumulado.length - avisados >= _passoDownload) {
+        avisados = acumulado.length;
+        aoReceber(avisados, total);
+      }
+    }
+    final bytes = acumulado.takeBytes();
+    aoReceber(bytes.length, total ?? bytes.length);
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   FalhaSync _versaoRecusada(String texto, String rotulo) {

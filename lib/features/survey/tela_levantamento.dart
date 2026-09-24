@@ -231,19 +231,24 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
       modo: modo,
     );
 
+    // Gravar, mostrar na lista e devolver o foco acontecem primeiro; o
+    // retorno sonoro sai depois e não é esperado. A ordem inversa é o que
+    // fazia o item demorar a aparecer: a tela ficava atrás de uma chamada de
+    // áudio que, com o som quebrado, não voltava.
+    final Som som;
     switch (leitura.resultado) {
       case ResultadoLeitura.naoLocalizado:
-        await ref.read(sonsProvider).tocar(Som.naoLocalizado);
+        som = Som.naoLocalizado;
         _registrar(LeituraRegistrada(leitura: leitura, codigoLido: texto));
 
       case ResultadoLeitura.jaVerificado:
-        await ref.read(sonsProvider).tocar(Som.jaVerificado);
+        som = Som.jaVerificado;
         setState(() => _aguardandoConfirmacao = leitura.patrimonio);
         _registrar(LeituraRegistrada(leitura: leitura, codigoLido: texto));
 
       case ResultadoLeitura.sucesso:
+        som = Som.sucesso;
         final depois = _gravar(leitura.patrimonio!, config);
-        await ref.read(sonsProvider).tocar(Som.sucesso);
         _registrar(
           LeituraRegistrada(
             leitura: leitura,
@@ -254,6 +259,7 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     }
 
     _devolverFoco();
+    ref.read(sonsProvider).tocar(som);
   }
 
   Patrimonio _gravar(Patrimonio patrimonio, ConfiguracaoLevantamento config) {
@@ -290,7 +296,6 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     if (patrimonio == null || config == null) return;
 
     final depois = _gravar(patrimonio, config);
-    await ref.read(sonsProvider).tocar(Som.sucesso);
 
     setState(() => _aguardandoConfirmacao = null);
     _registrar(
@@ -304,6 +309,7 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
       ),
     );
     _devolverFoco();
+    ref.read(sonsProvider).tocar(Som.sucesso);
   }
 
   Future<void> _abrirCamera() async {

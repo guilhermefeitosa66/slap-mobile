@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/andamento.dart';
 import 'tema.dart';
 
 /// Peças visuais repetidas entre as telas, na forma do design.
@@ -116,6 +117,81 @@ class BarraProgresso extends StatelessWidget {
       color: concluido
           ? apoio.concluido
           : Theme.of(context).colorScheme.primary,
+    );
+  }
+}
+
+/// A barra das esperas longas: importação, entrada por rede e sincronização.
+///
+/// A mesma peça nos três lugares, pela mesma razão: quem está esperando quer
+/// saber o que está acontecendo e quanto falta. Sem contagem para mostrar, a
+/// barra fica indeterminada em vez de fingir progresso.
+///
+/// O anúncio para leitor de tela fica na etapa, que muda poucas vezes; a
+/// contagem, que muda o tempo todo, vai no valor da barra — assim o avanço é
+/// consultável sem inundar de mensagens quem usa TalkBack.
+class BarraAndamento extends StatelessWidget {
+  final Andamento andamento;
+
+  /// Centraliza o texto, para quando a barra é o centro da tela e não uma
+  /// faixa no alto dela.
+  final bool centralizado;
+
+  final EdgeInsetsGeometry padding;
+
+  const BarraAndamento({
+    super.key,
+    required this.andamento,
+    this.centralizado = false,
+    this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 4),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final apoio = CoresApoio.of(context);
+    final contagem = andamento.contagem;
+    final fracao = andamento.fracao;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LinearProgressIndicator(
+          value: fracao,
+          semanticsLabel: andamento.etapa,
+          semanticsValue: fracao == null
+              ? null
+              : '${(fracao * 100).round()}%'
+                    '${contagem == null ? '' : ' · $contagem'}',
+        ),
+        Padding(
+          padding: padding,
+          child: Column(
+            crossAxisAlignment: centralizado
+                ? CrossAxisAlignment.center
+                : CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  andamento.etapa,
+                  textAlign: centralizado ? TextAlign.center : null,
+                ),
+              ),
+              if (contagem != null)
+                ExcludeSemantics(
+                  child: Text(
+                    contagem,
+                    textAlign: centralizado ? TextAlign.center : null,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: apoio.apagado),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

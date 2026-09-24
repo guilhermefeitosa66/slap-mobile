@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/core/andamento.dart';
 import 'package:slap_mobile/core/hlc.dart';
 import 'package:slap_mobile/core/version_vector.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
@@ -255,6 +256,27 @@ void main() {
     );
   });
 
+  test('o download do pacote diz quanto já chegou', () async {
+    // Era a espera mais longa do aplicativo, e a única coisa na tela era uma
+    // roda girando. O `Content-Length` da resposta é o que permite dizer
+    // quanto falta, e não só quanto já veio.
+    final andamentos = <Andamento>[];
+    await clienteB.baixarPacote(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+      aoProgredir: andamentos.add,
+    );
+
+    expect(andamentos, isNotEmpty);
+    final fim = andamentos.last;
+    expect(fim.etapa, 'Baixando o inventário…');
+    expect(fim.total, isNotNull, reason: 'o servidor informa o tamanho');
+    expect(fim.feitos, fim.total);
+    expect(fim.fracao, 1);
+    expect(fim.contagem, contains('B'));
+  });
+
   test('um inventário desconhecido responde igual a chave inválida', () async {
     // Distinguir os dois casos confirmaria a existência do inventário a quem
     // não tem a chave.
@@ -295,6 +317,65 @@ void main() {
     expect(a.patrimonios.porId('item-2')!.salaAtual, 'Laboratório');
     expect(a.patrimonios.progresso(inventario.id).verificados, 2);
     expect(b.patrimonios.progresso(inventario.id).verificados, 2);
+  });
+
+  test('a troca diz o que está recebendo e o que está enviando', () async {
+    // A tela ficava parada até o fim, sem dizer nem a direção nem o tamanho.
+    // As duas viagens são contadas em alterações, que é o número que o
+    // protocolo já tem.
+    await entrarNoInventario(b, clienteB, paraA);
+
+    a.patrimonios.registrarVerificacao(
+      patrimonio: a.patrimonios.porId('item-1')!,
+      config: const ConfiguracaoLevantamento(sala: 'Auditório'),
+      usuarioNome: 'Ana',
+    );
+    b.patrimonios.registrarVerificacao(
+      patrimonio: b.patrimonios.porId('item-2')!,
+      config: const ConfiguracaoLevantamento(sala: 'Laboratório'),
+      usuarioNome: 'Bruno',
+    );
+
+    final andamentos = <Andamento>[];
+    final resultado = await clienteB.sincronizar(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+      aoProgredir: andamentos.add,
+    );
+
+    final etapas = andamentos.map((a) => a.etapa).toSet();
+    expect(etapas, contains('Recebendo de ${paraA.rotulo}…'));
+    expect(etapas, contains('Enviando para ${paraA.rotulo}…'));
+
+    final recebendo = andamentos.lastWhere(
+      (a) => a.etapa.startsWith('Recebendo'),
+    );
+    expect(recebendo.feitos, resultado.recebidas);
+    expect(recebendo.contagem, contains('alterações recebidas'));
+
+    final enviando = andamentos.lastWhere(
+      (a) => a.etapa.startsWith('Enviando'),
+    );
+    expect(enviando.feitos, resultado.enviadas);
+    expect(enviando.total, resultado.enviadas);
+    expect(enviando.fracao, 1);
+  });
+
+  test('a última troca com cada aparelho fica registrada', () async {
+    await entrarNoInventario(b, clienteB, paraA);
+    await clienteB.sincronizar(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+    );
+
+    final trocas = b.ops.ultimasTrocas(inventario.id);
+    expect(trocas[a.dispositivoId], isNotNull);
+    expect(
+      DateTime.now().difference(trocas[a.dispositivoId]!).inMinutes,
+      lessThan(1),
+    );
   });
 
   test('sincronizar de novo sem novidade não transfere nada', () async {

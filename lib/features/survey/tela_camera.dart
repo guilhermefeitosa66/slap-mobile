@@ -117,21 +117,23 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
       modo: modo,
     );
 
-    LeituraRegistrada registro;
+    final LeituraRegistrada registro;
+    final Som som;
 
     switch (leitura.resultado) {
       case ResultadoLeitura.naoLocalizado:
-        await ref.read(sonsProvider).tocar(Som.naoLocalizado);
+        som = Som.naoLocalizado;
         registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
 
       case ResultadoLeitura.jaVerificado:
         // Pela câmera não se pede confirmação: interromper o fluxo com um
         // diálogo derrubaria o ritmo. O item aparece marcado na lista, e a
         // regravação, se necessária, é feita pelo campo de digitação.
-        await ref.read(sonsProvider).tocar(Som.jaVerificado);
+        som = Som.jaVerificado;
         registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
 
       case ResultadoLeitura.sucesso:
+        som = Som.sucesso;
         final identidade = ref.read(identidadeProvider);
         final depois = repo.registrarVerificacao(
           patrimonio: leitura.patrimonio!,
@@ -140,7 +142,6 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
           usuarioMatricula: identidade.matricula,
         );
         ref.read(revisaoProvider.notifier).mudou();
-        await ref.read(sonsProvider).tocar(Som.sucesso);
         registro = LeituraRegistrada(
           leitura: leitura,
           codigoLido: texto,
@@ -155,6 +156,8 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
       anunciarLeitura(context, registro);
       setState(() => _lidos.insert(0, registro));
     }
+    // Por último, e sem esperar: a lista não pode ficar atrás do áudio.
+    ref.read(sonsProvider).tocar(som);
   }
 
   @override

@@ -4,14 +4,15 @@
 O site apresenta o aplicativo — o que é, como se parece, como se usa e como
 instalar — e publica a política de privacidade numa URL estável, que as lojas
 exigem. A fonte da verdade dos textos longos continua no repositório: a
-política vem de docs/privacidade.md, as capturas de docs/imagens/ e a
-logomarca de docs/marca/. Este script só monta as páginas, com a paleta e as
+política vem de docs/privacidade.md, o manual de docs/manual.md, as capturas
+de docs/imagens/ e a logomarca de docs/marca/. Este script só monta as páginas, com a paleta e as
 fontes do aplicativo, para o site nunca divergir do que está versionado.
 
     python3 tool/gerar_site.py [pasta de saída, padrão _site]
 
 Saída:
     index.html                   apresentação, como usar, capturas, instalação
+    manual/index.html            o manual completo, de docs/manual.md
     privacidade/index.html       a política
     entrar/index.html            reserva do link de entrada num inventário
     .well-known/assetlinks.json  verificação do App Link (ver abaixo)
@@ -48,6 +49,10 @@ PACOTE_ANDROID = "io.github.guilhermefeitosa66.slap_mobile"
 
 # docs/privacidade.md e o que ele cita por caminho relativo.
 FONTE_POLITICA = RAIZ / "docs" / "privacidade.md"
+# O manual completo, também escrito em Markdown no repositório: assim ele é
+# lido e revisado ao lado do código, em vez de virar string dentro deste
+# gerador.
+FONTE_MANUAL = RAIZ / "docs" / "manual.md"
 PASTA_IMAGENS = RAIZ / "docs" / "imagens"
 PASTA_MARCA = RAIZ / "docs" / "marca"
 
@@ -94,6 +99,9 @@ ESTILO = """
   --laranja-fundo: #FBE8D6; --laranja-texto: #8A4408;
   --vermelho-fundo: #FAE0DE; --vermelho-texto: #7E1214;
   --raio: 16px; --largura: 1080px;
+  /* Contorno das capturas: mais presente que --borda, porque o fundo da
+     página e o do aplicativo em tema claro são quase a mesma cor. */
+  --borda-captura: #D3D0C7;
 }
 FONTES
 * { box-sizing: border-box; }
@@ -152,8 +160,64 @@ header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 
 .abertura h1 span { color: var(--teal); }
 .chamadas { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
 .nota { font-size: 0.9rem; color: var(--tinta-secundaria); margin-top: 1rem; }
-.celular { border-radius: 28px; border: 1px solid var(--borda); background: var(--superficie);
-  box-shadow: 0 24px 48px -24px rgba(20, 32, 30, 0.35); overflow: hidden; }
+/* A captura precisa se destacar de um fundo quase branco, no tamanho da
+   abertura e no da galeria. Três camadas: um contorno de 1 px que encosta na
+   borda, uma sombra curta que define o recorte em qualquer tamanho e uma
+   longa que dá profundidade. A sombra única e muito difusa que havia aqui
+   funcionava só na abertura, onde a imagem é grande. */
+.celular { border-radius: 28px; border: 1px solid var(--borda-captura);
+  background: var(--superficie); overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20, 32, 30, 0.10),
+              0 5px 12px -3px rgba(20, 32, 30, 0.16),
+              0 20px 40px -20px rgba(20, 32, 30, 0.30); }
+/* A captura é um botão: ampliar é a única coisa que ela faz. */
+button.celular { display: block; width: 100%; padding: 0; cursor: zoom-in;
+  font: inherit; color: inherit; transition: transform 0.15s, box-shadow 0.15s; }
+button.celular:hover { transform: translateY(-2px);
+  box-shadow: 0 1px 2px rgba(20, 32, 30, 0.10),
+              0 8px 16px -4px rgba(20, 32, 30, 0.18),
+              0 26px 48px -22px rgba(20, 32, 30, 0.34); }
+button.celular:focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
+
+/* Ampliação da captura, como em loja virtual. Sem biblioteca: são trinta
+   linhas de CSS e um script pequeno. */
+.lupa { position: fixed; inset: 0; z-index: 50; background: rgba(10, 18, 16, 0.9);
+  display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.lupa[hidden] { display: none; }
+.lupa figure { margin: 0; display: flex; flex-direction: column; align-items: center;
+  gap: 0.9rem; max-height: 100%; max-width: 100%; }
+.lupa img { max-width: 100%; max-height: calc(100vh - 8rem);
+  max-height: calc(100dvh - 8rem); width: auto; border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: var(--superficie); }
+.lupa figcaption { color: #F3F2EE; font-size: 0.95rem; line-height: 1.4;
+  text-align: center; max-width: 36rem; }
+.lupa button { position: absolute; display: grid; place-items: center;
+  width: 48px; height: 48px; border-radius: 999px; border: 0; cursor: pointer;
+  background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 1.6rem;
+  line-height: 1; }
+.lupa button:hover { background: rgba(255, 255, 255, 0.26); }
+.lupa button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.lupa .fechar { top: 1rem; right: 1rem; }
+.lupa .anterior { left: 1rem; top: 50%; transform: translateY(-50%); }
+.lupa .seguinte { right: 1rem; top: 50%; transform: translateY(-50%); }
+.lupa button[hidden] { display: none; }
+@media (max-width: 720px) {
+  .lupa { padding: 0.35rem; }
+  /* Perto de 90% da altura da tela: é o que deixa o texto da interface
+     legível na captura, que é o motivo de ampliar. */
+  .lupa figure { gap: 0.5rem; }
+  .lupa img { max-height: 86vh; max-height: 86dvh; }
+  .lupa figcaption { font-size: 0.85rem; }
+  .lupa .anterior { left: 0.25rem; }
+  .lupa .seguinte { right: 0.25rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lupa { animation: surgir 0.18s ease-out; }
+  .lupa img { animation: crescer 0.18s ease-out; }
+}
+@keyframes surgir { from { opacity: 0; } }
+@keyframes crescer { from { transform: scale(0.97); } }
+body.ampliando { overflow: hidden; }
 .abertura .celular { max-width: 340px; margin: 0 auto; }
 @media (max-width: 860px) {
   .abertura { padding: 2.5rem 0 2rem; }
@@ -217,7 +281,7 @@ footer { border-top: 1px solid var(--borda); padding: 2.5rem 0 3rem;
 footer .navegacao { min-height: 0; align-items: flex-start; }
 footer nav a:not(.botao) { color: var(--tinta-secundaria); margin-left: 1.25rem; }
 
-/* Páginas de texto (política, reserva do link). */
+/* Páginas de texto (política, manual, reserva do link). */
 .texto { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
 .texto h1 { font-size: 2rem; margin: 0 0 0.5rem; }
 .texto h2 { font-size: 1.35rem; margin: 2.25rem 0 0.5rem; padding-top: 1.25rem;
@@ -232,6 +296,45 @@ footer nav a:not(.botao) { color: var(--tinta-secundaria); margin-left: 1.25rem;
   font-weight: 600; }
 .texto .topo img { width: 40px; height: 40px; border-radius: 10px; }
 .texto footer { border: 0; padding: 3rem 0 0; }
+.trilha { font-size: 0.9rem; color: var(--tinta-secundaria); margin-bottom: 1.5rem; }
+.trilha a { color: var(--tinta-secundaria); }
+
+/* O manual é longo e consultado em campo: o índice fica no alto, e as
+   capturas entram no tamanho de um celular, ampliáveis como na inicial. */
+.manual { max-width: 46rem; }
+.manual .toc { background: var(--superficie); border: 1px solid var(--borda);
+  border-radius: var(--raio); padding: 1.25rem 1.5rem; margin: 2rem 0 2.5rem; }
+.manual .toc > ul { margin: 0; padding-left: 1.1rem; }
+.manual .toc ul { list-style: none; padding-left: 0.9rem; }
+.manual .toc > ul > li { margin: 0.35rem 0; }
+.manual .toc a { text-decoration: none; }
+.manual .toc a:hover { text-decoration: underline; }
+.manual .toc ul ul a { color: var(--tinta-secundaria); font-size: 0.95rem; }
+.manual .toc::before { content: "Neste manual"; display: block;
+  font-family: "Archivo", sans-serif; font-weight: 600; font-size: 0.85rem;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--teal);
+  margin-bottom: 0.75rem; }
+.manual h2 { scroll-margin-top: 1rem; }
+.manual h3 { margin: 2rem 0 0.25rem; }
+.manual table { border-collapse: collapse; width: 100%; margin: 1.25rem 0;
+  font-size: 0.95rem; }
+.manual th, .manual td { text-align: left; vertical-align: top;
+  padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--borda); }
+.manual th { font-family: "Archivo", sans-serif; font-weight: 600;
+  font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--tinta-secundaria); }
+.manual blockquote { margin: 1.5rem 0; padding: 1rem 1.25rem;
+  background: var(--teal-claro); color: var(--sobre-teal-claro);
+  border-radius: var(--raio); }
+.manual blockquote p { margin: 0.4rem 0 0; }
+.manual blockquote p:first-child { margin-top: 0; }
+.manual button.celular { max-width: 260px; margin: 1.75rem auto; }
+.manual hr { border: 0; border-top: 1px solid var(--borda); margin: 3rem 0 2rem; }
+@media (max-width: 560px) {
+  .manual table { font-size: 0.9rem; }
+  .manual th, .manual td { padding: 0.5rem 0.4rem; }
+  .manual button.celular { max-width: 220px; }
+}
 """
 
 # Ícones das características, em linha para não depender de arquivo externo.
@@ -243,6 +346,115 @@ ICONES = {
     "conflito": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h13l-3-3M21 17H8l3 3"/><path d="M12 11v2M12 16h.01"/></svg>',
     "relatorio": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>',
 }
+
+
+# Ampliação das capturas. Sem biblioteca: a página é estática, e isto é o que
+# uma loja virtual faz — clicar na imagem e vê-la grande sobre fundo escuro.
+#
+# Os cuidados que não se veem: o foco volta para a captura de origem ao
+# fechar, fica preso dentro do diálogo enquanto ele está aberto, e o gesto de
+# voltar do Android fecha a ampliação em vez de sair da página. Sem isso, quem
+# usa teclado ou leitor de tela fica preso atrás do fundo escurecido.
+SCRIPT_LUPA = """<script>
+(function () {
+  var gatilhos = [].slice.call(document.querySelectorAll('.ampliar'));
+  if (!gatilhos.length) return;
+
+  var lupa = document.createElement('div');
+  lupa.className = 'lupa';
+  lupa.hidden = true;
+  lupa.setAttribute('role', 'dialog');
+  lupa.setAttribute('aria-modal', 'true');
+  lupa.setAttribute('aria-label', 'Captura ampliada');
+  lupa.innerHTML =
+    '<button type="button" class="fechar" aria-label="Fechar">×</button>' +
+    '<button type="button" class="anterior" aria-label="Captura anterior">‹</button>' +
+    '<figure><img alt=""><figcaption></figcaption></figure>' +
+    '<button type="button" class="seguinte" aria-label="Próxima captura">›</button>';
+  document.body.appendChild(lupa);
+
+  var imagem = lupa.querySelector('img');
+  var legenda = lupa.querySelector('figcaption');
+  var fechar = lupa.querySelector('.fechar');
+  var anterior = lupa.querySelector('.anterior');
+  var seguinte = lupa.querySelector('.seguinte');
+
+  var origem = null;
+  var irmaos = [];
+  var atual = 0;
+  var empurrou = false;
+
+  function mostrar(i) {
+    atual = (i + irmaos.length) % irmaos.length;
+    var img = irmaos[atual].querySelector('img');
+    imagem.src = img.src;
+    imagem.alt = img.alt;
+    legenda.textContent = img.alt;
+    var varias = irmaos.length > 1;
+    anterior.hidden = !varias;
+    seguinte.hidden = !varias;
+  }
+
+  function abrir(gatilho) {
+    origem = gatilho;
+    irmaos = gatilhos.filter(function (g) {
+      return g.dataset.grupo === gatilho.dataset.grupo;
+    });
+    mostrar(irmaos.indexOf(gatilho));
+    lupa.hidden = false;
+    document.body.classList.add('ampliando');
+    fechar.focus();
+    // O gesto de voltar fecha a ampliação, e não a página.
+    try {
+      history.pushState({ lupa: true }, '');
+      empurrou = true;
+    } catch (e) { empurrou = false; }
+  }
+
+  function encerrar(voltando) {
+    if (lupa.hidden) return;
+    lupa.hidden = true;
+    imagem.removeAttribute('src');
+    document.body.classList.remove('ampliando');
+    // Volta o foco para a captura que estava sendo vista, que pode não ser a
+    // de onde se partiu: quem andou com as setas continua de onde parou.
+    var alvo = irmaos[atual] || origem;
+    if (alvo) alvo.focus();
+    origem = null;
+    if (empurrou && !voltando) history.back();
+    empurrou = false;
+  }
+
+  gatilhos.forEach(function (g) {
+    g.addEventListener('click', function () { abrir(g); });
+  });
+
+  fechar.addEventListener('click', function () { encerrar(false); });
+  anterior.addEventListener('click', function () { mostrar(atual - 1); });
+  seguinte.addEventListener('click', function () { mostrar(atual + 1); });
+  lupa.addEventListener('click', function (e) {
+    // Clique fora da imagem e dos botões fecha.
+    if (e.target === lupa || e.target.tagName === 'FIGURE') encerrar(false);
+  });
+  window.addEventListener('popstate', function () { encerrar(true); });
+
+  document.addEventListener('keydown', function (e) {
+    if (lupa.hidden) return;
+    if (e.key === 'Escape') { encerrar(false); return; }
+    if (e.key === 'ArrowLeft' && irmaos.length > 1) { mostrar(atual - 1); return; }
+    if (e.key === 'ArrowRight' && irmaos.length > 1) { mostrar(atual + 1); return; }
+    if (e.key !== 'Tab') return;
+    // Foco preso no diálogo enquanto ele estiver aberto.
+    var focaveis = [fechar, anterior, seguinte].filter(function (b) {
+      return !b.hidden;
+    });
+    var i = focaveis.indexOf(document.activeElement);
+    e.preventDefault();
+    var proximo = e.shiftKey ? i - 1 : i + 1;
+    focaveis[(proximo + focaveis.length) % focaveis.length].focus();
+  });
+})();
+</script>"""
 
 
 def estilo(prefixo: str) -> str:
@@ -277,30 +489,79 @@ def pagina(titulo: str, descricao: str, corpo: str, prefixo: str = "") -> str:
 """
 
 
-def converter(texto: str) -> str:
+def converter(
+    texto: str,
+    locais: dict[str, str] | None = None,
+    profundidade: str = "2-6",
+) -> str:
+    """Markdown para HTML, com tabelas e índice.
+
+    `locais` traduz links para documentos que **também** existem no site
+    (`privacidade.md` → `../privacidade/`). O que não estiver ali aponta para o
+    arquivo no GitHub: é onde ele existe.
+
+    `profundidade` limita o que entra no índice. O título da página fica de
+    fora sempre — um índice cujo primeiro item é o nome do documento aninha
+    tudo um nível sem dizer nada.
+    """
     corpo = markdown.markdown(
         texto,
         extensions=["tables", "toc"],
-        extension_configs={"toc": {"slugify": slugify_unicode}},
+        extension_configs={
+            "toc": {"slugify": slugify_unicode, "toc_depth": profundidade}
+        },
         output_format="html",
     )
-    # Links relativos para outros documentos do repositório apontam para o
-    # GitHub: no site só existe a política.
+    traducao = locais or {}
     return re.sub(
         r'href="(?!https?:|#|mailto:)([^"]+\.md)(#[^"]*)?"',
-        lambda m: f'href="{REPOSITORIO}/blob/main/docs/{m.group(1)}{m.group(2) or ""}"',
+        lambda m: 'href="{}{}"'.format(
+            traducao.get(
+                m.group(1), f"{REPOSITORIO}/blob/main/docs/{m.group(1)}"
+            ),
+            m.group(2) or "",
+        ),
         corpo,
     )
 
 
-def captura(nome: str, classe: str = "celular", carregamento: str = "lazy") -> str:
-    """Uma captura de tela, com o texto alternativo de CAPTURAS."""
+def capturas_ampliaveis(corpo: str, prefixo: str) -> str:
+    """Transforma as imagens de um texto convertido em capturas ampliáveis.
+
+    O manual é consultado em campo, muitas vezes no mesmo celular que está
+    levantando: ver a tela em tamanho maior é a diferença entre reconhecer o
+    botão e não reconhecer. Usa a mesma peça da página inicial.
+    """
+    return re.sub(
+        r'<p><img alt="([^"]*)" src="imagens/([^"]+)"\s*/?></p>',
+        lambda m: (
+            f'<button type="button" class="celular ampliar" data-grupo="manual" '
+            f'aria-label="Ampliar: {m.group(1)}">'
+            f'<img src="{prefixo}imagens/{m.group(2)}" alt="{m.group(1)}" '
+            f'width="720" height="1603" loading="lazy"></button>'
+        ),
+        corpo,
+    )
+
+
+def captura(nome: str, grupo: str, carregamento: str = "lazy") -> str:
+    """Uma captura de tela, clicável para ampliar.
+
+    É um `<button>`, e não uma `<div>` com `onclick`: ampliar é uma ação, e
+    assim ela chega pelo teclado e pelo leitor de tela sem nada a mais.
+    `grupo` liga as capturas que as setas percorrem — a galeria não navega
+    para os passos, que contam outra história.
+
+    720 × 1603 é o que tool/reduzir_capturas.py produz. A ampliação ajusta
+    pela altura da janela, que é sempre menor que 1603 px: a imagem nunca é
+    esticada além do original, e por isso a resolução atual basta.
+    """
     alt = html.escape(CAPTURAS[nome])
-    # 720 × 1603 é o que tool/reduzir_capturas.py produz; as dimensões evitam
-    # o salto do layout enquanto a imagem carrega.
     return (
-        f'<div class="{classe}"><img src="imagens/{nome}.png" alt="{alt}" '
-        f'width="720" height="1603" loading="{carregamento}"></div>'
+        f'<button type="button" class="celular ampliar" data-grupo="{grupo}" '
+        f'aria-label="Ampliar: {alt}">'
+        f'<img src="imagens/{nome}.png" alt="{alt}" '
+        f'width="720" height="1603" loading="{carregamento}"></button>'
     )
 
 
@@ -312,6 +573,7 @@ def cabecalho(logo: str) -> str:
 <a class="discreto" href="#por-que">Por quê</a>
 <a class="discreto" href="#como-usar">Como usar</a>
 <a class="discreto" href="#capturas">Capturas</a>
+<a href="manual/">Manual</a>
 <a href="#instalar">Instalar</a>
 <a class="discreto" href="{REPOSITORIO}">GitHub</a>
 <a class="botao botao-cheio botao-pequeno" href="{RELEASE}">Baixar o APK</a>
@@ -335,7 +597,7 @@ exporte os relatórios prontos para o SUAP.</p>
 </div>
 <p class="nota">Software livre · Apache-2.0 · Android 7.0 ou mais novo · sem conta, sem anúncios</p>
 </div>
-{captura("levantamento", carregamento="eager")}
+{captura("levantamento", "abertura", carregamento="eager")}
 </div>
 </section>"""
 
@@ -349,8 +611,9 @@ def por_que() -> str:
          "Os aparelhos do mesmo inventário trocam o que cada um levantou, direto entre "
          "eles, pela rede Wi-Fi local. Não há aparelho principal: todos têm a cópia inteira."),
         ("som", "Três retornos, sem olhar a tela",
-         "Cada leitura responde com som, vibração, cor e texto próprios. Dá para percorrer "
-         "uma sala inteira com o leitor numa mão e a etiqueta na outra."),
+         "Cada leitura responde com som, vibração, cor e texto próprios. O bipe já diz se o "
+         "item entrou, se já tinha sido lido ou se não está na planilha — não é preciso "
+         "conferir a tela a cada patrimônio."),
         ("config", "Configure uma vez, leia dezenas",
          "Sala, responsável, estado de conservação e situação de uso valem para as "
          "próximas leituras, até você mudar. É de onde vem a velocidade."),
@@ -359,7 +622,8 @@ def por_que() -> str:
          "conflito para alguém decidir, e a decisão vale em todos os aparelhos."),
         ("relatorio", "Relatórios prontos",
          "Itens corretos, itens que precisam de atualização no SUAP e itens não "
-         "localizados, em XLSX ou CSV — iguais em qualquer aparelho do inventário."),
+         "localizados, em XLSX ou CSV. Depois de sincronizar, saem iguais em qualquer "
+         "aparelho do inventário."),
     ]
     grade = "\n".join(
         f'<div class="cartao"><div class="icone">{ICONES[icone]}</div>'
@@ -378,7 +642,7 @@ inventário. Aqui o celular é o inventário.</p>
 <div class="retornos">
 <div class="retorno retorno-verde">Registrado<small>encontrado e gravado com a configuração atual</small></div>
 <div class="retorno retorno-laranja">Já verificado<small>lido antes; nada é sobrescrito sem confirmação</small></div>
-<div class="retorno retorno-vermelho">Não localizado<small>não está na planilha deste inventário</small></div>
+<div class="retorno retorno-vermelho">Não localizado<small>o código lido não está na planilha deste inventário</small></div>
 </div>
 </div>
 </section>"""
@@ -397,21 +661,27 @@ def como_usar() -> str:
          "Toque em Compartilhar e mostre o QR code ou envie o link. No outro celular, "
          "Novo → Ler o QR code de outro aparelho. Você aceita cada pedido de entrada; os dois "
          "precisam estar na mesma rede Wi-Fi."),
-        ("configuracao", "Diga onde você está",
+        ("configuracao", "Configure as leituras",
          "Sala, responsável, estado de conservação e situação de uso. A configuração vale "
-         "para todas as leituras seguintes, até você mudar de sala."),
+         "para todas as leituras seguintes, até você mudar — trocar de sala é só um dos "
+         "motivos para mudá-la."),
         ("levantamento", "Leia os códigos",
          "Pela câmera, com um leitor externo ou digitando o tombo. Verde é registrado, "
          "laranja é já verificado, vermelho é não localizado — com som e vibração para cada um."),
-        ("sincronizacao", "Sincronize quando quiser",
-         "Os aparelhos da mesma rede se encontram sozinhos. Se houver conflito, ele aparece "
-         "para alguém decidir; a decisão vale para todos."),
+        ("sincronizacao", "Troque os dados quando quiser",
+         "A troca é nos dois sentidos: cada aparelho manda o que levantou e recebe o que o "
+         "outro levantou. Eles se encontram sozinhos na mesma rede; se a rede da instituição "
+         "isolar os aparelhos, use o ponto de acesso de um dos celulares. Havendo conflito, "
+         "ele aparece para alguém decidir, e a decisão vale para todos."),
         ("relatorios", "Confira e exporte",
          "Três grupos: o que está certo, o que precisa de atualização no SUAP e o que não "
-         "foi localizado. Cada um sai em XLSX ou CSV."),
+         "foi localizado. Cada um sai em XLSX ou CSV. São eles que alimentam o relatório "
+         "final do inventário, que é arquivado, e o que vai ao setor de patrimônio para "
+         "atualizar o SUAP."),
     ]
     lista = "\n".join(
-        f'<li class="passo"><div><h3>{titulo}</h3><p>{texto}</p></div>{captura(nome)}</li>'
+        f'<li class="passo"><div><h3>{titulo}</h3><p>{texto}</p></div>'
+        f'{captura(nome, "passos")}</li>'
         for nome, titulo, texto in passos
     )
     return f"""<section id="como-usar">
@@ -425,6 +695,11 @@ levanta uma sala. No fim, os relatórios são os mesmos em todos os aparelhos.</
 <ol class="passos">
 {lista}
 </ol>
+<p class="centro" style="margin-top:2rem">
+<a class="botao botao-vazado" href="manual/">Ler o manual completo</a>
+</p>
+<p class="centro secundario">Cada tela em detalhe, com o que fazer em cada caso — inclusive
+quando algo dá errado.</p>
 </div>
 </section>"""
 
@@ -439,15 +714,16 @@ def capturas() -> str:
         "detalhe",
     ]
     figuras = "\n".join(
-        f"<figure>{captura(nome)}<figcaption>{html.escape(CAPTURAS[nome])}</figcaption></figure>"
+        f'<figure>{captura(nome, "galeria")}'
+        f"<figcaption>{html.escape(CAPTURAS[nome])}</figcaption></figure>"
         for nome in nomes
     )
     return f"""<section id="capturas">
 <div class="largura centro">
 <span class="sobretitulo">Capturas</span>
 <h2>O aplicativo por dentro</h2>
-<p class="lede">Tema claro e escuro, TalkBack e fonte ampliada. Os nomes nas imagens são
-fictícios; o resto é um inventário real.</p>
+<p class="lede">Tema claro e escuro, TalkBack e fonte ampliada. Toque em qualquer captura
+para vê-la em tamanho maior.</p>
 <div class="galeria">
 {figuras}
 </div>
@@ -475,8 +751,10 @@ publicado no GitHub. Precisa de Android 7.0 ou mais novo.</p>
 toque em <strong>Configurações</strong>, ative <strong>Permitir desta fonte</strong> e volte.</li>
 <li>Toque em <strong>Instalar</strong>. Na primeira abertura, informe seu nome e comece.</li>
 </ol>
-<p class="secundario">Para atualizar, instale o APK novo por cima: os inventários ficam.
-O passo a passo completo, com a conferência do arquivo, está em
+<p class="secundario">Para atualizar, instale o APK novo por cima: os inventários ficam.</p>
+<p class="secundario">A partir de 30 de setembro de 2026, celular Android certificado no Brasil só
+instala aplicativo de desenvolvedor registrado no Google. As versões publicadas aqui atendem a
+isso. O passo a passo completo, com a conferência do arquivo, está em
 <a href="{REPOSITORIO}/blob/main/docs/instalacao.md">docs/instalacao.md</a>.</p>
 </div>
 <div class="cartao">
@@ -522,6 +800,7 @@ def pagina_inicial(logo: str) -> str:
             instalar(),
             "</main>",
             rodape(),
+            SCRIPT_LUPA,
         ]),
     )
 
@@ -538,6 +817,44 @@ def pagina_politica() -> str:
         titulo,
         "Quais dados o SLAP Mobile guarda, para onde vão e por quê.",
         f'<main class="texto">{topo}{converter(texto)}{rodape_politica}</main>',
+        prefixo="../",
+    )
+
+
+def pagina_manual() -> str:
+    """O manual completo, de docs/manual.md.
+
+    Página própria, e não mais uma seção da inicial: a inicial serve para
+    decidir se vale usar o aplicativo; o manual, para conduzir o inventário.
+    """
+    texto = FONTE_MANUAL.read_text(encoding="utf-8")
+    titulo = re.search(r"^# (.+)$", texto, re.MULTILINE).group(1).strip()
+    trilha = (
+        '<nav class="trilha" aria-label="Você está em">'
+        '<a href="../">Início</a> <span aria-hidden="true">›</span> '
+        "<span>Manual</span></nav>"
+    )
+    topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
+    corpo = capturas_ampliaveis(
+        converter(
+            texto,
+            locais={"privacidade.md": "../privacidade/"},
+            profundidade="2-3",
+        ),
+        prefixo="../",
+    )
+    rodape_manual = (
+        f'<footer>Fonte: <a href="{REPOSITORIO}/blob/main/docs/manual.md">'
+        "docs/manual.md</a> no repositório. Encontrou algo errado ou faltando? "
+        f'<a href="{REPOSITORIO}/issues">Abra uma issue</a>.</footer>'
+    )
+    return pagina(
+        f"{titulo} — SLAP Mobile",
+        "Como conduzir um inventário patrimonial com o SLAP Mobile, tela a "
+        "tela: importar a planilha, levantar, trocar dados e exportar os "
+        "relatórios.",
+        f'<main class="texto manual">{topo}{trilha}{corpo}{rodape_manual}</main>'
+        + SCRIPT_LUPA,
         prefixo="../",
     )
 
@@ -655,7 +972,7 @@ def gravar_assetlinks(saida: Path) -> bool:
 def gerar(saida: Path) -> None:
     if saida.exists():
         shutil.rmtree(saida)
-    for pasta in ("privacidade", "entrar", "fontes", "imagens", "marca"):
+    for pasta in ("privacidade", "manual", "entrar", "fontes", "imagens", "marca"):
         (saida / pasta).mkdir(parents=True)
 
     for arquivo in FONTES:
@@ -679,6 +996,7 @@ def gerar(saida: Path) -> None:
 
     (saida / "index.html").write_text(pagina_inicial(logo), encoding="utf-8")
     (saida / "privacidade" / "index.html").write_text(pagina_politica(), encoding="utf-8")
+    (saida / "manual" / "index.html").write_text(pagina_manual(), encoding="utf-8")
     (saida / "entrar" / "index.html").write_text(pagina_entrar(), encoding="utf-8")
 
     if not gravar_assetlinks(saida):

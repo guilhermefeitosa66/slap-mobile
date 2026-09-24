@@ -15,7 +15,7 @@ class SonsMudos extends Sons {
   Future<void> preparar() async {}
 
   @override
-  Future<void> tocar(Som som) async => tocados.add(som);
+  void tocar(Som som) => tocados.add(som);
 
   @override
   Future<void> dispose() async {}
@@ -29,7 +29,7 @@ Future<ProviderContainer> montar(
   WidgetTester tester,
   Widget tela, {
   Banco? banco,
-  SonsMudos? sons,
+  Sons? sons,
   void Function(ProviderContainer)? preparar,
 }) async {
   final container = ProviderContainer(

@@ -1,6 +1,6 @@
 # Capturas de tela
 
-As imagens do README e do site (`tool/gerar_site.py`). Diferente das capturas da loja em
+As imagens do README, do site e do [manual](../manual.md) (`tool/gerar_site.py`). Diferente das capturas da loja em
 [`../loja/capturas/`](../loja/capturas/), geradas por teste golden com dados fictícios, estas
 vêm do emulador com um inventário real — só os **nomes de servidores e a matrícula são
 fictícios**, porque a planilha do SUAP traz nome e matrícula de pessoas.

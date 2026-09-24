@@ -354,10 +354,12 @@ class _Acoes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final acoes = [
+      // Seta dupla e "trocar": a ação manda e recebe na mesma viagem, e o
+      // ícone de recarregar sugeria uma direção só.
       (
-        Icons.sync,
-        'Sincronizar',
-        'Trocar dados com outros aparelhos',
+        Icons.swap_horiz,
+        'Trocar dados',
+        'Manda o que você levantou e recebe o que os outros levantaram',
         'sincronizar',
       ),
       (

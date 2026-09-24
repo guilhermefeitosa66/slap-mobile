@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../app/componentes.dart';
 import '../../app/providers.dart';
 import '../../app/tema.dart';
+import '../../core/andamento.dart';
 import '../../core/formato.dart';
 import 'cliente.dart';
 import 'compartilhar_inventario.dart';
@@ -30,6 +31,16 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
   final _sincronizando = <String>{};
   final _resultados = <String, String>{};
 
+  /// O que está acontecendo na troca com cada aparelho, enquanto acontece.
+  final _andamentos = <String, Andamento>{};
+
+  /// Quando foi a última troca bem-sucedida com cada aparelho. Começa com o
+  /// que está gravado: a informação vale também antes de trocar de novo.
+  Map<String, DateTime> _ultimasTrocas = const {};
+
+  /// A vez de quem, em "Trocar com todos".
+  ({int atual, int total, String rotulo})? _fila;
+
   /// Pares recusados por relógio, com a diferença medida. Sai daqui quando
   /// uma sincronização com o par passa.
   final _relogios = <String, RelogioDivergente>{};
@@ -43,6 +54,9 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
   @override
   void initState() {
     super.initState();
+    _ultimasTrocas = ref
+        .read(operacoesProvider)
+        .ultimasTrocas(widget.inventarioId);
     _ligar();
   }
 
@@ -101,6 +115,12 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     }
   }
 
+  /// "Última troca: hoje às 09:10", quando já houve uma.
+  String? _ultimaTrocaDe(Par par) {
+    final quando = _ultimasTrocas[par.dispositivoId];
+    return quando == null ? null : 'Última troca ${descreverMomento(quando)}';
+  }
+
   String _rotuloDoDispositivo(String dispositivoId) {
     for (final par in _pares) {
       if (par.dispositivoId == dispositivoId) return par.rotulo;
@@ -112,7 +132,10 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
     final inventario = ref.read(inventarioProvider(widget.inventarioId));
     if (inventario == null) return;
 
-    setState(() => _sincronizando.add(par.dispositivoId));
+    setState(() {
+      _sincronizando.add(par.dispositivoId);
+      _andamentos[par.dispositivoId] = Andamento('Falando com ${par.rotulo}…');
+    });
     // O tempo aparece junto do resultado: é um dos números do teste em campo.
     final cronometro = Stopwatch()..start();
 
@@ -123,6 +146,11 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
             par: par,
             inventarioId: widget.inventarioId,
             chaveSync: inventario.chaveSync,
+            aoProgredir: (andamento) {
+              if (mounted) {
+                setState(() => _andamentos[par.dispositivoId] = andamento);
+              }
+            },
           );
 
       ref.read(revisaoProvider.notifier).mudou();
@@ -130,6 +158,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
       if (!mounted) return;
       setState(() {
         _relogios.remove(par.dispositivoId);
+        _ultimasTrocas = {..._ultimasTrocas, par.dispositivoId: DateTime.now()};
         final tempo = descreverTempo(cronometro.elapsed);
         _resultados[par.dispositivoId] = resultado.houveTroca
             ? 'Recebidas ${resultado.recebidas}, enviadas ${resultado.enviadas}'
@@ -154,14 +183,33 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
         setState(() => _resultados[par.dispositivoId] = 'Falhou: $e');
       }
     } finally {
-      if (mounted) setState(() => _sincronizando.remove(par.dispositivoId));
+      if (mounted) {
+        setState(() {
+          _sincronizando.remove(par.dispositivoId);
+          _andamentos.remove(par.dispositivoId);
+        });
+      }
     }
   }
 
+  /// Percorre os pares em sequência, dizendo em qual está.
+  ///
+  /// Sem isso a tela ficava parada por vários aparelhos seguidos sem dizer de
+  /// quem era a vez, e quem esperava não sabia se faltava um ou três.
   Future<void> _sincronizarTodos() async {
-    for (final par in _pares) {
-      await _sincronizar(par);
+    final pares = _pares;
+    for (var i = 0; i < pares.length; i++) {
+      if (!mounted) return;
+      setState(
+        () => _fila = (
+          atual: i + 1,
+          total: pares.length,
+          rotulo: pares[i].rotulo,
+        ),
+      );
+      await _sincronizar(pares[i]);
     }
+    if (mounted) setState(() => _fila = null);
   }
 
   @override
@@ -173,7 +221,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sincronizar'),
+        title: const Text('Trocar dados'),
         actions: [
           if (inventario != null)
             IconButton(
@@ -214,7 +262,18 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
+          // Dito antes, e não só no resultado: quem vai tocar precisa saber
+          // que a troca é nos dois sentidos. Sem isso, parece que há risco de
+          // sobrescrever o trabalho do colega, e a pessoa não toca.
+          Text(
+            'A troca é nos dois sentidos: este aparelho manda o que você '
+            'levantou e recebe o que o outro levantou. Nada é apagado.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 10),
+          if (_fila case final fila?)
+            _VezDe(atual: fila.atual, total: fila.total, rotulo: fila.rotulo),
           if (_pares.isEmpty)
             const _NenhumPar()
           else
@@ -242,21 +301,20 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   subtitle: Text(
-                    '${_resultados[par.dispositivoId] ?? par.endereco}\n'
-                    'Encontrado por ${descreverOrigens(par.origens)}',
+                    [
+                      _resultados[par.dispositivoId] ??
+                          _ultimaTrocaDe(par) ??
+                          par.endereco,
+                      'Encontrado por ${descreverOrigens(par.origens)}',
+                    ].join('\n'),
                   ),
+                  // Seta dupla: a troca vai nos dois sentidos, e o ícone de
+                  // recarregar sugeria uma direção só.
                   trailing: _sincronizando.contains(par.dispositivoId)
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
-                          ),
-                        )
+                      ? null
                       : IconButton(
-                          tooltip: 'Sincronizar com ${par.rotulo}',
-                          icon: const Icon(Icons.sync),
+                          tooltip: 'Trocar dados com ${par.rotulo}',
+                          icon: const Icon(Icons.swap_horiz),
                           onPressed: () => _sincronizar(par),
                         ),
                   onTap: _sincronizando.contains(par.dispositivoId)
@@ -264,6 +322,14 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                       : () => _sincronizar(par),
                 ),
               ),
+              if (_andamentos[par.dispositivoId] case final andamento?)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                  child: BarraAndamento(
+                    andamento: andamento,
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                  ),
+                ),
               if (_relogios[par.dispositivoId] case final relogio?)
                 _AvisoRelogio(
                   aparelho: relogio.aparelho,
@@ -276,9 +342,38 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
           ? null
           : FloatingActionButton.extended(
               onPressed: _sincronizando.isEmpty ? _sincronizarTodos : null,
-              icon: const Icon(Icons.sync),
-              label: const Text('Sincronizar todos'),
+              icon: const Icon(Icons.swap_horiz),
+              label: const Text('Trocar com todos'),
             ),
+    );
+  }
+}
+
+/// Em qual aparelho a troca com todos está.
+class _VezDe extends StatelessWidget {
+  final int atual;
+  final int total;
+  final String rotulo;
+
+  const _VezDe({
+    required this.atual,
+    required this.total,
+    required this.rotulo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: BarraAndamento(
+        andamento: Andamento(
+          'Trocando com $rotulo',
+          feitos: atual - 1,
+          total: total,
+          detalhe: 'aparelho $atual de $total',
+        ),
+        padding: const EdgeInsets.fromLTRB(0, 6, 0, 0),
+      ),
     );
   }
 }
