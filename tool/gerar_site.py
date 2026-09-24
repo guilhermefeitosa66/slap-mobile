@@ -73,7 +73,8 @@ CAPTURAS = {
     "levantamento": "Levantamento: leitura registrada, com a lista das últimas leituras",
     "camera": "Leitura do código de barras pela câmera",
     "sincronizacao": "Sincronização com os outros aparelhos da rede local",
-    "itens": "Todos os itens, com busca e filtro por grupo",
+    "itens": "Todos os itens, com busca e filtros por sala, responsável e situação",
+    "filtros": "Filtro por sala, responsável, estado, situação e quem verificou",
     "detalhe": "Detalhe de um patrimônio: dados da planilha e do levantamento",
     "relatorios": "Relatórios em XLSX ou CSV, um por grupo",
 }
@@ -429,7 +430,14 @@ levanta uma sala. No fim, os relatórios são os mesmos em todos os aparelhos.</
 
 
 def capturas() -> str:
-    nomes = ["inventarios", "painel", "camera", "itens", "detalhe", "sincronizacao"]
+    nomes = [
+        "inventarios",
+        "painel",
+        "camera",
+        "itens",
+        "filtros",
+        "detalhe",
+    ]
     figuras = "\n".join(
         f"<figure>{captura(nome)}<figcaption>{html.escape(CAPTURAS[nome])}</figcaption></figure>"
         for nome in nomes

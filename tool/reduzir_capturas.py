@@ -51,9 +51,14 @@ def reduzir(origem: Path, largura: int) -> None:
             proporcao = largura / imagem.width
             altura = round(imagem.height * proporcao)
             reduzida = imagem.convert("RGB").resize((largura, altura), Image.LANCZOS)
+            # Interface chapada usa poucas cores: a paleta de 256 corta o
+            # arquivo a um terço sem diferença visível. Só a tela da câmera,
+            # que é foto, perde um pouco — e é a que menos depende de detalhe.
+            paleta = reduzida.quantize(colors=256, method=Image.MEDIANCUT)
             saida = DESTINO / arquivo.name
-            reduzida.save(saida, optimize=True)
-            print(f"{saida.relative_to(RAIZ)}: {largura} × {altura}")
+            paleta.save(saida, optimize=True)
+            tamanho = saida.stat().st_size // 1024
+            print(f"{saida.relative_to(RAIZ)}: {largura} × {altura}, {tamanho} kB")
 
 
 if __name__ == "__main__":
