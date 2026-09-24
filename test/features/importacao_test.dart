@@ -63,6 +63,89 @@ void main() {
       expect(m.colunaDe(CampoImportacao.valor), 7);
     });
 
+    test('reconhece o cabeçalho real da exportação do SUAP', () {
+      // `#` é a ordem e `NUMERO` é o código de barras. `NUMERO NOTA FISCAL`
+      // e `NÚMERO DE SÉRIE` contêm "numero" e não podem roubar a coluna;
+      // `STATUS` e `ESTADO DE CONSERVAÇÃO` têm outro vocabulário e ficam de
+      // fora.
+      final planilha = LeitorPlanilha.ler(
+        nomeArquivo: 'suap-real.xlsx',
+        bytes: planilhaXlsx([
+          [
+            '#',
+            'NUMERO',
+            'TOMBO',
+            'STATUS',
+            'ED',
+            'DESCRICAO',
+            'RÓTULOS',
+            'CARGA ATUAL',
+            'SETOR DO RESPONSÁVEL',
+            'CAMPUS DA CARGA',
+            'VALOR AQUISIÇÃO',
+            'VALOR DEPRECIADO',
+            'NUMERO NOTA FISCAL',
+            'NÚMERO DE SÉRIE',
+            'DATA DA ENTRADA',
+            'DATA DA CARGA',
+            'FORNECEDOR',
+            'SALA',
+            'ESTADO DE CONSERVAÇÃO',
+          ],
+          [
+            '1',
+            '-019281',
+            '23254',
+            'Ativo',
+            '449052',
+            'ESTABILIZADOR',
+            '',
+            'Dann Luciano',
+            'CTI',
+            'Picos',
+            '58,00',
+            '0,00',
+            '1234',
+            'SN-1',
+            '01/02/2010',
+            '01/02/2010',
+            'FORNECEDOR LTDA',
+            'SRN-CTI',
+            'Bom',
+          ],
+        ]),
+      );
+
+      final m = detectarMapeamento(planilha.linhas);
+
+      final esperado = {
+        CampoImportacao.ordem: 0,
+        CampoImportacao.codigoBarras: 1,
+        CampoImportacao.tombo: 2,
+        CampoImportacao.ed: 4,
+        CampoImportacao.descricao: 5,
+        CampoImportacao.responsavel: 7,
+        CampoImportacao.sala: 17,
+        CampoImportacao.valor: 10,
+      };
+      expect(m.valido, isTrue);
+      expect(m.colunas, esperado);
+      for (var coluna = 0; coluna < 19; coluna++) {
+        if (esperado.containsValue(coluna)) continue;
+        expect(
+          m.campoDaColuna(coluna),
+          isNull,
+          reason: 'coluna ${coluna + 1} não alimenta campo nenhum',
+        );
+      }
+      expect(m.disponiveis[0].cabecalho, '#');
+
+      final previa = Importador.preparar(planilha, m);
+      expect(previa.itens.single.ordem, '1');
+      expect(previa.itens.single.codigoBarras, '-019281');
+      expect(previa.itens.single.tombo, '23254');
+    });
+
     test('a ordem das colunas é irrelevante', () {
       // É a correção central sobre o SLAP, que lê por posição e joga dado no
       // campo errado quando a exportação muda.

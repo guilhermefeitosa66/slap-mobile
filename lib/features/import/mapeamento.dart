@@ -64,6 +64,11 @@ const Map<CampoImportacao, List<String>> sinonimos = {
     'barcode',
     'ean',
     'codigodebarra',
+    // `NUMERO` na exportação do SUAP é o código de barras (seis dígitos, com
+    // sinal negativo em parte das linhas). `NUMERO NOTA FISCAL` e `NÚMERO DE
+    // SÉRIE` contêm a palavra, mas só casam por substring, e a
+    // correspondência exata vence.
+    'numero',
   ],
   CampoImportacao.descricao: [
     'descricao',
@@ -120,9 +125,10 @@ const Map<CampoImportacao, List<String>> sinonimos = {
     'sequencia',
     'seq',
     'indice',
-    'numero',
+    // `Nº` e `#` sozinhos: a coluna de numeração das linhas.
     'n',
   ],
+
   CampoImportacao.valor: [
     'valor',
     'valoraquisicao',
