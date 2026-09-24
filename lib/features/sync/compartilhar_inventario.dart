@@ -45,20 +45,29 @@ class _DialogoQr extends StatelessWidget {
               // Fundo branco fixo: em tema escuro, um QR sobre fundo escuro
               // não é lido por leitor nenhum.
               color: Colors.white,
-              child: QrImageView(
-                data: convite,
-                version: QrVersions.auto,
-                size: 240,
-                backgroundColor: Colors.white,
-                // Tolerância alta: o código é lido da tela de um celular por
-                // outro celular, muitas vezes com reflexo e mão trêmula.
-                errorCorrectionLevel: QrErrorCorrectLevel.H,
+              // Largura e altura fixas, e não só `size`: o `AlertDialog` mede
+              // o conteúdo por largura intrínseca, e o `QrImageView` usa um
+              // `LayoutBuilder`, que não responde a essa medida. Sem o
+              // `SizedBox` a exceção interrompe o layout do diálogo inteiro,
+              // e só a barreira escurecida aparece.
+              child: SizedBox(
+                width: 240,
+                height: 240,
+                child: QrImageView(
+                  data: convite,
+                  version: QrVersions.auto,
+                  size: 240,
+                  backgroundColor: Colors.white,
+                  // Tolerância alta: o código é lido da tela de um celular
+                  // por outro celular, muitas vezes com reflexo e mão trêmula.
+                  errorCorrectionLevel: QrErrorCorrectLevel.H,
+                ),
               ),
             ),
             const SizedBox(height: 16),
             const Text(
-              'No outro aparelho, toque no ícone de leitura de QR na tela de '
-              'inventários e aponte para este código.',
+              'No outro aparelho, toque em Novo → Ler o QR code de outro '
+              'aparelho e aponte a câmera para este código.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
