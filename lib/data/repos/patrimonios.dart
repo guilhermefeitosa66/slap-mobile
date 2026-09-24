@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/codigo.dart';
 import '../../domain/divergencia.dart';
+import '../../domain/filtro_itens.dart';
 import '../../domain/patrimonio.dart';
 import '../../domain/valores.dart';
 import '../banco.dart';
@@ -496,18 +497,18 @@ class RepositorioPatrimonios {
   List<Patrimonio> listar({
     required String inventarioId,
     Classificacao? classificacao,
-    String? sala,
+    FiltroItens filtro = FiltroItens.nenhum,
     String? busca,
     int limite = 200,
     int deslocamento = 0,
   }) {
-    final filtro = _filtro(inventarioId, classificacao, sala, busca);
+    final consulta = _filtro(inventarioId, classificacao, filtro, busca);
     final linhas = _db.select(
-      'SELECT * FROM patrimonios WHERE ${filtro.onde} '
+      'SELECT * FROM patrimonios WHERE ${consulta.onde} '
       // O id desempata: sem ordem total, a mesma linha poderia aparecer em
       // duas páginas, ou em nenhuma.
       'ORDER BY CAST(ordem AS INTEGER), tombo_chave, id LIMIT ? OFFSET ?',
-      [...filtro.parametros, limite, deslocamento],
+      [...consulta.parametros, limite, deslocamento],
     );
     return linhas.map(_daLinha).toList();
   }
@@ -517,13 +518,13 @@ class RepositorioPatrimonios {
   int contar({
     required String inventarioId,
     Classificacao? classificacao,
-    String? sala,
+    FiltroItens filtro = FiltroItens.nenhum,
     String? busca,
   }) {
-    final filtro = _filtro(inventarioId, classificacao, sala, busca);
+    final consulta = _filtro(inventarioId, classificacao, filtro, busca);
     final r = _db.select(
-      'SELECT COUNT(*) AS n FROM patrimonios WHERE ${filtro.onde}',
-      filtro.parametros,
+      'SELECT COUNT(*) AS n FROM patrimonios WHERE ${consulta.onde}',
+      consulta.parametros,
     );
     return r.first['n'] as int;
   }
@@ -531,7 +532,7 @@ class RepositorioPatrimonios {
   ({String onde, List<Object?> parametros}) _filtro(
     String inventarioId,
     Classificacao? classificacao,
-    String? sala,
+    FiltroItens campos,
     String? busca,
   ) {
     final condicoes = <String>['inventario_id = ?'];
@@ -550,10 +551,36 @@ class RepositorioPatrimonios {
         condicoes.add('ignorado = 0');
     }
 
-    if (sala != null) {
-      condicoes.add('sala_original = ?');
-      parametros.add(sala);
+    // Sala e responsável são texto digitado: comparados pela forma comparável,
+    // como no resto do sistema. Filtrar por "Coordenação de TI" precisa achar
+    // o item cuja sala foi digitada "COORDENACAO DE TI" — para a divergência
+    // os dois já são a mesma sala, e o filtro não pode discordar disso. A
+    // chave vai normalizada do Dart; a coluna, pela função registrada no
+    // SQLite.
+    void porTexto(String expressao, String? valor) {
+      if (valor == null) return;
+      condicoes.add('forma_comparavel($expressao) = ?');
+      parametros.add(formaComparavel(valor));
     }
+
+    porTexto('sala_original', campos.sala);
+    porTexto(_salaEfetiva, campos.salaAtual);
+    porTexto('responsavel_original', campos.responsavel);
+    porTexto(_responsavelEfetivo, campos.responsavelAtual);
+    porTexto('verificado_por', campos.verificadoPor);
+
+    if (campos.conservacao case final c?) {
+      condicoes.add('conservacao = ?');
+      parametros.add(c.valor);
+    }
+    if (campos.situacao case final s?) {
+      condicoes.add('situacao = ?');
+      parametros.add(s.valor);
+    }
+    // Estado, situação e autor só existem em item encontrado. A condição é
+    // redundante com as de cima — nenhuma das três colunas tem valor sem
+    // verificação —, mas deixa a regra explícita na consulta.
+    if (campos.exigeVerificado) condicoes.add('verificado = 1');
 
     if (busca != null && busca.trim().isNotEmpty) {
       final chave = chaveBusca(busca);
@@ -583,6 +610,12 @@ class RepositorioPatrimonios {
 
     return (onde: condicoes.join(' AND '), parametros: parametros);
   }
+
+  /// Valor que vale hoje: o do levantamento quando existe, senão o do SUAP.
+  /// É o `salaEfetiva`/`responsavelEfetivo` do domínio, escrito para o banco.
+  static const _salaEfetiva = 'COALESCE(sala_atual, sala_original)';
+  static const _responsavelEfetivo =
+      'COALESCE(responsavel_atual, responsavel_original)';
 
   /// `%` e `_` digitados na busca são texto, não curinga.
   static String _semCuringas(String texto) => texto
@@ -630,6 +663,43 @@ class RepositorioPatrimonios {
     );
     return [for (final l in linhas) l['r'] as String];
   }
+
+  /// Valores distintos de uma expressão, sem vazios e em ordem alfabética.
+  ///
+  /// Alimenta os seletores do filtro da lista: cada um só oferece valores que
+  /// de fato existem no inventário, para que escolher nunca dê lista vazia
+  /// sem explicação.
+  List<String> _distintos(String inventarioId, String expressao) {
+    final linhas = _db.select(
+      'SELECT DISTINCT $expressao AS v FROM patrimonios '
+      "WHERE inventario_id = ? AND TRIM(COALESCE($expressao, '')) <> '' "
+      'ORDER BY v',
+      [inventarioId],
+    );
+    return [for (final l in linhas) l['v'] as String];
+  }
+
+  /// Salas como vieram da planilha do SUAP.
+  List<String> salasOriginais(String inventarioId) =>
+      _distintos(inventarioId, 'sala_original');
+
+  /// Salas onde os itens estão agora — o valor efetivo, que é o do
+  /// levantamento quando houve mudança e o do SUAP quando não houve.
+  List<String> salasAtuais(String inventarioId) =>
+      _distintos(inventarioId, _salaEfetiva);
+
+  /// Responsáveis como vieram da planilha do SUAP.
+  List<String> responsaveisOriginais(String inventarioId) =>
+      _distintos(inventarioId, 'responsavel_original');
+
+  /// Responsáveis que valem agora, pelo mesmo critério de [salasAtuais].
+  List<String> responsaveisAtuais(String inventarioId) =>
+      _distintos(inventarioId, _responsavelEfetivo);
+
+  /// Quem registrou verificação neste inventário — deste aparelho e dos que
+  /// já sincronizaram com ele.
+  List<String> verificadores(String inventarioId) =>
+      _distintos(inventarioId, 'verificado_por');
 
   /// Elementos de despesa presentes, com a contagem de itens de cada um.
   ///
