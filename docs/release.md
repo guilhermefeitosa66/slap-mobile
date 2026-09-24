@@ -1,8 +1,10 @@
 # Processo de release
 
 Uma release sai de um commit da `main` com o CI verde, é gerada e assinada **na máquina de quem
-guarda a chave** e é publicada no GitHub (APKs) e na Play Store (App Bundle). O CI nunca assina:
-a chave não sai daquela máquina.
+guarda a chave** e é publicada no GitHub. O CI nunca assina: a chave não sai daquela máquina.
+
+**A Play Store está no planejamento, não no processo.** Por enquanto a distribuição é só pelo
+GitHub, e nada é enviado ao Google — ver o passo 6.
 
 ## Antes da primeira vez
 
@@ -57,7 +59,7 @@ Confira os passos atuais na documentação do Google antes: o processo é novo e
    | Arquivo | Para quê |
    |---|---|
    | `slap-X.Y.Z.apk` | o arquivo que se baixa: um só, com as duas arquiteturas ARM |
-   | `slap-X.Y.Z.aab` | envio à Play Store |
+   | `slap-X.Y.Z.aab` | App Bundle, para quando houver listagem na Play Store |
    | `SHA256SUMS.txt` | somas para quem baixa conferir o arquivo |
    | `notas.md` | notas da versão, com a impressão digital preenchida |
 
@@ -86,8 +88,17 @@ Confira os passos atuais na documentação do Google antes: o processo é novo e
    `build/release/vX.Y.Z/notas.md` a cópia com a impressão digital do certificado preenchida
    (`{{certificado}}`). O fim da saída do script traz o comando `gh release create` pronto.
 
-6. **Play Store:** enviar o `.aab` primeiro para o teste interno e, depois de conferido, para
-   produção.
+6. **Play Store: nada a fazer, por enquanto.** A listagem ainda está em planejamento
+   ([#18](https://github.com/guilhermefeitosa66/slap-mobile/issues/18)) e a distribuição é só
+   pelo GitHub.
+
+   O `.aab` continua sendo gerado e guardado junto dos outros arquivos. Não é desperdício: é o
+   que mantém o caminho do App Bundle compilando, e um build que quebrasse em silêncio só
+   apareceria no dia do envio. Quando a listagem existir, ele vai primeiro ao teste interno e,
+   depois de conferido, à produção — e aí este passo volta a ter trabalho.
+
+   O `.aab` **não** entra na release do GitHub: quem baixa de lá instala o APK, e um arquivo que
+   o celular não abre só confunde.
 
 ## Se der errado depois de publicado
 
