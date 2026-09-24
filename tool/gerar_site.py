@@ -291,30 +291,58 @@ footer nav a:not(.botao) { color: var(--tinta-secundaria); margin-left: 1.25rem;
 .texto li { margin: 0.35rem 0; }
 .texto em:first-child:last-child { color: var(--tinta-secundaria); font-style: normal; }
 .texto code { font-size: 0.9em; }
-.texto .topo { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 2rem;
-  color: var(--tinta); text-decoration: none; font-family: "Archivo", sans-serif;
-  font-weight: 600; }
-.texto .topo img { width: 40px; height: 40px; border-radius: 10px; }
+/* Vale nas duas formas de página de texto: a de coluna única e a do manual,
+   que tem o cabeçalho fora da coluna de conteúdo. */
+.texto .topo, .manual .topo { display: flex; align-items: center; gap: 0.75rem;
+  margin-bottom: 2rem; color: var(--tinta); text-decoration: none;
+  font-family: "Archivo", sans-serif; font-weight: 600; }
+.texto .topo img, .manual .topo img { width: 40px; height: 40px;
+  border-radius: 10px; }
 .texto footer { border: 0; padding: 3rem 0 0; }
 .trilha { font-size: 0.9rem; color: var(--tinta-secundaria); margin-bottom: 1.5rem; }
 .trilha a { color: var(--tinta-secundaria); }
 
-/* O manual é longo e consultado em campo: o índice fica no alto, e as
-   capturas entram no tamanho de um celular, ampliáveis como na inicial. */
-.manual { max-width: 46rem; }
-.manual .toc { background: var(--superficie); border: 1px solid var(--borda);
-  border-radius: var(--raio); padding: 1.25rem 1.5rem; margin: 2rem 0 2.5rem; }
-.manual .toc > ul { margin: 0; padding-left: 1.1rem; }
-.manual .toc ul { list-style: none; padding-left: 0.9rem; }
-.manual .toc > ul > li { margin: 0.35rem 0; }
-.manual .toc a { text-decoration: none; }
+/* O manual é longo e consultado em campo: índice numa coluna à esquerda,
+   texto à direita, e as capturas no tamanho de um celular, ampliáveis como na
+   inicial. */
+.manual { max-width: 74rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+.manual-grade { display: grid; grid-template-columns: 17rem minmax(0, 1fr);
+  gap: 3.5rem; align-items: start; }
+.manual .conteudo { max-width: 44rem; margin: 0; padding: 0; }
+
+/* Cola no alto ao rolar, e rola por dentro quando não couber. O topo
+   acompanha a altura do cabeçalho fixo. */
+.manual .indice { position: sticky; top: 5rem; max-height: calc(100vh - 7rem);
+  overflow-y: auto; overscroll-behavior: contain;
+  border-left: 2px solid var(--borda); padding: 0.25rem 0 0.25rem 1.25rem; }
+.manual .indice summary { font-family: "Archivo", sans-serif; font-weight: 600;
+  font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--teal); cursor: pointer; margin-bottom: 0.75rem; }
+.manual .indice summary:focus-visible { outline: 3px solid var(--teal);
+  outline-offset: 3px; border-radius: 4px; }
+.manual .toc ul { list-style: none; margin: 0; padding: 0; }
+.manual .toc ul ul { padding-left: 0.9rem; }
+.manual .toc li { margin: 0.1rem 0; }
+.manual .toc a { display: block; padding: 0.3rem 0; text-decoration: none;
+  font-size: 0.95rem; line-height: 1.35; }
 .manual .toc a:hover { text-decoration: underline; }
-.manual .toc ul ul a { color: var(--tinta-secundaria); font-size: 0.95rem; }
-.manual .toc::before { content: "Neste manual"; display: block;
-  font-family: "Archivo", sans-serif; font-weight: 600; font-size: 0.85rem;
-  letter-spacing: 0.08em; text-transform: uppercase; color: var(--teal);
-  margin-bottom: 0.75rem; }
-.manual h2 { scroll-margin-top: 1rem; }
+.manual .toc ul ul a { color: var(--tinta-secundaria); font-size: 0.9rem; }
+/* A seção que está na tela, marcada enquanto se rola. */
+.manual .toc a.atual { color: var(--teal); font-weight: 600; }
+.manual .toc ul ul a.atual { color: var(--teal); }
+
+/* Sob o cabeçalho fixo: sem isto, o link leva o título para debaixo dele. */
+.manual h2, .manual h3 { scroll-margin-top: 5rem; }
+
+@media (max-width: 900px) {
+  .manual { padding-top: 1.5rem; }
+  .manual-grade { grid-template-columns: 1fr; gap: 1.5rem; }
+  .manual .indice { position: static; max-height: none; border-left: 0;
+    padding: 1rem 1.25rem; background: var(--superficie);
+    border: 1px solid var(--borda); border-radius: var(--raio); }
+  .manual .indice summary { margin-bottom: 0; }
+  .manual .indice[open] summary { margin-bottom: 0.75rem; }
+}
 .manual h3 { margin: 2rem 0 0.25rem; }
 .manual table { border-collapse: collapse; width: 100%; margin: 1.25rem 0;
   font-size: 0.95rem; }
@@ -457,6 +485,62 @@ SCRIPT_LUPA = """<script>
 </script>"""
 
 
+# O índice acompanha a leitura: o item da seção visível fica marcado. Sem isso,
+# num texto longo, o índice diz para onde ir mas não diz onde se está.
+#
+# No celular ele nasce recolhido — trinta e quatro links antes do texto seriam
+# trinta e quatro linhas de rolagem até começar a ler — e um toque no título
+# abre.
+SCRIPT_INDICE = """<script>
+(function () {
+  var indice = document.querySelector('.indice');
+  if (!indice) return;
+
+  if (window.matchMedia('(max-width: 900px)').matches) indice.open = false;
+
+  var links = {};
+  [].forEach.call(indice.querySelectorAll('a[href^="#"]'), function (a) {
+    links[decodeURIComponent(a.getAttribute('href').slice(1))] = a;
+  });
+
+  var titulos = [].filter.call(
+    document.querySelectorAll('.conteudo h2, .conteudo h3'),
+    function (h) { return links[h.id]; }
+  );
+  if (!titulos.length || !window.IntersectionObserver) return;
+
+  var visiveis = new Set();
+  function marcar() {
+    var atual = null;
+    for (var i = 0; i < titulos.length; i++) {
+      if (visiveis.has(titulos[i].id)) { atual = titulos[i].id; break; }
+    }
+    // Nenhum título na tela: vale o último que passou por cima.
+    if (!atual) {
+      for (var j = titulos.length - 1; j >= 0; j--) {
+        if (titulos[j].getBoundingClientRect().top < 120) {
+          atual = titulos[j].id;
+          break;
+        }
+      }
+    }
+    for (var id in links) links[id].classList.toggle('atual', id === atual);
+  }
+
+  var observador = new IntersectionObserver(function (entradas) {
+    entradas.forEach(function (e) {
+      if (e.isIntersecting) visiveis.add(e.target.id);
+      else visiveis.delete(e.target.id);
+    });
+    marcar();
+  }, { rootMargin: '-80px 0px -70% 0px' });
+
+  titulos.forEach(function (h) { observador.observe(h); });
+  marcar();
+})();
+</script>"""
+
+
 def estilo(prefixo: str) -> str:
     faces = "\n".join(
         f'@font-face {{ font-family: "{familia}"; font-weight: {peso}; '
@@ -494,7 +578,21 @@ def converter(
     locais: dict[str, str] | None = None,
     profundidade: str = "2-6",
 ) -> str:
-    """Markdown para HTML, com tabelas e índice.
+    """Markdown para HTML, com tabelas e índice."""
+    return converter_com_indice(texto, locais, profundidade)[0]
+
+
+def converter_com_indice(
+    texto: str,
+    locais: dict[str, str] | None = None,
+    profundidade: str = "2-6",
+) -> tuple[str, str]:
+    """Markdown para (corpo, índice), cada um por sua conta.
+
+    Separados porque o manual põe o índice numa coluna própria, ao lado do
+    texto, e não no meio dele. O conversor monta os dois de qualquer forma —
+    o `[TOC]` no Markdown só dizia onde encaixar, e fora daqui, no GitHub,
+    aparecia como texto solto.
 
     `locais` traduz links para documentos que **também** existem no site
     (`privacidade.md` → `../privacidade/`). O que não estiver ali aponta para o
@@ -504,25 +602,29 @@ def converter(
     fora sempre — um índice cujo primeiro item é o nome do documento aninha
     tudo um nível sem dizer nada.
     """
-    corpo = markdown.markdown(
-        texto,
+    conversor = markdown.Markdown(
         extensions=["tables", "toc"],
         extension_configs={
             "toc": {"slugify": slugify_unicode, "toc_depth": profundidade}
         },
         output_format="html",
     )
+    corpo = conversor.convert(texto)
     traducao = locais or {}
-    return re.sub(
-        r'href="(?!https?:|#|mailto:)([^"]+\.md)(#[^"]*)?"',
-        lambda m: 'href="{}{}"'.format(
-            traducao.get(
-                m.group(1), f"{REPOSITORIO}/blob/main/docs/{m.group(1)}"
+
+    def apontar(html_convertido: str) -> str:
+        return re.sub(
+            r'href="(?!https?:|#|mailto:)([^"]+\.md)(#[^"]*)?"',
+            lambda m: 'href="{}{}"'.format(
+                traducao.get(
+                    m.group(1), f"{REPOSITORIO}/blob/main/docs/{m.group(1)}"
+                ),
+                m.group(2) or "",
             ),
-            m.group(2) or "",
-        ),
-        corpo,
-    )
+            html_convertido,
+        )
+
+    return apontar(corpo), conversor.toc
 
 
 def capturas_ampliaveis(corpo: str, prefixo: str) -> str:
@@ -835,13 +937,21 @@ def pagina_manual() -> str:
         "<span>Manual</span></nav>"
     )
     topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
-    corpo = capturas_ampliaveis(
-        converter(
-            texto,
-            locais={"privacidade.md": "../privacidade/"},
-            profundidade="2-3",
-        ),
-        prefixo="../",
+    bruto, indice = converter_com_indice(
+        texto,
+        locais={"privacidade.md": "../privacidade/"},
+        profundidade="2-3",
+    )
+    corpo = capturas_ampliaveis(bruto, prefixo="../")
+
+    # O índice fica numa coluna à esquerda, como em documentação — e recolhido
+    # atrás de um toque no celular, onde trinta e quatro links antes do texto
+    # seriam trinta e quatro linhas de rolagem até começar a ler.
+    lado = (
+        '<details class="indice" open>'
+        "<summary>Neste manual</summary>"
+        f'<nav aria-label="Índice do manual">{indice}</nav>'
+        "</details>"
     )
     rodape_manual = (
         f'<footer>Fonte: <a href="{REPOSITORIO}/blob/main/docs/manual.md">'
@@ -853,8 +963,10 @@ def pagina_manual() -> str:
         "Como conduzir um inventário patrimonial com o SLAP Mobile, tela a "
         "tela: importar a planilha, levantar, trocar dados e exportar os "
         "relatórios.",
-        f'<main class="texto manual">{topo}{trilha}{corpo}{rodape_manual}</main>'
-        + SCRIPT_LUPA,
+        f'<main class="manual">{topo}{trilha}'
+        f'<div class="manual-grade">{lado}'
+        f'<article class="texto conteudo">{corpo}{rodape_manual}</article>'
+        "</div></main>" + SCRIPT_LUPA + SCRIPT_INDICE,
         prefixo="../",
     )
 

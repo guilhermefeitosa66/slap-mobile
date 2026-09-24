@@ -5,10 +5,8 @@ patrimônio e quem estiver com o celular na mão percorrendo as salas. Ele cobre
 inteiro, na ordem em que as coisas acontecem — da planilha exportada do SUAP até os arquivos
 que alimentam o relatório final.
 
-Não é preciso ler tudo de uma vez. O índice abaixo leva direto ao ponto, e cada seção se
-explica sozinha.
-
-[TOC]
+Não é preciso ler tudo de uma vez. O índice leva direto ao ponto, e cada seção se explica
+sozinha.
 
 ## Antes de começar
 
