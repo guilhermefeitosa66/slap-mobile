@@ -14,13 +14,24 @@ Saída:
     index.html                   apresentação, como usar, capturas, instalação
     privacidade/index.html       a política
     entrar/index.html            reserva do link de entrada num inventário
+    .well-known/assetlinks.json  verificação do App Link (ver abaixo)
     fontes/, imagens/, marca/    o que as páginas usam
     icone.png
+
+O convite de entrada num inventário é um App Link para /slap-mobile/entrar.
+Para o Android abrir o aplicativo direto, em vez de oferecer o seletor, o site
+precisa servir o assetlinks.json com a impressão digital SHA-256 da chave de
+release. Ela não está no repositório: grave-a em docs/loja/impressao-digital.txt
+(só os 32 pares hexadecimais separados por dois-pontos) na máquina que guarda a
+chave, ou passe SLAP_IMPRESSAO_DIGITAL no ambiente do workflow. Sem ela o site
+sai sem o arquivo, e o link continua funcionando pelo seletor de aplicativos.
 
 Depende do pacote `markdown` (pip install markdown).
 """
 
 import html
+import json
+import os
 import re
 import shutil
 import sys
@@ -39,6 +50,10 @@ PACOTE_ANDROID = "io.github.guilhermefeitosa66.slap_mobile"
 FONTE_POLITICA = RAIZ / "docs" / "privacidade.md"
 PASTA_IMAGENS = RAIZ / "docs" / "imagens"
 PASTA_MARCA = RAIZ / "docs" / "marca"
+
+# Impressão digital SHA-256 da chave de release, para o assetlinks.json.
+FONTE_IMPRESSAO = RAIZ / "docs" / "loja" / "impressao-digital.txt"
+IMPRESSAO_DIGITAL = re.compile(r"^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$")
 
 FONTES = {
     "Archivo-SemiBold.ttf": ("Archivo", 600),
@@ -528,8 +543,30 @@ def pagina_entrar() -> str:
     fragmento da URL, que o navegador não envia a servidor nenhum.
     """
     topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
+    # O nome do inventário vem no fragmento da URL, que o navegador não envia a
+    # servidor nenhum. Escrito com textContent: é texto de quem mandou o link,
+    # nunca marcação.
+    script = """<script>
+(function () {
+  var bruto = location.hash.replace(/^#/, '');
+  if (!bruto) return;
+  var campos = {};
+  bruto.split('&').forEach(function (par) {
+    var i = par.indexOf('=');
+    if (i < 0) return;
+    try {
+      campos[par.slice(0, i)] = decodeURIComponent(par.slice(i + 1).replace(/\\+/g, ' '));
+    } catch (e) { /* percentual malformado: ignora o campo */ }
+  });
+  if (!campos.n) return;
+  var alvo = document.getElementById('convite');
+  alvo.textContent = campos.a ? campos.n + ' · ' + campos.a : campos.n;
+  alvo.hidden = false;
+})();
+</script>"""
     corpo = f"""<main class="texto">{topo}
 <h1>Convite para um inventário</h1>
+<p id="convite" class="lede" hidden></p>
 <p>Este link abre um inventário no SLAP Mobile, o aplicativo de inventário patrimonial
 que funciona sem internet. Quem enviou o link vai aceitar sua entrada no aparelho dele; os
 dois celulares precisam estar na mesma rede Wi-Fi.</p>
@@ -542,13 +579,69 @@ dois celulares precisam estar na mesma rede Wi-Fi.</p>
 <p><em>O convite não contém a chave do inventário: ele só identifica o inventário e o
 aparelho de quem convidou. A chave é entregue depois que a pessoa aceita o pedido.</em></p>
 <footer>Como instalar fora da loja: <a href="{REPOSITORIO}/blob/main/docs/instalacao.md">docs/instalacao.md</a>.</footer>
-</main>"""
+</main>
+{script}"""
     return pagina(
         "Convite para um inventário — SLAP Mobile",
         "Este link abre um inventário no SLAP Mobile. Instale o aplicativo e toque no link de novo.",
         corpo,
         prefixo="../",
     )
+
+
+def impressao_digital() -> str | None:
+    """A impressão digital SHA-256 da chave de release, se estiver disponível.
+
+    Vem do ambiente (o workflow a injeta de um segredo) ou de um arquivo local,
+    que fica fora do repositório. Um valor malformado é recusado em vez de
+    gerar um assetlinks.json inválido, que faria o Android desistir da
+    verificação sem dizer por quê.
+    """
+    bruto = os.environ.get("SLAP_IMPRESSAO_DIGITAL")
+    if not bruto and FONTE_IMPRESSAO.exists():
+        bruto = FONTE_IMPRESSAO.read_text(encoding="utf-8")
+
+    if not bruto:
+        return None
+
+    valor = bruto.strip().upper()
+    if not IMPRESSAO_DIGITAL.match(valor):
+        print(
+            "Aviso: impressão digital malformada, o assetlinks.json não será "
+            "gerado. Esperado: 32 pares hexadecimais separados por dois-pontos.",
+            file=sys.stderr,
+        )
+        return None
+    return valor
+
+
+def gravar_assetlinks(saida: Path) -> bool:
+    """O arquivo que autoriza o aplicativo a abrir os links deste domínio.
+
+    Sem ele o convite continua funcionando: o Android mostra o seletor de
+    aplicativos em vez de abrir o SLAP Mobile direto.
+    """
+    digital = impressao_digital()
+    if digital is None:
+        return False
+
+    conteudo = [
+        {
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": PACOTE_ANDROID,
+                "sha256_cert_fingerprints": [digital],
+            },
+        }
+    ]
+    pasta = saida / ".well-known"
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / "assetlinks.json").write_text(
+        json.dumps(conteudo, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True
 
 
 def gerar(saida: Path) -> None:
@@ -579,6 +672,15 @@ def gerar(saida: Path) -> None:
     (saida / "index.html").write_text(pagina_inicial(logo), encoding="utf-8")
     (saida / "privacidade" / "index.html").write_text(pagina_politica(), encoding="utf-8")
     (saida / "entrar" / "index.html").write_text(pagina_entrar(), encoding="utf-8")
+
+    if not gravar_assetlinks(saida):
+        print(
+            "Aviso: sem a impressão digital da chave de release, o site sai sem "
+            ".well-known/assetlinks.json. O convite continua funcionando, mas o "
+            "Android vai oferecer o seletor de aplicativos em vez de abrir o "
+            "SLAP Mobile direto. Ver o cabeçalho deste script.",
+            file=sys.stderr,
+        )
 
     if faltando:
         print("Aviso: imagens ausentes, o site sai com espaços vazios:", file=sys.stderr)
