@@ -153,9 +153,13 @@ header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 
   font-weight: 600; font-size: 0.95rem; }
 .navegacao nav a:not(.botao):hover { color: var(--teal); }
 
-/* Menu sanduíche: só no celular, onde os sete itens não cabem numa linha. */
+/* Menu sanduíche, onde os sete itens não cabem numa linha.
+   O corte é 900 px, e não a largura de um celular: medido, o cabeçalho inteiro
+   — logomarca, sete links e o botão — precisa de cerca de 790 px. Abaixo
+   disso, sem o sanduíche, a logomarca e os links se sobrepõem. A folga até
+   900 cobre fonte de sistema aumentada e rótulo mais longo. */
 .sanduiche { display: none; }
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .navegacao { flex-wrap: nowrap; }
   .sanduiche { display: grid; place-content: center; gap: 5px;
     width: 48px; height: 48px; padding: 0; cursor: pointer;
@@ -613,8 +617,9 @@ SCRIPT_MENU = """<script>
     if (!cabecalho.contains(e.target)) abrir(false);
   });
 
-  // Voltando à largura de computador, o painel não fica preso aberto.
-  var largo = window.matchMedia('(min-width: 721px)');
+  // Voltando à largura de computador, o painel não fica preso aberto. O
+  // limite acompanha o do CSS.
+  var largo = window.matchMedia('(min-width: 901px)');
   var aoMudar = function (e) { if (e.matches) abrir(false); };
   if (largo.addEventListener) largo.addEventListener('change', aoMudar);
   else largo.addListener(aoMudar);
