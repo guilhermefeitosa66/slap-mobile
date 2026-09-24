@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/componentes.dart';
 import '../../app/providers.dart';
 import '../../core/andamento.dart';
+import '../../core/formato.dart';
 import 'importacao_em_segundo_plano.dart';
 import 'importador.dart';
 import 'leitor_planilha.dart';
@@ -155,14 +156,9 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${resultado.inseridos} itens importados'
-            '${resultado.preservados > 0 ? ' · ${resultado.preservados} já existiam e foram preservados' : ''}',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_resumo(resultado))));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -174,6 +170,21 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
       });
     }
   }
+
+  /// O que dizer ao fim da importação.
+  ///
+  /// O número principal é o dos que entraram no inventário — o mesmo que o
+  /// passo anterior prometeu. Os deixados de fora aparecem à parte, para a
+  /// conta fechar para quem somar.
+  String _resumo(ResultadoImportacao r) => [
+    '${formatarInteiro(r.entraram)} '
+        '${r.entraram == 1 ? 'item importado' : 'itens importados'}',
+    if (r.ignoradosPorEd > 0)
+      '${formatarInteiro(r.ignoradosPorEd)} fora do inventário por elemento '
+          'de despesa',
+    if (r.preservados > 0)
+      '${formatarInteiro(r.preservados)} já existiam e foram preservados',
+  ].join(' · ');
 
   @override
   Widget build(BuildContext context) {

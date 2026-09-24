@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/componentes.dart';
 import '../../app/preferencias.dart';
 import '../../app/providers.dart';
+import '../../core/atualizacao.dart';
 import 'copia_seguranca_ui.dart';
 
 /// Quem usa este aparelho e como ele se comporta no levantamento.
@@ -170,6 +171,13 @@ class TelaAjustes extends ConsumerWidget {
           secao('Sobre'),
           CartaoAgrupado(
             linhas: [
+              // A versão instalada, à mão: é o que se pergunta a quem relata
+              // um problema, e o que se compara com a release publicada.
+              const ListTile(
+                leading: Icon(Icons.info_outline),
+                title: Text('Versão do aplicativo'),
+                subtitle: Text(versaoApp),
+              ),
               ListTile(
                 leading: const Icon(Icons.description_outlined),
                 title: const Text('Licenças'),

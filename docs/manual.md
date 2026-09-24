@@ -421,6 +421,7 @@ troque dados com todos os aparelhos da comissão.
 | **Avisar de versão nova** | Ao abrir, pergunta ao GitHub qual é a última versão publicada. Não envia nada do inventário; dá para desligar. |
 | **Exportar cópia** / **Restaurar de uma cópia** | Veja abaixo. |
 | **Gerar nova identidade** | Só num caso, descrito em [Perguntas e problemas comuns](#dois-aparelhos-estão-com-a-mesma-identidade). |
+| **Versão do aplicativo** | Qual versão está instalada aqui. |
 | **Licenças** | Bibliotecas e fontes usadas pelo aplicativo. |
 
 ## Cópia de segurança

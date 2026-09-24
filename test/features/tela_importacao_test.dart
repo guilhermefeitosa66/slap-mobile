@@ -167,7 +167,14 @@ void main() {
     await tester.tap(find.text('Importar'));
     await esperarAte(tester, find.text('abrir'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('12 itens importados'), findsOneWidget);
+    // Nove entraram: os três de material bibliográfico ficaram de fora, e a
+    // mensagem tem de bater com o "9 entrarão no inventário" do passo
+    // anterior — dizer 12 contradiria a escolha que acabou de ser feita.
+    expect(find.textContaining('9 itens importados'), findsOneWidget);
+    expect(
+      find.textContaining('3 fora do inventário por elemento de despesa'),
+      findsOneWidget,
+    );
 
     final repo = RepositorioPatrimonios(banco, RepositorioOperacoes(banco));
     final progresso = repo.progresso(inventario.id);

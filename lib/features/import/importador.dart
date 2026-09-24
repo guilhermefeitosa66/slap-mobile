@@ -45,11 +45,16 @@ class PreviaImportacao {
 
 /// O que a importação de fato fez.
 class ResultadoImportacao {
+  /// Linhas gravadas no aparelho, inclusive as de elemento de despesa
+  /// excluído — elas ficam no banco, fora do inventário, para não sumirem do
+  /// histórico.
   final int inseridos;
 
   /// Já estavam no inventário e foram preservados, com o levantamento intacto.
   final int preservados;
 
+  /// Dos [inseridos], quantos ficaram fora do inventário por elemento de
+  /// despesa.
   final int ignoradosPorEd;
 
   const ResultadoImportacao({
@@ -57,6 +62,14 @@ class ResultadoImportacao {
     required this.preservados,
     required this.ignoradosPorEd,
   });
+
+  /// Quantos itens passam a contar no inventário.
+  ///
+  /// É este o número que quem importou espera ver, e o mesmo que a tela
+  /// prometeu no passo anterior com "N entrarão no inventário". [inseridos]
+  /// conta também os que foram deixados de fora, e dizê-lo como resultado
+  /// contradiz a escolha que a pessoa acabou de fazer.
+  int get entraram => inseridos - ignoradosPorEd;
 }
 
 class Importador {
