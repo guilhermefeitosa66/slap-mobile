@@ -37,6 +37,10 @@ tag="v$versao"
 [[ -z "$(git status --porcelain)" ]] ||
   falhar "há mudanças não commitadas. A release sai de um commit, para poder ser refeita."
 
+notas="docs/notas/$tag.md"
+[[ -f "$notas" ]] ||
+  falhar "escreva as notas da versão em $notas antes (ver docs/release.md)."
+
 commit="$(git rev-parse HEAD)"
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   [[ "$(git rev-list -n 1 "$tag")" == "$commit" ]] ||
@@ -105,6 +109,15 @@ fi
   fi
 )
 
+# As notas vão com a impressão digital do certificado preenchida: é o que
+# quem baixa usa para conferir o APK.
+if [[ -n "$impressao" ]]; then
+  sed "s/{{certificado}}/$impressao/" "$notas" >"$destino/notas.md"
+else
+  cp "$notas" "$destino/notas.md"
+  aviso "preencha {{certificado}} em $destino/notas.md com a impressão digital antes de publicar."
+fi
+
 concluido=1
 
 printf '\nArquivos em %s:\n' "$destino"
@@ -119,3 +132,6 @@ if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   printf '\nDepois de testar os APKs, marque o commit:\n  git tag -a %s -m "SLAP %s" && git push origin %s\n' \
     "$tag" "$versao" "$tag"
 fi
+printf '\nE publique (ou pela página de Releases, com os mesmos arquivos):\n'
+printf '  gh release create %s --verify-tag --title "SLAP %s" --notes-file %s/notas.md %s/*.apk %s/SHA256SUMS.txt\n' \
+  "$tag" "$versao" "$destino" "$destino" "$destino"

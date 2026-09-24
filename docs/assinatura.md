@@ -67,6 +67,9 @@ Antes da primeira release, e não depois:
    confere senha e alias contra o arquivo e escreve o `key.properties`. É o mesmo comando para
    montar um computador novo.
 4. Preencher a [tabela acima](#onde-ela-está-e-quem-tem-acesso).
+5. Registrar o certificado **público** da chave no Google, junto com o pacote do aplicativo — a
+   verificação de desenvolvedor do Android, obrigatória no Brasil a partir de 30 de setembro de
+   2026. Passo a passo em [release.md](release.md#verificação-de-desenvolvedor-do-android).
 
 ## Como o build usa a chave
 

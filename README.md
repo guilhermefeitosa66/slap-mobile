@@ -12,7 +12,9 @@ retorno sonoro para cada resultado: encontrado, já verificado ou não localizad
 aplicativo separa os patrimônios em três grupos — o que está correto, o que precisa ser alterado
 no SUAP e o que não foi localizado — e exporta cada um em XLSX ou CSV.
 
-> **Estado:** em desenvolvimento, sem release publicada.
+> **Estado:** a primeira versão, 1.0.0, está em preparação. Antes da publicação vem o
+> [teste em campo](docs/teste-em-campo.md) num campus. O que ela faz e o que ainda não faz está nas
+> [notas da versão](docs/notas/v1.0.0.md).
 
 ## Permissões
 
@@ -29,25 +31,26 @@ Detalhes na [política de privacidade](https://guilhermefeitosa66.github.io/slap
 
 ## Instalação
 
-Ainda não há APK publicado. Quando houver, estará em
-[Releases](https://github.com/guilhermefeitosa66/slap-mobile/releases).
+Baixe o APK da [versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest)
+— `arm64-v8a` serve para praticamente todo celular dos últimos anos — e siga o
+[passo a passo de instalação](docs/instalacao.md): como o APK não vem da Play Store, o Android pede
+para autorizar a instalação de fonte desconhecida. Precisa de Android 7.0 ou mais novo.
 
-Para gerar o APK a partir do código:
+Para atualizar, instale a versão nova por cima. **Não desinstale:** desinstalar apaga o que ainda
+não foi sincronizado.
+
+### A partir do código
+
+
 
 ```bash
 flutter build apk --release --split-per-abi
 ```
 
-Os arquivos saem em `build/app/outputs/flutter-apk/`. Instale o que corresponde ao processador do
-aparelho — `arm64-v8a` cobre praticamente todos os celulares dos últimos anos.
-
-Sem a chave de release (`android/key.properties`), esse APK sai assinado com a chave de debug:
-serve para testar, mas não atualiza uma versão publicada. A release assinada segue
-[docs/release.md](docs/release.md) e [docs/assinatura.md](docs/assinatura.md).
-
-Como o APK não vem da Play Store, o Android pede autorização para instalar de fonte desconhecida.
-A permissão é concedida ao aplicativo usado para abrir o arquivo, em
-**Configurações → Aplicativos → Acesso especial → Instalar apps desconhecidos**.
+Os arquivos saem em `build/app/outputs/flutter-apk/`. Sem a chave de release
+(`android/key.properties`), esse APK sai assinado com a chave de debug: serve para testar, mas não
+atualiza uma versão publicada. A release assinada segue [docs/release.md](docs/release.md) e
+[docs/assinatura.md](docs/assinatura.md).
 
 ## Licença
 

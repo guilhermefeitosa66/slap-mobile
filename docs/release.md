@@ -9,6 +9,35 @@ a chave não sai daquela máquina.
 - Chave de release gerada e com cópias guardadas — [assinatura.md](assinatura.md).
 - Flutter na versão do CI (`.github/workflows/ci.yml`) e o Android SDK, com `ANDROID_HOME`
   definido: o script usa o `apksigner` dele para conferir a assinatura.
+- **Desenvolvedor e pacote registrados no Google** — ver abaixo. Sem isso, a partir de
+  30 de setembro de 2026 os celulares Android certificados no Brasil não instalam o APK pelo
+  caminho normal.
+
+### Verificação de desenvolvedor do Android
+
+O Android passou a exigir que todo aplicativo instalado em aparelho certificado — inclusive fora
+da Play Store — seja de um desenvolvedor com identidade registrada no Google. No Brasil a regra vale
+a partir de **30 de setembro de 2026**; no resto do mundo, a partir de 2027. Aplicativo de desenvolvedor
+não registrado só instala por ADB ou por um caminho avançado, com espera de 24 horas, que não dá
+para pedir a quem vai fazer o inventário.
+
+Uma vez só:
+
+1. **Conta.** No [Android Developer Console](https://developer.android.com/developer-verification)
+   (ou no Play Console, se o app for para a loja — [listagem](loja/listagem.md)): verificação de
+   identidade e taxa única. Para o teste em campo basta a conta de **distribuição limitada**,
+   gratuita, que autoriza até 20 aparelhos.
+2. **Pacote.** Registrar `io.github.guilhermefeitosa66.slap_mobile` com o certificado **público**
+   da chave de release, exportado assim (sem senha no comando: o `keytool` pergunta):
+
+   ```bash
+   keytool -exportcert -rfc -keystore ~/.slap-chaves/slap-release.jks \
+     -alias "<alias>" -file slap-release.pem
+   ```
+
+   O `.pem` é público e pode ser enviado; o `.jks` e a senha não saem da máquina.
+
+Confira os passos atuais na documentação do Google antes: o processo é novo e ainda muda.
 
 ## Passo a passo
 
@@ -32,6 +61,7 @@ a chave não sai daquela máquina.
    | `slap-X.Y.Z-x86_64.apk` | emuladores e alguns Chromebooks |
    | `slap-X.Y.Z.aab` | envio à Play Store |
    | `SHA256SUMS.txt` | somas para quem baixa conferir o arquivo |
+   | `notas.md` | notas da versão, com a impressão digital preenchida |
 
    E confere a assinatura de cada APK: nenhum com a chave de debug, todos com o mesmo
    certificado. A impressão digital impressa no fim tem de ser a anotada em
@@ -52,9 +82,11 @@ a chave não sai daquela máquina.
    git tag -a vX.Y.Z -m "SLAP X.Y.Z" && git push origin vX.Y.Z
    ```
 
-5. **Release no GitHub**, a partir da tag: anexar os três APKs e o `SHA256SUMS.txt`, com as notas
-   da versão em português (o que o aplicativo faz, o que mudou, o que ainda não faz), a impressão
-   digital do certificado e o link para a instalação fora da loja no README.
+5. **Release no GitHub**, a partir da tag: os três APKs, o `SHA256SUMS.txt` e as notas da versão.
+   As notas são escritas antes, em `docs/notas/vX.Y.Z.md` — o que o aplicativo faz, o que mudou,
+   o que ainda não faz —, no mesmo commit da versão; o script recusa gerar sem elas e grava em
+   `build/release/vX.Y.Z/notas.md` a cópia com a impressão digital do certificado preenchida
+   (`{{certificado}}`). O fim da saída do script traz o comando `gh release create` pronto.
 
 6. **Play Store:** enviar o `.aab` primeiro para o teste interno e, depois de conferido, para
    produção.

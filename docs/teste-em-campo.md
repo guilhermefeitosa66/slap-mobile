@@ -20,6 +20,11 @@ flutter build apk --release --split-per-abi --dart-define=SLAP_DESCOBERTA=beacon
 flutter build apk --release --split-per-abi --dart-define=SLAP_DESCOBERTA=mdns
 ```
 
+**Instalar.** A partir de 30 de setembro de 2026, celulares Android certificados no Brasil só
+instalam pelo caminho normal apps de desenvolvedor registrado no Google (ver
+[release.md](release.md#verificação-de-desenvolvedor-do-android)). Para o teste, `adb install` de um
+computador funciona sempre; a conta gratuita de distribuição limitada cobre até 20 aparelhos.
+
 **Dados.** A planilha real do SUAP no aparelho que vai criar o inventário.
 
 **Bateria.** Carregue todos, e anote a porcentagem e a hora no começo.
