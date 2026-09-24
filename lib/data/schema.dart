@@ -274,6 +274,13 @@ class Config {
   /// apagada. A numeração continua daí se o inventário voltar.
   static String seqMinimo(String inventarioId) => 'seq_minimo.$inventarioId';
 
+  /// Momento da última leitura gravada por este aparelho num inventário, em
+  /// milissegundos. Só leitura conta: reabrir o inventário, resolver conflito
+  /// ou desfazer uma verificação não mostram que a pessoa está na sala.
+  /// Vazia: nenhuma leitura, já conferido no log.
+  static String ultimaLeitura(String inventarioId) =>
+      'ultima_leitura.$inventarioId';
+
   /// Inventário cujo levantamento estava aberto. O aplicativo reabre nele.
   static const levantamentoAberto = 'levantamento_aberto';
 

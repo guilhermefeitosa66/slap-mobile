@@ -78,6 +78,22 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
     final config = ref.read(configuracaoProvider(widget.inventarioId));
     if (config == null) return;
 
+    // Horas sem ler com a câmera aberta: a sala pode não ser mais esta. A
+    // câmera não grava com ela; fecha, e o levantamento pergunta. Se a
+    // pergunta já estiver aberta sobre a câmera, só espera a resposta.
+    if (precisaConfirmarSala(
+      config: config,
+      ultimaLeitura: ref
+          .read(operacoesProvider)
+          .ultimaLeituraLocal(widget.inventarioId),
+      agora: DateTime.now(),
+    )) {
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
     for (final codigo in captura.barcodes) {
       final texto = codigo.rawValue;
       if (texto == null || texto.trim().isEmpty) continue;

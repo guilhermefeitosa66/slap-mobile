@@ -46,6 +46,14 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   /// Guardado na abertura: no `dispose` o `ref` já não pode ser usado.
   late final Banco _banco;
 
+  /// A tela pode ficar aberta a noite inteira — com a tela ligada, ou com o
+  /// aparelho bloqueado e o processo vivo. Ao voltar, a sala é confirmada.
+  late final AppLifecycleListener _ciclo;
+
+  /// A pergunta da sala está na tela. Voltar ao aplicativo ou ler de novo
+  /// enquanto isso não abre uma segunda.
+  bool _confirmandoSala = false;
+
   @override
   void initState() {
     super.initState();
@@ -56,12 +64,14 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _garantirConfiguracao(),
     );
+    _ciclo = AppLifecycleListener(onResume: _aoVoltar);
   }
 
   @override
   void dispose() {
     // Saída normal: da próxima vez o aplicativo abre na lista.
     _banco.apagarConfig(Config.levantamentoAberto);
+    _ciclo.dispose();
     _campo.dispose();
     _foco.dispose();
     super.dispose();
@@ -76,18 +86,8 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     // Encerrado, a tela só explica o bloqueio: não há sala a configurar.
     if (_encerrado) return;
 
-    final atual = ref.read(configuracaoProvider(widget.inventarioId));
-    if (atual != null) {
-      final ultima = ref
-          .read(operacoesProvider)
-          .ultimaEscritaLocal(widget.inventarioId);
-      if (precisaConfirmarSala(
-        config: atual,
-        ultimaLeitura: ultima,
-        agora: DateTime.now(),
-      )) {
-        await _confirmarSala(atual, ultima);
-      }
+    if (ref.read(configuracaoProvider(widget.inventarioId)) != null) {
+      await _salaConfirmada();
       _devolverFoco();
       return;
     }
@@ -100,6 +100,53 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
       return;
     }
     _devolverFoco();
+  }
+
+  /// Se a sala vale para a próxima leitura.
+  ///
+  /// Depois de horas sem ler, pergunta antes e devolve `false`: a leitura que
+  /// esbarrou na pergunta não é gravada, e a pessoa lê de novo já com a sala
+  /// confirmada ou trocada. Também `false` enquanto a pergunta está aberta.
+  Future<bool> _salaConfirmada() async {
+    if (_confirmandoSala) return false;
+    final atual = ref.read(configuracaoProvider(widget.inventarioId));
+    if (atual == null) return true;
+
+    final ultima = ref
+        .read(operacoesProvider)
+        .ultimaLeituraLocal(widget.inventarioId);
+    if (!precisaConfirmarSala(
+      config: atual,
+      ultimaLeitura: ultima,
+      agora: DateTime.now(),
+    )) {
+      return true;
+    }
+
+    // Um "Regravar" oferecido antes da pergunta é de uma leitura feita na
+    // sala antiga: não pode ir para a sala escolhida agora.
+    if (_aguardandoConfirmacao != null) {
+      setState(() => _aguardandoConfirmacao = null);
+    }
+    _confirmandoSala = true;
+    try {
+      await _confirmarSala(atual, ultima);
+    } finally {
+      _confirmandoSala = false;
+    }
+    return false;
+  }
+
+  /// O aplicativo voltou ao primeiro plano, talvez na manhã seguinte.
+  ///
+  /// A pergunta usa o navegador raiz, e por isso aparece também sobre a
+  /// câmera.
+  Future<void> _aoVoltar() async {
+    if (!mounted || _encerrado) return;
+    if (await _salaConfirmada()) return;
+    if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) {
+      _devolverFoco();
+    }
   }
 
   Future<void> _confirmarSala(
@@ -169,6 +216,10 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
       await _garantirConfiguracao();
       return;
     }
+    if (!await _salaConfirmada()) {
+      _devolverFoco();
+      return;
+    }
 
     final repo = ref.read(patrimoniosProvider);
     final modo = ref.read(modoLeituraProvider);
@@ -229,6 +280,10 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   }
 
   Future<void> _confirmarSobrescrita() async {
+    if (!await _salaConfirmada()) {
+      _devolverFoco();
+      return;
+    }
     final patrimonio = _aguardandoConfirmacao;
     final config = ref.read(configuracaoProvider(widget.inventarioId));
     if (patrimonio == null || config == null) return;
@@ -253,12 +308,20 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   Future<void> _abrirCamera() async {
     final config = ref.read(configuracaoProvider(widget.inventarioId));
     if (config == null) return;
+    if (!await _salaConfirmada()) {
+      _devolverFoco();
+      return;
+    }
+    if (!mounted) return;
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => TelaCamera(inventarioId: widget.inventarioId),
       ),
     );
+    // A câmera fecha sozinha se a sala ficou velha com ela aberta: a
+    // pergunta é feita aqui.
+    if (mounted) await _salaConfirmada();
     if (mounted) _devolverFoco();
   }
 

@@ -136,6 +136,7 @@ void main() {
     test('apagar é local, e sincronizar traz tudo de volta', () {
       verificar(a, 'item-1');
       RedeSimulada.sincronizar(a, b, inventario.id);
+      verificar(b, 'item-1');
       b.banco.gravarConfig(
         Config.configuracaoLevantamento(inventario.id),
         '{}',
@@ -150,6 +151,7 @@ void main() {
         isNull,
       );
       expect(b.banco.lerConfig(Config.levantamentoAberto), isNull);
+      expect(b.ops.ultimaLeituraLocal(inventario.id), isNull);
       expect(
         a.inventarios.porId(inventario.id),
         isNotNull,

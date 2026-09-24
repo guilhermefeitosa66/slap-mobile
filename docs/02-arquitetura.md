@@ -365,6 +365,18 @@ sustentam:
 
 - **Configuração pegajosa**, herdada do SLAP: sala, estado, situação e responsável são
   definidos uma vez e aplicados às leituras seguintes. Uma leitura = zero toques na tela.
+  A configuração fica na tabela `config` do aparelho e sobrevive ao Android encerrar o
+  aplicativo, que reabre direto no levantamento — com a lista e o painel embaixo, para o
+  voltar funcionar como de costume. Depois de 4 h sem ler (`ultima_leitura.<inventário>`,
+  gravada a cada leitura, do campo ou da câmera; outras operações do aparelho não contam), a
+  sala é confirmada antes da leitura seguinte: ao abrir o levantamento, ao voltar o
+  aplicativo ao primeiro plano e antes de gravar. A câmera não grava com a sala vencida:
+  fecha, e o levantamento pergunta. Um "Regravar" pendente cai quando a pergunta aparece:
+  a leitura foi feita na sala antiga e não vai para a nova. Uma marca no futuro (a data do
+  aparelho estava adiantada e foi corrigida) não conta, e sem outra a sala é confirmada.
+  Bancos anteriores à marca a preenchem uma vez, na primeira consulta, com a última
+  operação de patrimônio do aparelho no log. Essa primeira conta ainda inclui edições e
+  desfazer, não só leituras; aceito, porque acontece uma vez e só em bancos antigos.
 - **Busca indexada local**, sem rede no caminho da leitura.
 - **Áudio pré-carregado**: os três sons ficam decodificados em memória; o feedback sai junto
   com a leitura, não depois dela.
