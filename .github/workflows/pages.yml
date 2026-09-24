@@ -1,4 +1,5 @@
-# Publica o site do projeto no GitHub Pages: a apresentação e a política de
+# Publica o site do projeto no GitHub Pages: a apresentação do aplicativo, com
+# as capturas de docs/imagens/ e a logomarca de docs/marca/, e a política de
 # privacidade, gerada de docs/privacidade.md. As lojas pedem a política numa
 # URL estável:
 #
@@ -13,6 +14,8 @@ on:
     branches: [main]
     paths:
       - docs/privacidade.md
+      - docs/imagens/**
+      - docs/marca/**
       - docs/loja/icone-512.png
       - assets/fontes/**
       - tool/gerar_site.py

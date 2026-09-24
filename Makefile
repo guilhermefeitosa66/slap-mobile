@@ -16,7 +16,7 @@ ARGS ?=
 APK := build/app/outputs/flutter-apk/app-release.apk
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda dependencias verificar desatualizadas rodar apk instalar testar limpar
+.PHONY: ajuda dependencias verificar desatualizadas rodar apk instalar site testar limpar
 
 ajuda: ## Lista as tarefas
 	@echo "Uso: make <tarefa>"
@@ -53,6 +53,11 @@ apk: ## Gera o APK de uso, que instala em qualquer Android 7.0+
 # de instalar e apaga os inventários.
 instalar: apk ## Gera o APK e instala por cima no aparelho, sem apagar dados
 	@tool/instalar_apk.sh "$(APK)" "$(DISPOSITIVO)"
+
+site: ## Gera o site do GitHub Pages em _site (requer o pacote markdown)
+	python3 tool/gerar_site.py _site
+	@echo
+	@echo "Site: _site/index.html"
 
 testar: ## Formatação, análise e testes, como no CI
 	$(DART) format --output=none --set-exit-if-changed lib test
