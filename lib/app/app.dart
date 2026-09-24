@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,7 +43,7 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
 
     // O áudio é preparado na inicialização para que a primeira leitura já
     // tenha retorno imediato, sem o atraso de carregar o arquivo.
-    ref.read(sonsProvider).preparar();
+    unawaited(ref.read(sonsProvider).preparar());
 
     _rotas = GoRouter(
       initialLocation: rotaInicial(

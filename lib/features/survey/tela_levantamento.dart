@@ -233,17 +233,17 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
     switch (leitura.resultado) {
       case ResultadoLeitura.naoLocalizado:
-        await ref.read(sonsProvider).tocar(Som.naoLocalizado);
+        ref.read(sonsProvider).tocar(Som.naoLocalizado);
         _registrar(LeituraRegistrada(leitura: leitura, codigoLido: texto));
 
       case ResultadoLeitura.jaVerificado:
-        await ref.read(sonsProvider).tocar(Som.jaVerificado);
+        ref.read(sonsProvider).tocar(Som.jaVerificado);
         setState(() => _aguardandoConfirmacao = leitura.patrimonio);
         _registrar(LeituraRegistrada(leitura: leitura, codigoLido: texto));
 
       case ResultadoLeitura.sucesso:
         final depois = _gravar(leitura.patrimonio!, config);
-        await ref.read(sonsProvider).tocar(Som.sucesso);
+        ref.read(sonsProvider).tocar(Som.sucesso);
         _registrar(
           LeituraRegistrada(
             leitura: leitura,
@@ -290,7 +290,7 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     if (patrimonio == null || config == null) return;
 
     final depois = _gravar(patrimonio, config);
-    await ref.read(sonsProvider).tocar(Som.sucesso);
+    ref.read(sonsProvider).tocar(Som.sucesso);
 
     setState(() => _aguardandoConfirmacao = null);
     _registrar(
