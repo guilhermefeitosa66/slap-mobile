@@ -8,7 +8,7 @@ import 'dart:io';
 /// plugin, com canal de plataforma, só para saber um número que já é conhecido
 /// na compilação. Um teste confere que as duas não divergem — é o que torna a
 /// repetição segura.
-const String versaoApp = '1.2.1';
+const String versaoApp = '1.2.2';
 
 /// Onde se pergunta qual é a última versão publicada.
 ///
@@ -54,6 +54,10 @@ bool versaoEhMaisNova(String candidata, String atual) {
   return false;
 }
 
+/// A versão como se mostra na tela: `v1.2.0`, `SLAP 1.2.0` e `1.2.0+7` viram
+/// `1.2.0`. O que a pessoa vê é o número, sem a convenção de tag em volta.
+String versaoLegivel(String bruto) => _numeros(bruto).join('.');
+
 /// Os números de `v1.2.3`, `1.2.3+4`, `SLAP 1.2`: `[1, 2, 3]`.
 List<int> _numeros(String bruto) {
   final achado = RegExp(r'(\d+(?:\.\d+)*)').firstMatch(bruto);
@@ -82,6 +86,25 @@ class VerificadorAtualizacao {
     String versaoAtual = versaoApp,
     String endereco = enderecoUltimaVersao,
   }) async {
+    final publicada = await ultimaPublicada(endereco: endereco);
+    if (publicada == null) return null;
+    if (!versaoEhMaisNova(publicada, versaoAtual)) return null;
+
+    return AtualizacaoDisponivel(
+      versao: versaoLegivel(publicada),
+      endereco: enderecoComoAtualizar,
+    );
+  }
+
+  /// A última versão publicada, como o GitHub a nomeia. Nulo quando **não deu
+  /// para saber**.
+  ///
+  /// Separado de [verificar] porque os dois casos que ele junta — estar em dia
+  /// e não ter conseguido perguntar — são diferentes na tela: um permite dizer
+  /// "atualizado", o outro não permite dizer nada.
+  Future<String?> ultimaPublicada({
+    String endereco = enderecoUltimaVersao,
+  }) async {
     try {
       final corpo = await buscar(Uri.parse(endereco));
       if (corpo == null) return null;
@@ -91,21 +114,13 @@ class VerificadorAtualizacao {
 
       final publicada = (json['tag_name'] ?? json['name'])?.toString();
       if (publicada == null || publicada.isEmpty) return null;
-      if (!versaoEhMaisNova(publicada, versaoAtual)) return null;
-
-      return AtualizacaoDisponivel(
-        versao: _soONumero(publicada),
-        endereco: enderecoComoAtualizar,
-      );
+      // Sem número não há o que comparar: vale como não ter conseguido saber.
+      return _numeros(publicada).isEmpty ? null : publicada;
     } catch (_) {
-      // Qualquer falha é "nada a avisar". Ver o comentário da classe.
+      // Qualquer falha é "não deu para saber". Ver o comentário da classe.
       return null;
     }
   }
-
-  /// `v1.2.0`, `SLAP 1.2.0` e `1.2.0+7` viram `1.2.0`: o que a pessoa vê na
-  /// tela é o número, sem a convenção de tag em volta dele.
-  static String _soONumero(String tag) => _numeros(tag).join('.');
 }
 
 Future<String?> _buscarPorHttp(Uri endereco) async {

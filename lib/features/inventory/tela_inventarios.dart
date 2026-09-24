@@ -73,17 +73,23 @@ class TelaInventarios extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Novo'),
       ),
-      bottomNavigationBar: identidade.configurada
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text(
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (identidade.configurada)
+              Text(
                 '${identidade.nome}'
                 '${identidade.matricula == null ? '' : ' · ${identidade.matricula}'}',
                 style: Theme.of(context).textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
-            )
-          : null,
+            const SizedBox(height: 2),
+            const VersaoInstalada(),
+          ],
+        ),
+      ),
     );
   }
 

@@ -521,11 +521,17 @@ Vale relatar numa [issue](https://github.com/guilhermefeitosa66/slap-mobile/issu
 ### Apareceu um aviso de versão nova
 
 O aplicativo é instalado por arquivo, fora da loja, e nada mais avisaria que saiu uma versão
-corrigida. Tocando em **Ver como**, a página de instalação abre no navegador. Instalar por cima
-mantém os inventários — **não desinstale**.
+corrigida. A faixa laranja aparece no alto da lista de inventários; tocando em **Baixar nova
+versão**, a página de instalação abre no navegador. Instalar por cima mantém os inventários —
+**não desinstale**.
 
-**Agora não** tira o aviso até a versão seguinte. Para não ver mais nenhum, desligue em **Ajustes
-→ Atualizações**.
+**Agora não** tira a faixa enquanto o aplicativo estiver aberto. Fechando e abrindo de novo, ela
+volta, até a versão ser instalada. Para não ver mais nenhum aviso, desligue em **Ajustes →
+Atualizações**.
+
+No pé da lista de inventários, abaixo do seu nome, fica a versão instalada. Quando o aplicativo
+consegue conferir e está em dia, aparece "atualizado" ao lado — nada aparece quando não houve
+como conferir.
 
 Vale atualizar todos os aparelhos da comissão juntos: aparelhos em versões diferentes trocam
 dados normalmente, mas um deles pode estar com um defeito que os outros já não têm.

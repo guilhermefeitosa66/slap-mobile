@@ -36,7 +36,34 @@ void main() {
 
     expect(find.textContaining('Versão 9.9.9 disponível'), findsOneWidget);
     expect(find.textContaining('Você está na $versaoApp'), findsOneWidget);
-    expect(find.text('Ver como'), findsOneWidget);
+    expect(find.text('Baixar nova versão'), findsOneWidget);
+  });
+
+  testWidgets('a faixa passa na auditoria de acessibilidade', (tester) async {
+    // O laranja é o tom de aviso do aplicativo, e o botão inverte fundo e
+    // texto dele. Contraste e alvo de toque conferidos com a faixa na tela.
+    await abrir(tester, fixo('{"tag_name": "v9.9.9"}'));
+
+    await expectLater(tester, meetsGuideline(textContrastGuideline));
+    await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+  });
+
+  testWidgets('em dia, o rodapé confirma discretamente', (tester) async {
+    await abrir(tester, fixo('{"tag_name": "v$versaoApp"}'));
+
+    expect(find.text('Versão $versaoApp'), findsOneWidget);
+    expect(find.text('atualizado'), findsOneWidget);
+  });
+
+  testWidgets('sem conferir, o rodapé não afirma que está em dia', (
+    tester,
+  ) async {
+    // Dizer "atualizado" sem ter perguntado é pior que não dizer nada.
+    await abrir(tester, VerificadorAtualizacao(buscar: (_) async => null));
+
+    expect(find.text('Versão $versaoApp'), findsOneWidget);
+    expect(find.text('atualizado'), findsNothing);
   });
 
   testWidgets('em dia não mostra faixa nenhuma', (tester) async {
@@ -53,25 +80,28 @@ void main() {
     expect(find.text('Inventários'), findsOneWidget);
   });
 
-  testWidgets('dispensada, não volta na abertura seguinte', (tester) async {
+  testWidgets('dispensada, some enquanto o aplicativo está aberto', (
+    tester,
+  ) async {
     await abrir(tester, fixo('{"tag_name": "v9.9.9"}'));
     await tester.tap(find.text('Agora não'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('disponível'), findsNothing);
-    expect(banco.lerConfig(Config.atualizacaoDispensada), '9.9.9');
-
-    // De novo, como numa abertura seguinte.
-    await abrir(tester, fixo('{"tag_name": "v9.9.9"}'));
-    expect(find.textContaining('disponível'), findsNothing);
   });
 
-  testWidgets('dispensar uma versão não silencia a seguinte', (tester) async {
-    banco.gravarConfig(Config.atualizacaoDispensada, '9.9.9');
+  testWidgets('fechar e abrir o aplicativo volta a avisar', (tester) async {
+    // A dispensa não é gravada: quem está no meio de um levantamento manda
+    // calar e segue, mas quem abre o aplicativo de novo é lembrado enquanto
+    // não instalar.
+    await abrir(tester, fixo('{"tag_name": "v9.9.9"}'));
+    await tester.tap(find.text('Agora não'));
+    await tester.pumpAndSettle();
 
-    await abrir(tester, fixo('{"tag_name": "v9.9.10"}'));
+    // Outra abertura: outro container de provedores, como no aplicativo.
+    await abrir(tester, fixo('{"tag_name": "v9.9.9"}'));
 
-    expect(find.textContaining('Versão 9.9.10 disponível'), findsOneWidget);
+    expect(find.textContaining('Versão 9.9.9 disponível'), findsOneWidget);
   });
 
   testWidgets('com a verificação desligada, nem se pergunta', (tester) async {
