@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../app/componentes.dart';
 import '../../app/providers.dart';
+import '../../core/andamento.dart';
 import 'cliente.dart';
 import 'descoberta.dart';
 import 'protocolo.dart';
@@ -68,7 +70,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
   MobileScannerController? _controlador;
 
   _Alvo? _alvo;
-  String _situacao = '';
+  Andamento _situacao = const Andamento('');
   String? _erro;
   bool _ocupado = false;
 
@@ -134,7 +136,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
       return;
     }
 
-    _andando('Procurando aparelhos na rede local…');
+    _andando(const Andamento('Procurando aparelhos na rede local…'));
 
     final servidor = ref.read(servidorSyncProvider);
     final porta = await servidor.iniciar();
@@ -177,8 +179,10 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
       for (final par in candidatos) {
         try {
           _andando(
-            'Esperando ${par.rotulo} aceitar o seu pedido…\n'
-            'O pedido vale um minuto.',
+            Andamento(
+              'Esperando ${par.rotulo} aceitar o seu pedido…',
+              detalhe: 'O pedido vale um minuto.',
+            ),
           );
 
           // O aceite é a autorização, também quando a chave já veio no QR:
@@ -216,7 +220,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
   /// Mostra em que pé está a entrada. Só faz sentido com a tela montada: o
   /// pedido leva até um minuto, tempo de sobra para a pessoa desistir e
   /// voltar.
-  void _andando(String situacao) {
+  void _andando(Andamento situacao) {
     if (mounted) setState(() => _situacao = situacao);
   }
 
@@ -233,12 +237,13 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
     final cliente = ref.read(clienteSyncProvider);
     final inventarios = ref.read(inventariosProvider);
 
-    _andando('Baixando o inventário…');
+    _andando(const Andamento('Baixando o inventário…'));
 
     final pacote = await cliente.baixarPacote(
       par: par,
       inventarioId: alvo.inventarioId,
       chaveSync: chaveSync,
+      aoProgredir: _andando,
     );
 
     inventarios.registrarRecebido(pacote.inventario);
@@ -249,7 +254,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
     // pelo log, e já com o par à mão: quem começa a ler precisa ver o que os
     // outros já leram — e, se este aparelho já participou antes, recuperar o
     // próprio trabalho antes de continuar.
-    _andando('Recebendo o levantamento…');
+    _andando(const Andamento('Recebendo o levantamento…'));
     try {
       await cliente.sincronizar(
         par: par,
@@ -295,11 +300,25 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
     }
   }
 
+  /// Quantas rodadas de busca antes de desistir. A descoberta não é
+  /// instantânea: o anúncio precisa circular e ser respondido.
+  static const _tentativasDeBusca = 10;
+
   Future<List<Par>> _aguardarPares(Descoberta descoberta) async {
-    for (var tentativa = 0; tentativa < 10; tentativa++) {
+    for (var tentativa = 0; tentativa < _tentativasDeBusca; tentativa++) {
       await Future<void>.delayed(const Duration(milliseconds: 800));
       if (descoberta.pares.isNotEmpty) return descoberta.pares;
-      _andando('Procurando aparelhos na rede local… (${tentativa + 1}/10)');
+      // A única etapa cuja fração é do tempo, e não do trabalho: procurar na
+      // rede não tem tamanho conhecido. Ainda assim é mais informação que uma
+      // roda girando — diz quanto ainda vai insistir antes de desistir.
+      _andando(
+        Andamento(
+          'Procurando aparelhos na rede local…',
+          feitos: tentativa + 1,
+          total: _tentativasDeBusca,
+          unidade: 'tentativas',
+        ),
+      );
     }
     return descoberta.pares;
   }
@@ -308,7 +327,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Entrar em um inventário')),
-      body: _alvo == null ? _leitor() : _andamento(),
+      body: _alvo == null ? _leitor() : _painel(),
     );
   }
 
@@ -347,7 +366,7 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
     );
   }
 
-  Widget _andamento() {
+  Widget _painel() {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
@@ -362,9 +381,11 @@ class _TelaEntrarState extends ConsumerState<TelaEntrar> {
             Text('${_alvo!.ano}'),
             const SizedBox(height: 32),
             if (_erro == null) ...[
-              const CircularProgressIndicator(),
-              const SizedBox(height: 24),
-              Text(_situacao, textAlign: TextAlign.center),
+              BarraAndamento(
+                andamento: _situacao,
+                centralizado: true,
+                padding: const EdgeInsets.only(top: 24),
+              ),
             ] else ...[
               Icon(
                 Icons.error_outline,

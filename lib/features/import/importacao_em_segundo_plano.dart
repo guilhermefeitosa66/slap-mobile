@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import '../../core/andamento.dart';
 import '../../data/banco.dart';
 import '../../data/repos/operacoes.dart';
 import '../../data/repos/patrimonios.dart';
@@ -20,16 +21,6 @@ import 'mapeamento.dart';
 /// A transação continua única: falha no meio desfaz tudo, e o inventário
 /// nunca fica com metade da planilha.
 
-/// Quanto da gravação já foi feito.
-class ProgressoImportacao {
-  final int feitos;
-  final int total;
-
-  const ProgressoImportacao(this.feitos, this.total);
-
-  double get fracao => total == 0 ? 1 : feitos / total;
-}
-
 class FalhaImportacao implements Exception {
   final String mensagem;
   FalhaImportacao(this.mensagem);
@@ -39,22 +30,107 @@ class FalhaImportacao implements Exception {
 }
 
 /// Lê o arquivo e reconhece as colunas, num isolate.
+///
+/// Com a planilha do campus — dez mil linhas —, esta é a espera mais longa
+/// das três, e era a única sem número nenhum na tela.
 Future<(PlanilhaLida, Mapeamento)> lerPlanilhaEmSegundoPlano({
   required String nomeArquivo,
   required Uint8List bytes,
-}) {
-  return Isolate.run(() {
-    final planilha = LeitorPlanilha.ler(nomeArquivo: nomeArquivo, bytes: bytes);
-    return (planilha, detectarMapeamento(planilha.linhas));
-  });
+  void Function(Andamento)? aoProgredir,
+  String? etapa,
+}) async {
+  final passo = etapa ?? 'Lendo $nomeArquivo…';
+  final canal = _CanalAndamento(aoProgredir);
+  final porta = canal.porta;
+  try {
+    return await Isolate.run(() {
+      final planilha = LeitorPlanilha.ler(
+        nomeArquivo: nomeArquivo,
+        bytes: bytes,
+        aoProgredir: porta == null
+            ? null
+            : (feitas, total) => porta.send(
+                Andamento(
+                  passo,
+                  feitos: feitas,
+                  total: total,
+                  unidade: 'linhas lidas',
+                ),
+              ),
+      );
+      return (planilha, detectarMapeamento(planilha.linhas));
+    });
+  } finally {
+    await canal.fechar();
+  }
 }
 
 /// Converte as linhas em patrimônios, sem gravar, num isolate.
 Future<PreviaImportacao> prepararEmSegundoPlano(
   PlanilhaLida planilha,
-  Mapeamento mapeamento,
-) {
-  return Isolate.run(() => Importador.preparar(planilha, mapeamento));
+  Mapeamento mapeamento, {
+  void Function(Andamento)? aoProgredir,
+  String etapa = 'Conferindo as linhas…',
+}) async {
+  final canal = _CanalAndamento(aoProgredir);
+  final porta = canal.porta;
+  try {
+    return await Isolate.run(
+      () => Importador.preparar(
+        planilha,
+        mapeamento,
+        aoProgredir: porta == null
+            ? null
+            : (feitas, total) => porta.send(
+                Andamento(
+                  etapa,
+                  feitos: feitas,
+                  total: total,
+                  unidade: 'linhas conferidas',
+                ),
+              ),
+      ),
+    );
+  } finally {
+    await canal.fechar();
+  }
+}
+
+/// Canal de volta para o andamento de quem roda num isolate.
+///
+/// `Isolate.run` não tem por onde avisar nada, mas uma [SendPort] é enviável
+/// e o isolate escreve nela — é o mesmo canal que a gravação usa, com uma
+/// linha a mais. O trabalho continua dentro de `Isolate.run` de propósito: é
+/// ele que devolve a exceção original ([PlanilhaInvalida], por exemplo) do
+/// outro lado.
+///
+/// **O que vai para o isolate é só a porta**, nunca um fecho desta função:
+/// fecho que captura variável de tipo não é enviável, e a importação falharia
+/// com um erro obscuro sobre argumento ilegal em mensagem de isolate.
+class _CanalAndamento {
+  final ReceivePort? _avisos;
+  final StreamSubscription<dynamic>? _assinatura;
+
+  const _CanalAndamento._(this._avisos, this._assinatura);
+
+  /// Sem quem escute, não cria porta nenhuma.
+  factory _CanalAndamento(void Function(Andamento)? aoProgredir) {
+    if (aoProgredir == null) return const _CanalAndamento._(null, null);
+    final avisos = ReceivePort();
+    return _CanalAndamento._(
+      avisos,
+      avisos.listen((mensagem) {
+        if (mensagem is Andamento) aoProgredir(mensagem);
+      }),
+    );
+  }
+
+  SendPort? get porta => _avisos?.sendPort;
+
+  Future<void> fechar() async {
+    await _assinatura?.cancel();
+    _avisos?.close();
+  }
 }
 
 /// Grava a prévia no inventário, informando o progresso.
@@ -67,7 +143,8 @@ Future<ResultadoImportacao> importarEmSegundoPlano({
   required String inventarioId,
   required PreviaImportacao previa,
   Set<String> edsExcluidos = const {},
-  void Function(ProgressoImportacao)? aoProgredir,
+  void Function(Andamento)? aoProgredir,
+  String etapa = 'Gravando os patrimônios…',
 }) async {
   final caminho = banco.caminho;
   if (caminho == null) {
@@ -78,7 +155,7 @@ Future<ResultadoImportacao> importarEmSegundoPlano({
       edsExcluidos: edsExcluidos,
       aoProgredir: aoProgredir == null
           ? null
-          : (feitos, total) => aoProgredir(ProgressoImportacao(feitos, total)),
+          : (feitos, total) => aoProgredir(_gravando(etapa, feitos, total)),
     );
   }
 
@@ -92,6 +169,7 @@ Future<ResultadoImportacao> importarEmSegundoPlano({
         inventarioId: inventarioId,
         previa: previa,
         edsExcluidos: edsExcluidos,
+        etapa: etapa,
       ),
       // Erro não tratado ou saída sem resposta também chegam aqui: a tela
       // nunca fica esperando para sempre.
@@ -101,7 +179,7 @@ Future<ResultadoImportacao> importarEmSegundoPlano({
 
     await for (final mensagem in mensagens) {
       switch (mensagem) {
-        case final ProgressoImportacao p:
+        case final Andamento p:
           aoProgredir?.call(p);
         case final ResultadoImportacao r:
           return r;
@@ -119,12 +197,21 @@ Future<ResultadoImportacao> importarEmSegundoPlano({
   }
 }
 
+/// O andamento da gravação, dito do jeito que a barra mostra.
+Andamento _gravando(String etapa, int feitos, int total) => Andamento(
+  etapa,
+  feitos: feitos,
+  total: total,
+  unidade: 'patrimônios gravados',
+);
+
 class _Pedido {
   final SendPort resposta;
   final String caminho;
   final String inventarioId;
   final PreviaImportacao previa;
   final Set<String> edsExcluidos;
+  final String etapa;
 
   const _Pedido({
     required this.resposta,
@@ -132,6 +219,7 @@ class _Pedido {
     required this.inventarioId,
     required this.previa,
     required this.edsExcluidos,
+    required this.etapa,
   });
 }
 
@@ -149,7 +237,7 @@ Future<void> _gravar(_Pedido pedido) async {
       previa: pedido.previa,
       edsExcluidos: pedido.edsExcluidos,
       aoProgredir: (feitos, total) =>
-          pedido.resposta.send(ProgressoImportacao(feitos, total)),
+          pedido.resposta.send(_gravando(pedido.etapa, feitos, total)),
     );
     pedido.resposta.send(resultado);
   } catch (e) {

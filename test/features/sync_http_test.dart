@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:slap_mobile/core/andamento.dart';
 import 'package:slap_mobile/core/hlc.dart';
 import 'package:slap_mobile/core/version_vector.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
@@ -253,6 +254,27 @@ void main() {
       ),
       throwsA(isA<FalhaSync>()),
     );
+  });
+
+  test('o download do pacote diz quanto já chegou', () async {
+    // Era a espera mais longa do aplicativo, e a única coisa na tela era uma
+    // roda girando. O `Content-Length` da resposta é o que permite dizer
+    // quanto falta, e não só quanto já veio.
+    final andamentos = <Andamento>[];
+    await clienteB.baixarPacote(
+      par: paraA,
+      inventarioId: inventario.id,
+      chaveSync: inventario.chaveSync,
+      aoProgredir: andamentos.add,
+    );
+
+    expect(andamentos, isNotEmpty);
+    final fim = andamentos.last;
+    expect(fim.etapa, 'Baixando o inventário…');
+    expect(fim.total, isNotNull, reason: 'o servidor informa o tamanho');
+    expect(fim.feitos, fim.total);
+    expect(fim.fracao, 1);
+    expect(fim.contagem, contains('B'));
   });
 
   test('um inventário desconhecido responde igual a chave inválida', () async {

@@ -1,11 +1,30 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import '../../core/andamento.dart';
 import '../../core/formato.dart';
 import '../../core/hlc.dart';
 import '../../data/repos/operacoes.dart';
 import 'cifra.dart';
 import 'protocolo.dart';
+
+/// De quantos em quantos bytes um download informa o andamento.
+const int _passoDownload = 64 * 1024;
+
+/// O andamento de uma transferência, contado em bytes.
+///
+/// Fica fora da classe porque a tela de entrada também o usa para dizer o que
+/// está recebendo antes de a resposta chegar.
+Andamento andamentoDeBytes(String etapa, int recebidos, int? total) =>
+    Andamento(
+      etapa,
+      feitos: recebidos,
+      total: total,
+      detalhe: total == null
+          ? '${formatarBytes(recebidos)} recebidos'
+          : '${formatarBytes(recebidos)} de ${formatarBytes(total)}',
+    );
 
 class FalhaSync implements Exception {
   final String mensagem;
@@ -463,10 +482,16 @@ class ClienteSync {
   }
 
   /// Baixa a réplica inicial de um inventário.
+  ///
+  /// É a espera mais longa do aplicativo: um inventário de campus são
+  /// milhares de patrimônios por Wi-Fi. [aoProgredir] acompanha os bytes que
+  /// chegam, para a tela não ficar só girando.
   Future<PacoteInventario> baixarPacote({
     required Par par,
     required String inventarioId,
     required String chaveSync,
+    void Function(Andamento)? aoProgredir,
+    String etapa = 'Baixando o inventário…',
   }) async {
     final resposta = await _requisitar(
       host: par.host,
@@ -476,6 +501,10 @@ class ClienteSync {
       caminho: Rotas.pacote,
       inventarioId: inventarioId,
       chaveSync: chaveSync,
+      aoReceber: aoProgredir == null
+          ? null
+          : (recebidos, total) =>
+                aoProgredir(andamentoDeBytes(etapa, recebidos, total)),
     );
     return PacoteInventario.fromJson(resposta);
   }
@@ -494,6 +523,7 @@ class ClienteSync {
     String? inventarioId,
     String? chaveSync,
     Duration? tempoLimite,
+    void Function(int recebidos, int? total)? aoReceber,
   }) async {
     final limite = tempoLimite ?? this.tempoLimite;
     final cliente = HttpClient()..connectionTimeout = limite;
@@ -553,7 +583,7 @@ class ClienteSync {
       }
 
       final resposta = await req.close().timeout(limite);
-      final texto = await utf8.decoder.bind(resposta).join();
+      final texto = await _lerCorpo(resposta, aoReceber);
 
       if (resposta.statusCode == HttpStatus.upgradeRequired) {
         throw _versaoRecusada(texto, rotulo ?? host);
@@ -587,6 +617,38 @@ class ClienteSync {
     } finally {
       cliente.close(force: true);
     }
+  }
+
+  /// Lê a resposta em pedaços, contando o que já chegou.
+  ///
+  /// `join()` esconde o download inteiro atrás de um único `await`, e com ele
+  /// não há nada para mostrar no meio. O total vem do `Content-Length`, que o
+  /// servidor informa; sem ele, a contagem continua valendo e só a fração
+  /// fica de fora.
+  ///
+  /// O aviso é espaçado de propósito: um pedaço de rede chega a cada poucos
+  /// quilobytes, e redesenhar a tela a cada um custaria mais que o download.
+  Future<String> _lerCorpo(
+    HttpClientResponse resposta,
+    void Function(int recebidos, int? total)? aoReceber,
+  ) async {
+    if (aoReceber == null) return utf8.decoder.bind(resposta).join();
+
+    final total = resposta.contentLength < 0 ? null : resposta.contentLength;
+    final acumulado = BytesBuilder(copy: false);
+    var avisados = 0;
+
+    aoReceber(0, total);
+    await for (final pedaco in resposta) {
+      acumulado.add(pedaco);
+      if (acumulado.length - avisados >= _passoDownload) {
+        avisados = acumulado.length;
+        aoReceber(avisados, total);
+      }
+    }
+    final bytes = acumulado.takeBytes();
+    aoReceber(bytes.length, total ?? bytes.length);
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   FalhaSync _versaoRecusada(String texto, String rotulo) {

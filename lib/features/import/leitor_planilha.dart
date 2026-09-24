@@ -47,10 +47,20 @@ class PlanilhaLida {
 /// conversão. Arquivos `.xls` são rejeitados com mensagem explícita, em vez de
 /// falharem de um jeito obscuro.
 class LeitorPlanilha {
+  /// De quantas em quantas linhas a leitura informa o progresso.
+  ///
+  /// O mesmo critério da gravação: avisar a cada linha custaria mais que
+  /// converter a linha, ainda mais atravessando a fronteira de um isolate.
+  static const passoProgresso = 250;
+
+  /// [aoProgredir] recebe quantas linhas já foram convertidas e quantas são.
+  /// A descompactação do XLSX, que vem antes, não tem como ser acompanhada —
+  /// até ela terminar, a barra fica indeterminada.
   static PlanilhaLida ler({
     required String nomeArquivo,
     required Uint8List bytes,
     String? aba,
+    void Function(int feitas, int total)? aoProgredir,
   }) {
     final nome = nomeArquivo.toLowerCase();
 
@@ -62,10 +72,10 @@ class LeitorPlanilha {
     }
 
     if (nome.endsWith('.csv') || nome.endsWith('.txt')) {
-      return _lerCsv(nomeArquivo, bytes);
+      return _lerCsv(nomeArquivo, bytes, aoProgredir);
     }
 
-    return _lerXlsx(nomeArquivo, bytes, aba);
+    return _lerXlsx(nomeArquivo, bytes, aba, aoProgredir);
   }
 
   // ------------------------------------------------------------------ XLSX ---
@@ -74,6 +84,7 @@ class LeitorPlanilha {
     String nomeArquivo,
     Uint8List bytes,
     String? aba,
+    void Function(int feitas, int total)? aoProgredir,
   ) {
     final Excel planilha;
     try {
@@ -90,10 +101,13 @@ class LeitorPlanilha {
         : abas.first;
     final tabela = planilha.tables[escolhida]!;
 
+    final total = tabela.rows.length;
     final linhas = <List<String?>>[];
     for (final linha in tabela.rows) {
       linhas.add([for (final celula in linha) _textoDaCelula(celula?.value)]);
+      _avisar(aoProgredir, linhas.length, total);
     }
+    aoProgredir?.call(total, total);
 
     return PlanilhaLida(
       nomeArquivo: nomeArquivo,
@@ -136,7 +150,11 @@ class LeitorPlanilha {
 
   // ------------------------------------------------------------------- CSV ---
 
-  static PlanilhaLida _lerCsv(String nomeArquivo, Uint8List bytes) {
+  static PlanilhaLida _lerCsv(
+    String nomeArquivo,
+    Uint8List bytes,
+    void Function(int feitas, int total)? aoProgredir,
+  ) {
     // `fieldDelimiter: null` deixa o separador ser detectado pela biblioteca,
     // o que importa aqui: o Excel em português grava com ponto e vírgula,
     // porque a vírgula já é o separador decimal.
@@ -146,10 +164,14 @@ class LeitorPlanilha {
     // que é justamente um dos defeitos do SLAP.
     const decodificador = CsvDecoder(dynamicTyping: false);
 
-    final linhas = decodificador
-        .convert(_decodificar(bytes))
-        .map((l) => [for (final c in l) c?.toString()])
-        .toList();
+    final brutas = decodificador.convert(_decodificar(bytes));
+    final total = brutas.length;
+    final linhas = <List<String?>>[];
+    for (final l in brutas) {
+      linhas.add([for (final c in l) c?.toString()]);
+      _avisar(aoProgredir, linhas.length, total);
+    }
+    aoProgredir?.call(total, total);
 
     return PlanilhaLida(
       nomeArquivo: nomeArquivo,
@@ -175,6 +197,16 @@ class LeitorPlanilha {
   }
 
   // ----------------------------------------------------------------- comum ---
+
+  static void _avisar(
+    void Function(int feitas, int total)? aoProgredir,
+    int feitas,
+    int total,
+  ) {
+    if (aoProgredir != null && feitas % passoProgresso == 0) {
+      aoProgredir(feitas, total);
+    }
+  }
 
   /// Remove linhas totalmente vazias do fim.
   ///

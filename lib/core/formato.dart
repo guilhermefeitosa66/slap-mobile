@@ -12,6 +12,16 @@ String formatarInteiro(int n) => _inteiro.format(n);
 /// Percentual com uma casa decimal, sem o símbolo.
 String formatarPercentual(double p) => _umaCasa.format(p);
 
+/// Tamanho de arquivo como se lê numa tela de celular: `840 kB`, `3,4 MB`.
+///
+/// Múltiplos de mil, e não de 1024: quem acompanha um download não está
+/// conferindo bytes, está estimando quanto falta.
+String formatarBytes(int bytes) {
+  if (bytes < 1000) return '$bytes B';
+  if (bytes < 1000000) return '${(bytes / 1000).round()} kB';
+  return '${_umaCasa.format(bytes / 1000000)} MB';
+}
+
 /// Duração por extenso e arredondada, para mensagens: `12 min`, `2 h 5 min`,
 /// `3 dias`.
 String descreverDuracao(Duration d) {

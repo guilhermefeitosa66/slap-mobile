@@ -60,17 +60,27 @@ class ResultadoImportacao {
 }
 
 class Importador {
+  /// De quantas em quantas linhas a conferência informa o progresso. Mesmo
+  /// critério da leitura e da gravação: avisar a cada linha custaria mais que
+  /// conferir a linha.
+  static const passoProgresso = 250;
+
   /// Converte as linhas da planilha em patrimônios, sem gravar nada.
+  ///
+  /// [aoProgredir] recebe quantas linhas de dados já foram conferidas e
+  /// quantas são.
   static PreviaImportacao preparar(
     PlanilhaLida planilha,
-    Mapeamento mapeamento,
-  ) {
+    Mapeamento mapeamento, {
+    void Function(int feitas, int total)? aoProgredir,
+  }) {
     final itens = <PatrimonioImportado>[];
     final vistos = <String>{};
     final duplicados = <String>[];
     final porEd = <String, int>{};
     var semTombo = 0;
     var examinadas = 0;
+    final aConferir = planilha.linhas.length - mapeamento.linhaCabecalho - 1;
 
     for (
       var i = mapeamento.linhaCabecalho + 1;
@@ -79,6 +89,9 @@ class Importador {
     ) {
       final linha = planilha.linhas[i];
       examinadas++;
+      if (aoProgredir != null && examinadas % passoProgresso == 0) {
+        aoProgredir(examinadas, aConferir);
+      }
 
       final tombo = _celula(linha, mapeamento.colunaDe(CampoImportacao.tombo));
       if (tombo == null || chaveBusca(tombo).isEmpty) {
@@ -114,6 +127,8 @@ class Importador {
         ),
       );
     }
+
+    aoProgredir?.call(examinadas, aConferir);
 
     final ordenados = porEd.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
