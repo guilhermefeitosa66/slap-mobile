@@ -7,6 +7,7 @@ import '../../app/preferencias.dart';
 import '../../app/providers.dart';
 import '../../core/atualizacao.dart';
 import 'copia_seguranca_ui.dart';
+import 'tela_licencas.dart';
 
 /// Quem usa este aparelho e como ele se comporta no levantamento.
 ///
@@ -181,12 +182,10 @@ class TelaAjustes extends ConsumerWidget {
               ListTile(
                 leading: const Icon(Icons.description_outlined),
                 title: const Text('Licenças'),
-                subtitle: const Text('Bibliotecas e fontes usadas'),
+                subtitle: const Text('Do aplicativo e do que ele usa'),
                 trailing: const SetaNavegacao(),
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: 'SLAP Inventário',
-                  applicationLegalese: 'Apache-2.0',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const TelaLicencas()),
                 ),
               ),
             ],

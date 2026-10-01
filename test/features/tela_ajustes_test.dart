@@ -30,4 +30,33 @@ void main() {
     expect(find.text('Versão do aplicativo'), findsOneWidget);
     expect(find.text(versaoApp), findsOneWidget);
   });
+
+  testWidgets('licenças mostram primeiro a do aplicativo', (tester) async {
+    // Quem abre "Licenças" quer saber sob que termos o aplicativo pode ser
+    // usado e repassado. A lista de licenças das bibliotecas responde outra
+    // pergunta, e fica a um toque de distância.
+    final banco = Banco.emMemoria();
+    addTearDown(banco.fechar);
+
+    await montar(tester, const TelaAjustes(), banco: banco);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Licenças'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Licenças'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Licença Apache 2.0'), findsOneWidget);
+    // A lista das bibliotecas existe, mas como um caminho a seguir.
+    expect(find.text('Bibliotecas e fontes usadas'), findsOneWidget);
+    expect(find.byType(LicensePage), findsNothing);
+
+    await tester.tap(find.text('Bibliotecas e fontes usadas'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LicensePage), findsOneWidget);
+  });
 }

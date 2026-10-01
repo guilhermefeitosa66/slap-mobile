@@ -7,6 +7,7 @@ import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
 import 'package:slap_mobile/domain/divergencia.dart';
 import 'package:slap_mobile/features/ajustes/tela_ajustes.dart';
+import 'package:slap_mobile/features/ajustes/tela_licencas.dart';
 import 'package:slap_mobile/features/divergence/tela_itens.dart';
 import 'package:slap_mobile/features/identity/tela_identidade.dart';
 import 'package:slap_mobile/features/import/tela_importacao.dart';
@@ -127,6 +128,7 @@ void main() {
         'relatórios': (() => TelaRelatorios(inventarioId: inventario.id), null),
         'ajustes': (() => const TelaAjustes(), null),
         'identidade': (() => const TelaIdentidade(), null),
+        'licenças': (() => const TelaLicencas(), null),
         'importação': (() => TelaImportacao(inventarioId: inventario.id), null),
       };
 
