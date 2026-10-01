@@ -582,6 +582,131 @@ void main() {
     });
   });
 
+  group('etiquetas', () {
+    /// Quatro itens, um por situação que a lista precisa distinguir.
+    void cenarioEtiquetas() {
+      repo.inserirLote(inventario.id, const [
+        PatrimonioImportado(
+          tombo: '1',
+          descricao: 'MESA',
+          sala: 'Biblioteca',
+          responsavel: 'Carla',
+        ),
+        PatrimonioImportado(
+          tombo: '2',
+          descricao: 'ARMÁRIO',
+          sala: 'Biblioteca',
+          responsavel: 'Carla',
+        ),
+        PatrimonioImportado(
+          tombo: '3',
+          descricao: 'ESTABILIZADOR',
+          sala: 'Biblioteca',
+          responsavel: 'Carla',
+        ),
+        PatrimonioImportado(
+          tombo: '4',
+          descricao: 'PROJETOR',
+          sala: 'Biblioteca',
+          responsavel: 'Carla',
+        ),
+      ]);
+      final itens = repo.todos(inventario.id);
+      // Só a sala mudou.
+      repo.registrarVerificacao(
+        patrimonio: itens[0],
+        config: const ConfiguracaoLevantamento(sala: 'Auditório'),
+        usuarioNome: 'Ana',
+      );
+      // Sala e responsável, e o bem está inservível.
+      repo.registrarVerificacao(
+        patrimonio: itens[1],
+        config: const ConfiguracaoLevantamento(
+          sala: 'Depósito',
+          responsavel: 'Bruno',
+          situacao: SituacaoUso.inservivel,
+        ),
+        usuarioNome: 'Ana',
+      );
+      // Confere com a planilha, mas o estado é ruim.
+      repo.registrarVerificacao(
+        patrimonio: itens[2],
+        config: const ConfiguracaoLevantamento(
+          sala: 'Biblioteca',
+          conservacao: EstadoConservacao.ruim,
+        ),
+        usuarioNome: 'Ana',
+      );
+      // O quarto fica sem verificar: não localizado.
+    }
+
+    testWidgets('dizem por extenso o que mudou', (tester) async {
+      // "Sala" sozinho, que era o que aparecia aqui, lê-se como um título —
+      // e não como "a sala mudou".
+      cenarioEtiquetas();
+      await montar(
+        tester,
+        TelaItens(inventarioId: inventario.id),
+        banco: banco,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mudou de sala'), findsNWidgets(2));
+      expect(find.text('Mudou de responsável'), findsOneWidget);
+    });
+
+    testWidgets('o motivo da providência aparece escrito', (tester) async {
+      // Antes era um ponto de exclamação vermelho no canto, que não dizia
+      // nem o que pedia providência nem que era disso que se tratava.
+      cenarioEtiquetas();
+      await montar(
+        tester,
+        TelaItens(inventarioId: inventario.id),
+        banco: banco,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inservível'), findsOneWidget);
+      expect(find.text('Estado ruim'), findsOneWidget);
+      // O item que confere com a planilha e está em mau estado diz as duas
+      // coisas: são dimensões diferentes, e as duas valem.
+      expect(find.text('OK'), findsWidgets);
+    });
+
+    testWidgets('a lista filtrada não repete a própria classificação', (
+      tester,
+    ) async {
+      cenarioEtiquetas();
+      await montar(
+        tester,
+        TelaItens(
+          inventarioId: inventario.id,
+          classificacao: Classificacao.naoLocalizado,
+        ),
+        banco: banco,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('PROJETOR'), findsOneWidget);
+      // O título da tela já diz: repetir em toda linha não informa nada.
+      expect(find.widgetWithText(Container, 'Não localizado'), findsNothing);
+    });
+
+    testWidgets('as etiquetas passam na auditoria de acessibilidade', (
+      tester,
+    ) async {
+      cenarioEtiquetas();
+      await montar(
+        tester,
+        TelaItens(inventarioId: inventario.id),
+        banco: banco,
+      );
+      await tester.pumpAndSettle();
+
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+    });
+  });
+
   group('tela', () {
     testWidgets('mostra o total e carrega além de 500 conforme rola', (
       tester,

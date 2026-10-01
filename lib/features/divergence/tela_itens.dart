@@ -345,6 +345,7 @@ class _TelaItensState extends ConsumerState<TelaItens> {
                       return _LinhaPatrimonio(
                         patrimonio: _itens[i],
                         aoTocar: () => _abrirDetalhe(_itens[i]),
+                        classificacaoFiltrada: _classificacao,
                       );
                     },
                   ),
@@ -853,17 +854,30 @@ class _LinhaValor extends StatelessWidget {
 }
 
 class _LinhaPatrimonio extends StatelessWidget {
+  /// A classificação pela qual a lista está filtrada, se houver. Serve para
+  /// não repetir em toda linha o que o título da lista já diz.
+  final Classificacao? classificacaoFiltrada;
+
   final Patrimonio patrimonio;
   final VoidCallback aoTocar;
 
-  const _LinhaPatrimonio({required this.patrimonio, required this.aoTocar});
+  const _LinhaPatrimonio({
+    required this.patrimonio,
+    required this.aoTocar,
+    this.classificacaoFiltrada,
+  });
 
   @override
   Widget build(BuildContext context) {
     final classificacao = classificar(patrimonio);
-    final divergencias = divergenciasDe(patrimonio);
-    final tom = CoresResultado.of(context).de(classificacao);
+    final cores = CoresResultado.of(context);
+    final tom = cores.de(classificacao);
     final tema = Theme.of(context);
+    final etiquetas = etiquetasDoItem(
+      patrimonio,
+      cores,
+      classificacaoFiltrada: classificacaoFiltrada,
+    );
 
     return InkWell(
       onTap: aoTocar,
@@ -901,34 +915,103 @@ class _LinhaPatrimonio extends StatelessWidget {
                     '${patrimonio.salaEfetiva ?? "sem sala"}',
                     style: tema.textTheme.bodySmall,
                   ),
-                  if (divergencias.isNotEmpty)
+                  if (etiquetas.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        divergencias.map((d) => d.campo.rotulo).join(', '),
-                        style: tema.textTheme.bodySmall?.copyWith(
-                          color: tom.texto,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final e in etiquetas)
+                            _Etiqueta(texto: e.texto, tom: e.tom),
+                        ],
                       ),
                     ),
                 ],
               ),
             ),
-            if (patrimonio.exigeAtencao)
-              Tooltip(
-                message: 'Requer providência',
-                child: Icon(
-                  Icons.priority_high,
-                  color: tema.colorScheme.error,
-                  semanticLabel: 'Requer providência',
-                ),
-              ),
           ],
         ),
       ),
     );
   }
+}
+
+/// Uma etiqueta do item: o que mudou, ou o que precisa de providência.
+class _Etiqueta extends StatelessWidget {
+  final String texto;
+  final TomResultado tom;
+
+  const _Etiqueta({required this.texto, required this.tom});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: tom.fundo,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        texto,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: tom.texto,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
+/// O que as etiquetas de um item dizem.
+///
+/// Frases, e não nomes de campo nem ícones: "Sala" sozinho, que era o que
+/// aparecia aqui, lê-se como um título, e não como "a sala mudou". E o ponto
+/// de exclamação vermelho do canto não dizia o que pedia providência — nem
+/// que era disso que se tratava.
+///
+/// A classificação só vira etiqueta quando a lista **não** está filtrada por
+/// ela: numa lista só de divergentes, repetir "Divergente" em toda linha não
+/// informa nada. O que distingue as linhas entre si é que merece etiqueta.
+List<({String texto, TomResultado tom})> etiquetasDoItem(
+  Patrimonio patrimonio,
+  CoresResultado cores, {
+  Classificacao? classificacaoFiltrada,
+}) {
+  final classificacao = classificar(patrimonio);
+  final etiquetas = <({String texto, TomResultado tom})>[];
+
+  // O que mudou em relação à planilha, campo a campo e por extenso.
+  for (final d in divergenciasDe(patrimonio)) {
+    etiquetas.add((
+      texto: switch (d.campo) {
+        CampoDivergente.sala => 'Mudou de sala',
+        CampoDivergente.responsavel => 'Mudou de responsável',
+      },
+      tom: cores.de(Classificacao.divergente),
+    ));
+  }
+
+  // O motivo da providência, e não a palavra "providência": o que se faz com
+  // o bem depende de ele estar ruim ou inservível, e são coisas diferentes.
+  final atencao = cores.de(Classificacao.naoLocalizado);
+  if (patrimonio.conservacao?.exigeAtencao ?? false) {
+    etiquetas.add((texto: 'Estado ruim', tom: atencao));
+  }
+  if (patrimonio.situacao?.exigeAtencao ?? false) {
+    etiquetas.add((texto: 'Inservível', tom: atencao));
+  }
+
+  if (classificacao != classificacaoFiltrada &&
+      classificacao != Classificacao.divergente) {
+    etiquetas.insert(0, (
+      texto: classificacao.rotulo,
+      tom: cores.de(classificacao),
+    ));
+  }
+
+  return etiquetas;
 }
 
 /// Ficha completa de um patrimônio, em três seções: o status, o que veio da
