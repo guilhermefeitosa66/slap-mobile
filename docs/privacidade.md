@@ -31,7 +31,7 @@ guarda, para onde eles vão e por quê.
   colegas do inventário e nos relatórios.
 - **Um identificador do aparelho**, sorteado na primeira vez que o aplicativo abre. Serve para
   numerar as alterações na sincronização. Não vem do hardware nem de nenhum identificador do
-  sistema, e troca se você usar *Ajustes → Gerar nova identidade*.
+  sistema, e troca se você usar *Ajustes → Separar este aparelho de uma cópia*.
 - **Suas preferências**: sons, vibração, tela ligada.
 
 Tudo fica no armazenamento privado do aplicativo e **fora do backup automático** do sistema (do

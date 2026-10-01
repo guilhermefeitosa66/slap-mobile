@@ -220,7 +220,7 @@ Nenhuma operação daquele par é aplicada até a diferença sumir.
 escreveu: as operações gravadas com a data adiantada ficam com HLC no futuro, o `hlc_local` vai
 junto, e corrigir a data do celular não conserta nada. Cada envio continuava recusado inteiro até
 o tempo real alcançar a data errada — com o ano errado, nunca —, a mensagem culpava um relógio que
-já estava certo, e a única saída oferecida pelo aplicativo ("Gerar nova identidade") apagava
+já estava certo, e a única saída oferecida pelo aplicativo (separar o aparelho de uma cópia) apagava
 justamente o trabalho que ainda não tinha saído dali.
 
 Com **evidência de fora** de que o relógio de parede está certo, o aparelho re-estampa as próprias
@@ -351,10 +351,10 @@ as duas histórias.
 
 **A recusa vai estruturada, não como frase pronta**, porque a frase depende de quem lê. Quem
 recusa fala da identidade *dele*: "outro aparelho está usando a identidade deste". Repetida tal e
-qual do outro lado, ela manda o aparelho honesto — que só estava passando por ali — tocar em
-"Gerar nova identidade" e apagar o trabalho que ainda não entregou. A resposta leva `tipo` e
+qual do outro lado, ela manda o aparelho honesto — que só estava passando por ali — separar-se
+de uma cópia e apagar o trabalho que ainda não entregou. A resposta leva `tipo` e
 `device_id`, e cada lado monta a frase do ponto de vista dele; quem descobre que a identidade
-duplicada é a própria recebe a orientação de gerar identidade nova, e quem não tem nada com isso
+duplicada é a própria recebe a orientação de separar o aparelho da cópia, e quem não tem nada com isso
 lê que dois aparelhos, nomeados, estão em conflito. O campo `erro` continua existindo com um texto
 neutro que serve aos dois casos, para uma versão anterior do aplicativo mostrar algo que faça
 sentido.

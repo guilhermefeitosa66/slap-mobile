@@ -6,6 +6,8 @@ import '../../app/componentes.dart';
 import '../../app/preferencias.dart';
 import '../../app/providers.dart';
 import '../../core/atualizacao.dart';
+import '../../core/formato.dart';
+import '../../data/repos/operacoes.dart';
 import 'copia_seguranca_ui.dart';
 import 'tela_licencas.dart';
 
@@ -154,18 +156,28 @@ class TelaAjustes extends ConsumerWidget {
               ),
             ],
           ),
-          secao('Identidade do aparelho'),
+          secao('Este aparelho'),
           CartaoAgrupado(
             linhas: [
               ListTile(
-                leading: const Icon(Icons.fingerprint),
-                title: const Text('Gerar nova identidade'),
+                leading: const Icon(Icons.delete_sweep_outlined),
+                title: const Text('Apagar tudo deste aparelho'),
                 subtitle: const Text(
-                  'Só quando a sincronização disser que outro aparelho está '
-                  'usando a identidade deste.',
+                  'Todos os inventários. Seu nome, ajustes e a identidade do '
+                  'aparelho ficam.',
                 ),
                 trailing: const SetaNavegacao(),
-                onTap: () => _renovarIdentidade(context, ref),
+                onTap: () => _apagarTudo(context, ref),
+              ),
+              ListTile(
+                leading: const Icon(Icons.fingerprint),
+                title: const Text('Separar este aparelho de uma cópia'),
+                subtitle: const Text(
+                  'Quando a sincronização recusa dizendo que outro aparelho '
+                  'está usando a identidade deste.',
+                ),
+                trailing: const SetaNavegacao(),
+                onTap: () => _separarDeUmaCopia(context, ref),
               ),
             ],
           ),
@@ -196,37 +208,209 @@ class TelaAjustes extends ConsumerWidget {
   }
 }
 
-Future<void> _renovarIdentidade(BuildContext context, WidgetRef ref) async {
-  final esquema = Theme.of(context).colorScheme;
+/// Quantos inventários o aparelho tem e o que se perde apagando todos.
+///
+/// A soma é por aparelho porque a pergunta é por aparelho: uma contagem por
+/// inventário não responde "o que eu perco limpando este celular".
+({int inventarios, TrabalhoNaoEntregue perda}) _perdaDoAparelho(WidgetRef ref) {
+  final inventarios = ref.read(inventariosProvider).listar();
+  final operacoes = ref.read(operacoesProvider);
+
+  return (
+    inventarios: inventarios.length,
+    perda: inventarios
+        .map((i) => operacoes.trabalhoNaoEntregue(i.id))
+        .fold(TrabalhoNaoEntregue.nenhum, (a, b) => a + b),
+  );
+}
+
+/// O trabalho que se perde, em números.
+///
+/// Verificações quando houver — é o que a pessoa reconhece como o seu dia de
+/// trabalho. Quando o que ficou aqui foi só editar, resolver conflito ou
+/// desfazer, fala-se em alterações: "0 verificações" não diria nada.
+String _trabalho(TrabalhoNaoEntregue perda) {
+  if (perda.verificacoes > 0) {
+    return perda.verificacoes == 1
+        ? '1 verificação'
+        : '${formatarInteiro(perda.verificacoes)} verificações';
+  }
+  return perda.operacoes == 1
+      ? '1 alteração'
+      : '${formatarInteiro(perda.operacoes)} alterações';
+}
+
+/// A frase do aviso em destaque: quantos inventários saem e quanto trabalho
+/// vai com eles.
+String _frasePerda(int inventarios, TrabalhoNaoEntregue perda) {
+  final quantos = inventarios == 1
+      ? 'O inventário deste aparelho será apagado'
+      : 'Os ${formatarInteiro(inventarios)} inventários deste aparelho serão '
+            'apagados';
+
+  if (perda.nada) {
+    return '$quantos. Tudo o que foi feito aqui já está em outro aparelho.';
+  }
+
+  final um =
+      (perda.verificacoes > 0 ? perda.verificacoes : perda.operacoes) == 1;
+  final feitas = um ? 'feita' : 'feitas';
+  final perdem = um ? 'se perde' : 'se perdem';
+
+  return perda.jaSincronizou
+      ? '$quantos, e ${_trabalho(perda)} $feitas aqui ainda não '
+            '${um ? 'chegou' : 'chegaram'} a nenhum outro aparelho: $perdem.'
+      : '$quantos, e ${_trabalho(perda)} $feitas aqui $perdem para sempre — '
+            'este aparelho nunca sincronizou.';
+}
+
+enum _EscolhaApagar { exportar, apagar }
+
+/// Limpa o aparelho, dizendo antes o que se perde e oferecendo a cópia.
+///
+/// Existe como ação própria porque quem queria isto — terminou o levantamento,
+/// vai devolver o celular — acabava usando a troca de identidade por engano:
+/// ela apaga tudo, mas com outro nome e outro propósito.
+Future<void> _apagarTudo(BuildContext context, WidgetRef ref) async {
+  while (true) {
+    final (:inventarios, :perda) = _perdaDoAparelho(ref);
+    if (!context.mounted) return;
+
+    if (inventarios == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não há nenhum inventário neste aparelho.'),
+        ),
+      );
+      return;
+    }
+
+    final escolha = await showDialog<_EscolhaApagar>(
+      context: context,
+      builder: (contexto) {
+        final esquema = Theme.of(contexto).colorScheme;
+        return AlertDialog(
+          title: const Text('Apagar tudo deste aparelho?'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CaixaDeAviso(texto: _frasePerda(inventarios, perda)),
+                const SizedBox(height: 16),
+                const Text(
+                  'Os outros aparelhos não são afetados: cada um tem a sua '
+                  'própria cópia, e sincronizar com eles traz o inventário de '
+                  'volta.\n\n'
+                  'Seu nome, matrícula, ajustes e a identidade deste aparelho '
+                  'ficam.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(contexto),
+              child: const Text('Cancelar'),
+            ),
+            // A cópia oferecida no caminho: quem vai limpar o aparelho pode
+            // querer o arquivo antes, e aqui é mais provável que aceite do
+            // que lembrando depois.
+            TextButton(
+              onPressed: () => Navigator.pop(contexto, _EscolhaApagar.exportar),
+              child: const Text('Exportar cópia'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(contexto, _EscolhaApagar.apagar),
+              style: FilledButton.styleFrom(
+                backgroundColor: esquema.error,
+                foregroundColor: esquema.onError,
+                minimumSize: const Size(0, 48),
+              ),
+              child: Text(perda.nada ? 'Apagar tudo' : 'Apagar mesmo assim'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!context.mounted) return;
+    if (escolha == _EscolhaApagar.exportar) {
+      await exportarCopia(context, ref);
+      // Volta a perguntar, agora com a cópia na mão.
+      continue;
+    }
+    if (escolha != _EscolhaApagar.apagar) return;
+
+    ref.read(inventariosProvider).apagarTudoLocalmente();
+    ref.read(revisaoProvider.notifier).mudou();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Inventários apagados deste aparelho.')),
+    );
+    return;
+  }
+}
+
+/// Dá a este aparelho uma identidade própria, quando ele e uma cópia sua
+/// estão escrevendo com a mesma.
+///
+/// Chamava-se "gerar nova identidade". Apresentado a um usuário, o nome não
+/// comunicou nada — identidade de quê? Aqui se diz o fim, separar este
+/// aparelho de uma cópia; o mecanismo fica para o texto.
+Future<void> _separarDeUmaCopia(BuildContext context, WidgetRef ref) async {
+  final (:inventarios, :perda) = _perdaDoAparelho(ref);
+  if (!context.mounted) return;
+
   final confirmou = await showDialog<bool>(
     context: context,
-    builder: (contexto) => AlertDialog(
-      title: const Text('Gerar nova identidade?'),
-      content: const Text(
-        'Use só quando a sincronização avisar que outro aparelho está usando '
-        'a identidade deste — o que acontece quando os dados do aplicativo são '
-        'copiados de um celular para outro.\n\n'
-        'Todos os inventários deste aparelho serão apagados. Depois, entre de '
-        'novo em cada um pelo QR code: o que os outros aparelhos têm volta. O '
-        'que foi feito aqui e ainda não chegou a nenhum outro se perde.\n\n'
-        'Seu nome, matrícula e ajustes ficam.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(contexto, false),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(contexto, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: esquema.error,
-            foregroundColor: esquema.onError,
-            minimumSize: const Size(0, 48),
+    builder: (contexto) {
+      final esquema = Theme.of(contexto).colorScheme;
+      return AlertDialog(
+        title: const Text('Separar de uma cópia?'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (inventarios > 0) ...[
+                CaixaDeAviso(texto: _frasePerda(inventarios, perda)),
+                const SizedBox(height: 16),
+              ],
+              const Text(
+                'Use só quando a sincronização recusar dizendo que outro '
+                'aparelho está usando a identidade deste — o que acontece '
+                'quando os dados do aplicativo são copiados de um celular '
+                'para outro.\n\n'
+                'Este aparelho passa a ter identidade própria. Depois, entre '
+                'de novo em cada inventário pelo QR code: o que os outros '
+                'aparelhos têm volta. Seu nome, matrícula e ajustes ficam.',
+              ),
+              if (!perda.nada) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Se a sincronização com algum outro aparelho ainda '
+                  'funcionar, faça antes: é o que salva esse trabalho.',
+                  style: Theme.of(contexto).textTheme.bodyMedium,
+                ),
+              ],
+            ],
           ),
-          child: const Text('Gerar e apagar'),
         ),
-      ],
-    ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(contexto, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(contexto, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: esquema.error,
+              foregroundColor: esquema.onError,
+              minimumSize: const Size(0, 48),
+            ),
+            child: Text(inventarios == 0 ? 'Separar' : 'Apagar e separar'),
+          ),
+        ],
+      );
+    },
   );
   if (confirmou != true || !context.mounted) return;
 
@@ -234,7 +418,9 @@ Future<void> _renovarIdentidade(BuildContext context, WidgetRef ref) async {
   ref.read(revisaoProvider.notifier).mudou();
   ScaffoldMessenger.of(context).showSnackBar(
     const SnackBar(
-      content: Text('Identidade nova. Entre nos inventários pelo QR code.'),
+      content: Text(
+        'Identidade própria gerada. Entre nos inventários pelo QR code.',
+      ),
     ),
   );
 }

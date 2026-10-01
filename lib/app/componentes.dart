@@ -246,3 +246,58 @@ class SetaNavegacao extends StatelessWidget {
     );
   }
 }
+
+/// Aviso que não pode passar batido: fora do texto corrido, com fundo, ícone
+/// e cor próprios.
+///
+/// Nasceu do diálogo que apaga os inventários do aparelho. A frase que decide
+/// a ação — "todos os inventários deste aparelho serão apagados" — estava no
+/// meio do segundo de três parágrafos, e em teste de uso passou batido: a
+/// pessoa confirmou sem ter registrado o que ia perder. Texto longo e uniforme
+/// se pula, e o que se pulava era a única informação que importava.
+class CaixaDeAviso extends StatelessWidget {
+  final String texto;
+  final IconData icone;
+
+  /// Por omissão, o tom de não localizado — o mais forte do aplicativo, para
+  /// perda de dados. [CoresResultado.jaVerificado] serve a avisos que não
+  /// destroem nada.
+  final TomResultado? tom;
+
+  const CaixaDeAviso({
+    super.key,
+    required this.texto,
+    this.icone = Icons.warning_amber_rounded,
+    this.tom,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cor = tom ?? CoresResultado.of(context).naoLocalizado;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cor.fundo,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // O ícone repete o que a cor já diz; o texto é que carrega o aviso.
+          ExcludeSemantics(child: Icon(icone, color: cor.texto, size: 22)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              texto,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cor.texto,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

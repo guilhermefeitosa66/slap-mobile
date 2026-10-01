@@ -233,6 +233,30 @@ class RepositorioInventarios {
     });
   }
 
+  /// Apaga todos os inventários deste aparelho, e nada mais.
+  ///
+  /// Para quem terminou o levantamento, vai devolver o celular ou quer o
+  /// espaço de volta. A identidade do aparelho continua a mesma — apagar os
+  /// dados não é motivo para trocá-la —, e com ela os pisos de numeração, de
+  /// modo que um inventário que volte pelo QR code continua de onde parou.
+  /// Nome, matrícula e preferências ficam.
+  ///
+  /// O que só existe aqui se perde: [RepositorioOperacoes.trabalhoNaoEntregue]
+  /// diz quanto, por inventário, e a tela soma e pergunta antes.
+  void apagarTudoLocalmente() {
+    banco.transacao(() {
+      for (final inv in listar()) {
+        removerLocalmente(inv.id);
+      }
+      // Contextos causais são deduplicados por conteúdo, sem dono: sobram
+      // órfãos quando as operações que os citavam saem.
+      _db.execute(
+        'DELETE FROM contextos WHERE ctx_id NOT IN '
+        '(SELECT ctx_id FROM ops WHERE ctx_id IS NOT NULL)',
+      );
+    });
+  }
+
   /// Recomeça este aparelho com identidade nova.
   ///
   /// É a saída para quando dois aparelhos estão escrevendo com a mesma
@@ -241,16 +265,19 @@ class RepositorioInventarios {
   /// identidade antiga é justamente a que está em disputa; voltam pelo QR code,
   /// com o que os outros aparelhos têm. Nome, matrícula e preferências ficam.
   ///
+  /// Guardar as operações antigas e seguir sincronizando não é alternativa:
+  /// elas e as da cópia ocupam os mesmos `(dispositivo, seq)`, e a version
+  /// vector do outro aparelho passaria a cobrir operações que ele nunca
+  /// recebeu. A divergência ficaria permanente e silenciosa, que é justamente
+  /// o que a recusa de sincronizar evita.
+  ///
   /// O que foi feito aqui e não chegou a nenhum outro aparelho se perde.
   void renovarIdentidade() {
     banco.transacao(() {
-      for (final inv in listar()) {
-        removerLocalmente(inv.id);
-      }
+      apagarTudoLocalmente();
       // A numeração recomeça do zero com a identidade nova: os pisos da
       // antiga não valem mais.
       _db.execute("DELETE FROM config WHERE chave LIKE 'seq_minimo.%'");
-      _db.execute('DELETE FROM contextos');
       banco.gravarConfig(Config.dispositivoId, _uuid.v4());
       banco.apagarConfig(Config.hlcLocal);
     });

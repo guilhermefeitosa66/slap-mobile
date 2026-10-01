@@ -67,7 +67,7 @@ por exemplo —, a sincronização **detecta e recusa**, sem misturar nada:
   outro lado confere se tem a mesma naquela posição. Sem isso, dois clones que escreveram o mesmo
   número de operações nunca pediriam um ao outro a posição em disputa.
 
-A mensagem explica o que aconteceu. A saída é **Ajustes → Gerar nova identidade** num dos dois
+A mensagem explica o que aconteceu. A saída é **Ajustes → Separar este aparelho de uma cópia** num dos dois
 aparelhos: os inventários dele são apagados, a identidade é trocada, e ele entra de novo pelo QR
 code, recebendo o que os outros têm. O que aquele aparelho fez depois da cópia e não chegou a
 ninguém se perde — é o custo que a prevenção acima existe para evitar.

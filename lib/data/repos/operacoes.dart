@@ -179,6 +179,26 @@ class TrabalhoNaoEntregue {
     required this.verificacoes,
   });
 
+  /// Nada feito, nada a perder. Semente da soma.
+  static const nenhum = TrabalhoNaoEntregue(
+    jaSincronizou: false,
+    operacoes: 0,
+    verificacoes: 0,
+  );
+
+  /// O trabalho de dois inventários somado.
+  ///
+  /// Serve a quem apaga o aparelho inteiro: a pergunta ali é sobre o aparelho,
+  /// e uma conta por inventário não responde. [jaSincronizou] vira verdadeiro
+  /// se **algum** inventário já sincronizou — "este aparelho nunca sincronizou"
+  /// só se pode dizer quando nenhum sincronizou.
+  TrabalhoNaoEntregue operator +(TrabalhoNaoEntregue outro) =>
+      TrabalhoNaoEntregue(
+        jaSincronizou: jaSincronizou || outro.jaSincronizou,
+        operacoes: operacoes + outro.operacoes,
+        verificacoes: verificacoes + outro.verificacoes,
+      );
+
   bool get nada => operacoes == 0;
 }
 

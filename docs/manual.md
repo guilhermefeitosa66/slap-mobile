@@ -425,9 +425,10 @@ troque dados com todos os aparelhos da comissão.
 | **Tema** | Claro, escuro ou o que o celular estiver usando. |
 | **Avisar de versão nova** | Ao abrir, pergunta ao GitHub qual é a última versão publicada. Não envia nada do inventário; dá para desligar. |
 | **Exportar cópia** / **Restaurar de uma cópia** | Veja abaixo. |
-| **Gerar nova identidade** | Só num caso, descrito em [Perguntas e problemas comuns](#dois-aparelhos-estão-com-a-mesma-identidade). |
+| **Apagar tudo deste aparelho** | Tira todos os inventários daqui. Diz antes, em números, o que ainda não chegou a nenhum outro aparelho, e oferece a cópia de segurança. Seu nome, ajustes e a identidade do aparelho ficam. |
+| **Separar este aparelho de uma cópia** | Só num caso, descrito em [Perguntas e problemas comuns](#dois-aparelhos-estão-com-a-mesma-identidade). |
 | **Versão do aplicativo** | Qual versão está instalada aqui. |
-| **Licenças** | Bibliotecas e fontes usadas pelo aplicativo. |
+| **Licenças** | A do aplicativo (Apache 2.0) e, numa subseção, a de cada biblioteca e fonte usada. |
 
 ## Cópia de segurança
 
@@ -512,10 +513,11 @@ Acontece quando a cópia de segurança de um celular é restaurada em outro e os
 levantar ao mesmo tempo. A troca de dados detecta e recusa, dizendo qual aparelho está
 duplicado.
 
-No aparelho que está duplicando — **e só nele** —, use **Ajustes → Gerar nova identidade**.
-Leia o aviso com atenção: o aparelho passa a ser um novo participante e precisa entrar nos
-inventários de novo, pelo QR code. Antes disso, troque dados com um colega, para não perder o
-que foi levantado.
+No aparelho que está duplicando — **e só nele** —, use
+**Ajustes → Separar este aparelho de uma cópia**. O aviso em destaque diz quantos inventários
+saem e quanto trabalho ainda não chegou a nenhum outro aparelho. Se a troca com algum colega
+ainda funcionar, faça antes: é o que salva esse trabalho. Depois, o aparelho passa a ser um novo
+participante e entra nos inventários de novo, pelo QR code.
 
 ### O item lido demora a aparecer na lista
 
