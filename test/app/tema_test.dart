@@ -150,7 +150,7 @@ void main() {
       final banco = bancoComIdentidade();
       final container = await abrir(tester, banco);
 
-      await tester.tap(find.byTooltip('Meus dados e ajustes'));
+      await tester.tap(find.byTooltip('Ajustes'));
       await tester.pumpAndSettle();
       expect(find.byType(TelaAjustes), findsOneWidget);
       expect(find.text('Aparência'.toUpperCase()), findsOneWidget);

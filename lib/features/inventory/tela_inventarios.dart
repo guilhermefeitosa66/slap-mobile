@@ -29,8 +29,11 @@ class TelaInventarios extends ConsumerWidget {
         ),
         actions: [
           IconButton.outlined(
-            tooltip: 'Meus dados e ajustes',
-            icon: const Icon(Icons.person_outline),
+            // Engrenagem, e não um ícone de pessoa: só a primeira das seis
+            // seções da tela é sobre quem usa o aparelho. Quem vai desligar o
+            // som não procura isso atrás de um retrato.
+            tooltip: 'Ajustes',
+            icon: const Icon(Icons.settings_outlined),
             style: IconButton.styleFrom(
               backgroundColor: Theme.of(
                 context,
