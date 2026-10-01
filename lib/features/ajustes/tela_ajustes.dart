@@ -244,12 +244,11 @@ String _trabalho(TrabalhoNaoEntregue perda) {
 /// vai com eles.
 String _frasePerda(int inventarios, TrabalhoNaoEntregue perda) {
   final quantos = inventarios == 1
-      ? 'O inventário deste aparelho será apagado'
-      : 'Os ${formatarInteiro(inventarios)} inventários deste aparelho serão '
-            'apagados';
+      ? 'Apaga o inventário deste aparelho'
+      : 'Apaga os ${formatarInteiro(inventarios)} inventários deste aparelho';
 
   if (perda.nada) {
-    return '$quantos. Tudo o que foi feito aqui já está em outro aparelho.';
+    return '$quantos. Tudo o que foi feito aqui já está em outro.';
   }
 
   final um =
@@ -257,11 +256,14 @@ String _frasePerda(int inventarios, TrabalhoNaoEntregue perda) {
   final feitas = um ? 'feita' : 'feitas';
   final perdem = um ? 'se perde' : 'se perdem';
 
+  // A saída — sincronizar antes — vai junto do aviso, e não num parágrafo
+  // adiante: quem lê a perda é quem precisa dela.
   return perda.jaSincronizou
       ? '$quantos, e ${_trabalho(perda)} $feitas aqui ainda não '
-            '${um ? 'chegou' : 'chegaram'} a nenhum outro aparelho: $perdem.'
-      : '$quantos, e ${_trabalho(perda)} $feitas aqui $perdem para sempre — '
-            'este aparelho nunca sincronizou.';
+            '${um ? 'chegou' : 'chegaram'} a nenhum outro: sincronize antes, '
+            'ou $perdem.'
+      : '$quantos, e ${_trabalho(perda)} $feitas aqui $perdem para sempre: '
+            'nenhum outro aparelho ${um ? 'a' : 'as'} recebeu.';
 }
 
 enum _EscolhaApagar { exportar, apagar }
@@ -298,11 +300,9 @@ Future<void> _apagarTudo(BuildContext context, WidgetRef ref) async {
                 CaixaDeAviso(texto: _frasePerda(inventarios, perda)),
                 const SizedBox(height: 16),
                 const Text(
-                  'Os outros aparelhos não são afetados: cada um tem a sua '
-                  'própria cópia, e sincronizar com eles traz o inventário de '
-                  'volta.\n\n'
-                  'Seu nome, matrícula, ajustes e a identidade deste aparelho '
-                  'ficam.',
+                  'Os outros aparelhos não são afetados: sincronizar com eles '
+                  'traz o inventário de volta.\n\n'
+                  'Seu nome, ajustes e a identidade deste aparelho ficam.',
                 ),
               ],
             ),
@@ -375,22 +375,11 @@ Future<void> _separarDeUmaCopia(BuildContext context, WidgetRef ref) async {
                 const SizedBox(height: 16),
               ],
               const Text(
-                'Use só quando a sincronização recusar dizendo que outro '
-                'aparelho está usando a identidade deste — o que acontece '
-                'quando os dados do aplicativo são copiados de um celular '
-                'para outro.\n\n'
-                'Este aparelho passa a ter identidade própria. Depois, entre '
-                'de novo em cada inventário pelo QR code: o que os outros '
-                'aparelhos têm volta. Seu nome, matrícula e ajustes ficam.',
+                'É para quando a sincronização recusa dizendo que outro '
+                'aparelho usa a identidade deste.\n\n'
+                'Depois, entre de novo em cada inventário pelo QR code: o que '
+                'os outros aparelhos têm volta. Seu nome e ajustes ficam.',
               ),
-              if (!perda.nada) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Se a sincronização com algum outro aparelho ainda '
-                  'funcionar, faça antes: é o que salva esse trabalho.',
-                  style: Theme.of(contexto).textTheme.bodyMedium,
-                ),
-              ],
             ],
           ),
         ),

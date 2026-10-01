@@ -126,7 +126,9 @@ void main() {
       // O aviso fica fora do texto corrido: é o que decide a ação.
       expect(find.byType(CaixaDeAviso), findsOneWidget);
       expect(
-        find.textContaining('2 verificações feitas aqui ainda não chegaram'),
+        find.textContaining(
+          '2 verificações feitas aqui ainda não chegaram a nenhum outro',
+        ),
         findsOneWidget,
       );
       expect(
@@ -184,7 +186,7 @@ void main() {
 
       expect(find.byType(CaixaDeAviso), findsOneWidget);
       expect(
-        find.textContaining('O inventário deste aparelho será apagado'),
+        find.textContaining('Apaga o inventário deste aparelho'),
         findsOneWidget,
       );
       // Não é mais "gerar nova identidade": o nome diz o fim, não o meio.

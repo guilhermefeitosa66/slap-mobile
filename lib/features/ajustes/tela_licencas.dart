@@ -72,7 +72,7 @@ class TelaLicencas extends StatelessWidget {
           CartaoAgrupado(
             linhas: [
               ListTile(
-                leading: const Icon(Icons.inventory_2_outlined),
+                leading: const Icon(Icons.library_books_outlined),
                 title: const Text('Bibliotecas e fontes usadas'),
                 subtitle: const Text('A licença de cada uma'),
                 trailing: const SetaNavegacao(),
