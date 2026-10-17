@@ -57,6 +57,16 @@ void main() {
         null,
       ];
       const responsaveis = ['Maria José', 'MARIA JOSE', 'João', null];
+      // Estado de origem do SUAP (ou nenhum) e estado lido: manter (null), um
+      // do SUAP ou um do vocabulário antigo.
+      final estadosSuap = <EstadoConservacao?>[
+        null,
+        ...EstadoConservacao.selecionaveis,
+      ];
+      final estadosLidos = <EstadoConservacao?>[
+        null,
+        ...EstadoConservacao.values,
+      ];
       final aleatorio = Random(42);
       T sorteio<T>(List<T> lista) => lista[aleatorio.nextInt(lista.length)];
 
@@ -66,6 +76,7 @@ void main() {
             tombo: '$i',
             sala: sorteio(salas),
             responsavel: sorteio(responsaveis),
+            conservacao: sorteio(estadosSuap),
           ),
       ]);
 
@@ -75,7 +86,7 @@ void main() {
           patrimonio: p,
           config: ConfiguracaoLevantamento(
             sala: sorteio(salas.whereType<String>().toList()..remove('')),
-            conservacao: sorteio(EstadoConservacao.values),
+            conservacao: sorteio(estadosLidos),
             situacao: sorteio(SituacaoUso.values),
             responsavel: sorteio(responsaveis),
           ),
@@ -229,23 +240,27 @@ void main() {
           sala: 'Sala 1',
           responsavel: 'Ana',
         ),
+        // Estado do SUAP: as leituras de 2 e 3 o mantêm.
         PatrimonioImportado(
           tombo: '2',
           descricao: 'MESA',
           sala: 'Sala 1',
           responsavel: 'Ana',
+          conservacao: EstadoConservacao.bom,
         ),
         PatrimonioImportado(
           tombo: '3',
           descricao: 'ARMÁRIO',
           sala: 'Sala 2',
           responsavel: 'Bruno',
+          conservacao: EstadoConservacao.bom,
         ),
         PatrimonioImportado(
           tombo: '4',
           descricao: 'CADEIRA',
           sala: 'Sala 2',
           responsavel: 'Bruno',
+          conservacao: EstadoConservacao.bom,
         ),
       ]);
 
@@ -258,7 +273,7 @@ void main() {
         // digitaria "Auditório".
         config: const ConfiguracaoLevantamento(
           sala: 'AUDITORIO',
-          conservacao: EstadoConservacao.ruim,
+          conservacao: EstadoConservacao.antieconomico,
           situacao: SituacaoUso.inservivel,
           responsavel: 'Carla',
         ),
@@ -350,14 +365,19 @@ void main() {
     test('estado e situação só existem em item verificado', () {
       cenario();
       expect(
-        tombos(filtro: const FiltroItens(conservacao: EstadoConservacao.ruim)),
+        tombos(
+          filtro: const FiltroItens(
+            conservacao: EstadoConservacao.antieconomico,
+          ),
+        ),
         ['1'],
       );
       expect(
         tombos(filtro: const FiltroItens(situacao: SituacaoUso.inservivel)),
         ['1'],
       );
-      // Bom é o padrão das leituras: os outros dois verificados.
+      // O estado efetivo: 2 e 3 mantiveram o "Bom" do SUAP. O 4 também é
+      // "Bom" no SUAP, mas não foi encontrado.
       expect(
         tombos(filtro: const FiltroItens(conservacao: EstadoConservacao.bom)),
         ['2', '3'],
@@ -628,12 +648,12 @@ void main() {
         ),
         usuarioNome: 'Ana',
       );
-      // Confere com a planilha, mas o estado é ruim.
+      // Confere com a planilha, mas o bem está antieconômico.
       repo.registrarVerificacao(
         patrimonio: itens[2],
         config: const ConfiguracaoLevantamento(
           sala: 'Biblioteca',
-          conservacao: EstadoConservacao.ruim,
+          conservacao: EstadoConservacao.antieconomico,
         ),
         usuarioNome: 'Ana',
       );
@@ -667,7 +687,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Inservível'), findsOneWidget);
-      expect(find.text('Estado ruim'), findsOneWidget);
+      // O estado do SUAP por extenso: antieconômico e irreversível pedem
+      // providências diferentes.
+      expect(find.text('Antieconômico'), findsOneWidget);
       // O item que confere com a planilha e está em mau estado diz as duas
       // coisas: são dimensões diferentes, e as duas valem.
       expect(find.text('OK'), findsWidgets);

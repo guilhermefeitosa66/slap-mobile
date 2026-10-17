@@ -58,7 +58,7 @@ void main() {
       jsonEncode(
         ConfiguracaoLevantamento(
           sala: 'Auditório',
-          conservacao: EstadoConservacao.regular,
+          conservacao: EstadoConservacao.recuperavel,
           responsavel: 'Carla Menezes',
           desde: desde,
         ).toJson(),
@@ -419,6 +419,9 @@ void main() {
           find.widgetWithText(TextField, 'Sala onde você está'),
           'Sala 205',
         );
+        // Sem foco, a lista de sugestões fecha e não cobre o botão.
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Aplicar e continuar'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Aplicar e continuar'));

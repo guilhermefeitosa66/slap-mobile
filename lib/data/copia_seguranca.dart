@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart';
 
+import '../core/codigo.dart';
 import '../core/version_vector.dart';
 import 'banco.dart';
 import 'repos/operacoes.dart';
@@ -240,22 +241,52 @@ class CopiaDeSeguranca {
     // A lista é fechada, e não `SELECT *`, para que uma cópia feita por uma
     // versão anterior do esquema continue restaurável: as colunas que ela
     // tinha a mais — `conservacao_original` e `situacao_original` até a versão
-    // 3, `ordem` até a 4 — simplesmente não são lidas.
-    const colunas =
-        'id, inventario_id, tombo, codigo_barras, ed, descricao, '
-        'responsavel_original, sala_original, valor, tombo_chave, '
-        'codigo_barras_chave, ignorado';
+    // 3, `ordem` até a 4 — simplesmente não são lidas. O estado de origem do
+    // SUAP voltou na versão 6, com o vocabulário do SUAP; de cópia anterior
+    // ele não é lido, porque o que houvesse ali seria o do esquema antigo.
+    final colunasDaCopia = {
+      for (final r in de.select('PRAGMA table_info(patrimonios)'))
+        r['name'] as String,
+    };
+    final versaoDaCopia =
+        de.select('PRAGMA user_version').first['user_version'] as int;
+    final comEstado =
+        versaoDaCopia >= 6 && colunasDaCopia.contains('conservacao_original');
+
+    final colunas = [
+      'id',
+      'inventario_id',
+      'tombo',
+      'codigo_barras',
+      'ed',
+      'descricao',
+      'responsavel_original',
+      'sala_original',
+      'valor',
+      'ignorado',
+      if (comEstado) 'conservacao_original',
+    ];
+    // As chaves de busca não vêm da cópia: são recalculadas pela regra deste
+    // aplicativo. Uma cópia anterior à versão 6 tem as chaves sem sinal, que
+    // fariam a plaqueta antiga casar com o bem novo (ver `chaveBusca`).
     final stmt = para.prepare(
-      'INSERT OR IGNORE INTO patrimonios ($colunas) '
-      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT OR IGNORE INTO patrimonios '
+      '(${colunas.join(', ')}, tombo_chave, codigo_barras_chave) '
+      'VALUES (${List.filled(colunas.length + 2, '?').join(', ')})',
     );
 
     try {
       for (final r in de.select(
-        'SELECT $colunas FROM patrimonios WHERE inventario_id = ?',
+        'SELECT ${colunas.join(', ')} FROM patrimonios '
+        'WHERE inventario_id = ?',
         [id],
       )) {
-        stmt.execute([...r.values]);
+        final codigoBarras = r['codigo_barras'] as String?;
+        stmt.execute([
+          ...r.values,
+          chaveBusca(r['tombo'] as String?),
+          codigoBarras == null ? null : chaveBusca(codigoBarras),
+        ]);
       }
     } finally {
       stmt.close();

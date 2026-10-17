@@ -1,5 +1,6 @@
 import '../../core/codigo.dart';
 import '../../data/repos/patrimonios.dart';
+import '../../domain/valores.dart';
 import 'leitor_planilha.dart';
 import 'mapeamento.dart';
 
@@ -26,12 +27,29 @@ class PreviaImportacao {
   /// escolha do que ignorar.
   final Map<String, int> contagemPorEd;
 
+  /// Linhas sem tombo, mas com número, que receberam o tombo pela regra do
+  /// SUAP (`tombo = numero + 42535`) em vez de serem descartadas.
+  final int tombosPeloNumero;
+
+  /// Tombos cuja linha traz um número que não segue a regra do SUAP
+  /// (`tombo = numero + 42535`). Entram como vieram, mas a tela avisa: ou a
+  /// planilha foi editada à mão, ou a coluna de tombo não é a do SUAP — e aí
+  /// a busca pela plaqueta pode achar o bem errado.
+  final List<String> foraDaRegraDoSuap;
+
+  /// Células de estado de conservação preenchidas com algo que não é do
+  /// vocabulário do SUAP. O item entra sem estado de origem.
+  final int estadosNaoReconhecidos;
+
   const PreviaImportacao({
     required this.itens,
     required this.linhasExaminadas,
     required this.semTombo,
     required this.tombosDuplicados,
     required this.contagemPorEd,
+    this.tombosPeloNumero = 0,
+    this.foraDaRegraDoSuap = const [],
+    this.estadosNaoReconhecidos = 0,
   });
 
   int get total => itens.length;
@@ -92,6 +110,9 @@ class Importador {
     final duplicados = <String>[];
     final porEd = <String, int>{};
     var semTombo = 0;
+    var pelosNumeros = 0;
+    final foraDaRegra = <String>[];
+    var estadosDesconhecidos = 0;
     var examinadas = 0;
     final aConferir = planilha.linhas.length - mapeamento.linhaCabecalho - 1;
 
@@ -106,10 +127,34 @@ class Importador {
         aoProgredir(examinadas, aConferir);
       }
 
-      final tombo = _celula(linha, mapeamento.colunaDe(CampoImportacao.tombo));
+      final codigoBarras = _celula(
+        linha,
+        mapeamento.colunaDe(CampoImportacao.codigoBarras),
+      );
+      var tombo = _celula(linha, mapeamento.colunaDe(CampoImportacao.tombo));
       if (tombo == null || chaveBusca(tombo).isEmpty) {
-        semTombo++;
-        continue;
+        // O SUAP deixa o tombo em branco em parte dos bens, e a exportação
+        // dele escreve "-" no vazio. O número basta: o tombo é dado pela
+        // regra fixa do próprio SUAP.
+        tombo = tomboPeloNumero(codigoBarras);
+        if (tombo == null) {
+          semTombo++;
+          continue;
+        }
+        pelosNumeros++;
+      } else if (tomboPeloNumero(codigoBarras) case final esperado?
+          when int.tryParse(chaveBusca(tombo)) != null &&
+              esperado != chaveBusca(tombo)) {
+        foraDaRegra.add(tombo);
+      }
+
+      final celulaEstado = _celula(
+        linha,
+        mapeamento.colunaDe(CampoImportacao.conservacao),
+      );
+      final conservacao = EstadoConservacao.daPlanilha(celulaEstado);
+      if (conservacao == null && _estadoPreenchido(celulaEstado)) {
+        estadosDesconhecidos++;
       }
 
       final chave = chaveBusca(tombo);
@@ -121,10 +166,7 @@ class Importador {
       itens.add(
         PatrimonioImportado(
           tombo: tombo,
-          codigoBarras: _celula(
-            linha,
-            mapeamento.colunaDe(CampoImportacao.codigoBarras),
-          ),
+          codigoBarras: codigoBarras,
           ed: ed,
           descricao: _celula(
             linha,
@@ -136,6 +178,7 @@ class Importador {
           ),
           sala: _celula(linha, mapeamento.colunaDe(CampoImportacao.sala)),
           valor: _celula(linha, mapeamento.colunaDe(CampoImportacao.valor)),
+          conservacao: conservacao,
         ),
       );
     }
@@ -151,6 +194,9 @@ class Importador {
       semTombo: semTombo,
       tombosDuplicados: duplicados,
       contagemPorEd: {for (final e in ordenados) e.key: e.value},
+      tombosPeloNumero: pelosNumeros,
+      foraDaRegraDoSuap: foraDaRegra,
+      estadosNaoReconhecidos: estadosDesconhecidos,
     );
   }
 
@@ -203,6 +249,13 @@ class Importador {
       preservados: preservados,
       ignoradosPorEd: ignorados,
     );
+  }
+
+  /// Célula de estado com conteúdo de verdade. "-" é o vazio da exportação do
+  /// SUAP, e "Não aplicar" é o estado vazio dele.
+  static bool _estadoPreenchido(String? celula) {
+    final t = formaComparavel(celula);
+    return t.isNotEmpty && t != '-' && t != 'nao aplicar';
   }
 
   static String? _celula(List<String?> linha, int? coluna) {

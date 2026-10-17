@@ -7,6 +7,7 @@ import '../../core/version_vector.dart';
 import '../../data/repos/inventarios.dart';
 import '../../data/repos/operacoes.dart';
 import '../../domain/patrimonio.dart';
+import '../../domain/valores.dart';
 import 'cifra.dart';
 
 /// Tipo de serviço anunciado por mDNS. O primeiro rótulo precisa ter no
@@ -22,7 +23,11 @@ const int portaMulticast = 47771;
 ///
 /// 2: corpo cifrado (AES-GCM), chaves derivadas por HKDF, inventário na query
 /// e cabeças nos pedidos.
-const int versaoProtocolo = 2;
+///
+/// 3: estado de conservação no vocabulário do SUAP, com o estado de origem no
+/// pacote do inventário. Um aparelho na versão 2 gravaria `regular` e `ruim`,
+/// que o SUAP não conhece, e não mostraria os estados novos que recebesse.
+const int versaoProtocolo = 3;
 
 /// Cabeçalho com a versão do protocolo de quem pede.
 const String cabecalhoVersao = 'x-slap-versao';
@@ -468,6 +473,7 @@ class PacoteInventario {
           'responsavel': p.responsavelOriginal,
           'sala': p.salaOriginal,
           'valor': p.valor,
+          'conservacao': p.conservacaoOriginal?.valor,
           'ignorado': p.ignorado,
         },
     ],
@@ -503,6 +509,9 @@ class PacoteInventario {
             responsavelOriginal: p['responsavel'] as String?,
             salaOriginal: p['sala'] as String?,
             valor: p['valor'] as String?,
+            conservacaoOriginal: EstadoConservacao.de(
+              p['conservacao'] as String?,
+            ),
             ignorado: p['ignorado'] as bool? ?? false,
           ),
       ],

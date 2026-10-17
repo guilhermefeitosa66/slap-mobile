@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/codigo.dart';
 import '../domain/valores.dart';
 import 'schema.dart';
 
@@ -91,6 +92,16 @@ class Banco {
       argumentCount: const AllowedArgumentCount(1),
       deterministic: true,
       function: (argumentos) => formaComparavel(argumentos[0]?.toString()),
+    );
+
+    // A chave de busca de tombo e código de barras, no SQL. Existe para a
+    // migração que recalcula as chaves gravadas (esquema v6): ela roda dentro
+    // do banco, sem trazer dezenas de milhares de linhas para o Dart.
+    db.createFunction(
+      functionName: 'chave_busca',
+      argumentCount: const AllowedArgumentCount(1),
+      deterministic: true,
+      function: (argumentos) => chaveBusca(argumentos[0]?.toString()),
     );
   }
 

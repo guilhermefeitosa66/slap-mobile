@@ -469,6 +469,26 @@ class _PassoElementos extends StatelessWidget {
                             color: Theme.of(context).colorScheme.error,
                           ),
                         ),
+                      if (previa.tombosPeloNumero > 0)
+                        Text(
+                          '${previa.tombosPeloNumero} sem tombo na planilha '
+                          'receberam o do SUAP: número + 42535.',
+                        ),
+                      if (previa.foraDaRegraDoSuap.isNotEmpty)
+                        Text(
+                          '${previa.foraDaRegraDoSuap.length} com tombo que '
+                          'não é número + 42535, a regra do SUAP. Confira se '
+                          'as colunas de tombo e de número estão certas.',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      if (previa.estadosNaoReconhecidos > 0)
+                        Text(
+                          '${previa.estadosNaoReconhecidos} com estado de '
+                          'conservação fora do vocabulário do SUAP; entram '
+                          'sem estado de origem.',
+                        ),
                     ],
                   ),
                 ),

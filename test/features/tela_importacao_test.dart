@@ -88,8 +88,10 @@ void main() {
     final linhas = [
       'Relatório de bens;;;;;',
       'Nº;Tombo;Código de Barras;ED;Descrição;Sala',
+      // Pela regra do SUAP, tombo = numero + 42535: as plaquetas antigas
+      // 23101 a 23112 são os bens -19434 a -19423.
       for (var i = 1; i <= 12; i++)
-        '$i;${(23100 + i).toString().padLeft(6, '0')};-${887100 + i};'
+        '$i;${(23100 + i).toString().padLeft(6, '0')};${23100 + i - 42535};'
             '${i <= 9 ? '44905242' : '44905218'};'
             '${i <= 9 ? 'CADEIRA $i' : 'LIVRO $i'};Biblioteca',
     ];
@@ -187,16 +189,27 @@ void main() {
       ).porId(inventario.id)!.edsExcluidos,
       ['44905218'],
     );
+    ResultadoLeitura ler(String codigo) => repo
+        .procurar(
+          inventarioId: inventario.id,
+          codigo: codigo,
+          modo: ModoLeitura.codigoBarras,
+        )
+        .resultado;
     expect(
-      repo
-          .procurar(
-            inventarioId: inventario.id,
-            codigo: '887101',
-            modo: ModoLeitura.codigoBarras,
-          )
-          .resultado,
+      ler('-19434'),
       ResultadoLeitura.sucesso,
-      reason: 'o código negativo do SUAP fica encontrável',
+      reason: 'o número negativo do SUAP fica encontrável',
+    );
+    expect(
+      ler('23101'),
+      ResultadoLeitura.sucesso,
+      reason: 'a plaqueta antiga, pelo tombo',
+    );
+    expect(
+      ler('19434'),
+      ResultadoLeitura.naoLocalizado,
+      reason: 'sem o sinal é outro bem do SUAP, que não está aqui',
     );
   });
 

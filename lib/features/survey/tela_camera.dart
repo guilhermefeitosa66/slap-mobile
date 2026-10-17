@@ -125,6 +125,13 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
         som = Som.naoLocalizado;
         registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
 
+      case ResultadoLeitura.ambiguo:
+        // Como no "já verificado", a câmera não para para perguntar. Nada é
+        // gravado; o item fica marcado na lista, e a escolha se faz digitando
+        // o número no levantamento.
+        som = Som.jaVerificado;
+        registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
+
       case ResultadoLeitura.jaVerificado:
         // Pela câmera não se pede confirmação: interromper o fluxo com um
         // diálogo derrubaria o ritmo. O item aparece marcado na lista, e a
@@ -206,7 +213,8 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
                   vertical: 9,
                 ),
                 child: Text(
-                  '${config.sala} · ${config.conservacao.rotulo} · '
+                  '${config.sala} · '
+                  '${config.conservacao?.rotulo ?? 'estado do SUAP'} · '
                   '${config.situacao.rotulo}',
                   style: TextStyle(color: apoio.sobreFaixa, fontSize: 13),
                   maxLines: 1,

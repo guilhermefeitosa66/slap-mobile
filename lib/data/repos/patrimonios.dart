@@ -23,6 +23,13 @@ enum ResultadoLeitura {
 
   /// Nenhum patrimônio do inventário corresponde ao código.
   naoLocalizado,
+
+  /// O código é o número de um bem e o tombo de outro — no SUAP, a plaqueta
+  /// nova de um e a plaqueta antiga do outro. Nada é gravado: escolher por
+  /// conta própria registraria o bem errado em silêncio, e o erro só
+  /// apareceria quando os dois fossem atualizados no SUAP. Os dois vão em
+  /// [Leitura.candidatos] para a pessoa decidir.
+  ambiguo,
 }
 
 /// O que aconteceu com uma leitura.
@@ -42,12 +49,28 @@ class Leitura {
   /// com `.first` e não avisa ninguém.
   final int duplicados;
 
+  /// Os bens entre os quais escolher, quando o resultado é
+  /// [ResultadoLeitura.ambiguo]: primeiro os do campo do modo de leitura,
+  /// depois os do outro campo.
+  final List<Patrimonio> candidatos;
+
   const Leitura({
     required this.resultado,
     this.patrimonio,
     this.achadoNoOutroCampo = false,
     this.duplicados = 0,
+    this.candidatos = const [],
   });
+
+  /// A leitura de um bem escolhido entre os [candidatos] de uma leitura
+  /// ambígua. Daqui em diante segue como uma leitura comum: grava se ainda não
+  /// foi verificado, pede confirmação se já foi.
+  factory Leitura.escolhida(Patrimonio p) => Leitura(
+    resultado: p.verificado
+        ? ResultadoLeitura.jaVerificado
+        : ResultadoLeitura.sucesso,
+    patrimonio: p,
+  );
 
   bool get temDuplicados => duplicados > 1;
 }
@@ -67,7 +90,10 @@ enum ModoLeitura {
 /// na sala e cada leitura seguinte não exige nenhum toque na tela.
 class ConfiguracaoLevantamento {
   final String sala;
-  final EstadoConservacao conservacao;
+
+  /// Estado novo. `null` mantém o do SUAP, como o responsável: a leitura
+  /// confirma o cadastro em vez de reescrever o estado de cada bem da sala.
+  final EstadoConservacao? conservacao;
   final SituacaoUso situacao;
 
   /// Responsável novo. `null` mantém o do SUAP, reproduzindo a regra do
@@ -80,7 +106,7 @@ class ConfiguracaoLevantamento {
 
   const ConfiguracaoLevantamento({
     required this.sala,
-    this.conservacao = EstadoConservacao.bom,
+    this.conservacao,
     this.situacao = SituacaoUso.ativo,
     this.responsavel,
     this.desde,
@@ -89,6 +115,7 @@ class ConfiguracaoLevantamento {
   ConfiguracaoLevantamento copyWith({
     String? sala,
     EstadoConservacao? conservacao,
+    bool limparConservacao = false,
     SituacaoUso? situacao,
     String? responsavel,
     bool limparResponsavel = false,
@@ -96,7 +123,7 @@ class ConfiguracaoLevantamento {
   }) {
     return ConfiguracaoLevantamento(
       sala: sala ?? this.sala,
-      conservacao: conservacao ?? this.conservacao,
+      conservacao: limparConservacao ? null : (conservacao ?? this.conservacao),
       situacao: situacao ?? this.situacao,
       responsavel: limparResponsavel ? null : (responsavel ?? this.responsavel),
       desde: desde ?? this.desde,
@@ -105,7 +132,7 @@ class ConfiguracaoLevantamento {
 
   Map<String, dynamic> toJson() => {
     'sala': sala,
-    'conservacao': conservacao.valor,
+    'conservacao': conservacao?.valor,
     'situacao': situacao.valor,
     'responsavel': responsavel,
     'desde': desde?.millisecondsSinceEpoch,
@@ -120,9 +147,12 @@ class ConfiguracaoLevantamento {
     final desde = j['desde'];
     return ConfiguracaoLevantamento(
       sala: sala,
-      conservacao:
-          EstadoConservacao.de(j['conservacao'] as String?) ??
-          EstadoConservacao.bom,
+      // Valor do vocabulário antigo, gravado por uma versão anterior, não se
+      // escolhe mais: a configuração volta a manter o estado do SUAP.
+      conservacao: switch (EstadoConservacao.de(j['conservacao'] as String?)) {
+        final e? when !e.legado => e,
+        _ => null,
+      },
       situacao: SituacaoUso.de(j['situacao'] as String?) ?? SituacaoUso.ativo,
       responsavel: j['responsavel'] as String?,
       desde: desde is num
@@ -142,6 +172,9 @@ class PatrimonioImportado {
   final String? sala;
   final String? valor;
 
+  /// Estado de conservação que o SUAP registra para o bem.
+  final EstadoConservacao? conservacao;
+
   const PatrimonioImportado({
     required this.tombo,
     this.codigoBarras,
@@ -150,6 +183,7 @@ class PatrimonioImportado {
     this.responsavel,
     this.sala,
     this.valor,
+    this.conservacao,
   });
 }
 
@@ -157,13 +191,15 @@ class PatrimonioImportado {
 ///
 /// É a regra de [divergenciasDe], escrita para o banco: sala e responsável
 /// comparados pela forma comparável (a função `forma_comparavel` que o
-/// [Banco] registra). Um teste confere que as duas dão sempre o mesmo
-/// resultado.
+/// [Banco] registra), e o estado de conservação quando o SUAP tem um. Um
+/// teste confere que as duas dão sempre o mesmo resultado.
 const sqlDivergente =
     '(forma_comparavel(sala_original) <> '
     'forma_comparavel(COALESCE(sala_atual, sala_original)) '
     'OR forma_comparavel(responsavel_original) <> '
-    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)))';
+    'forma_comparavel(COALESCE(responsavel_atual, responsavel_original)) '
+    'OR (conservacao_original IS NOT NULL AND conservacao IS NOT NULL '
+    'AND conservacao <> conservacao_original))';
 
 class RepositorioPatrimonios {
   /// De quantos em quantos itens a importação informa o progresso.
@@ -180,9 +216,19 @@ class RepositorioPatrimonios {
 
   /// Procura um patrimônio pelo código lido.
   ///
-  /// Tenta primeiro o campo do modo selecionado e, se não achar, tenta o
-  /// outro. Nenhuma chamada de rede participa disso: é acesso por índice no
-  /// banco local, que é o que mantém o ritmo do levantamento.
+  /// Procura nos dois campos — tombo e código de barras (o `NUMERO` do SUAP)
+  /// — e o modo selecionado diz qual vem primeiro. Achado só no outro campo,
+  /// o item é registrado com o aviso de cadastro inconsistente.
+  ///
+  /// Achado nos dois campos, mas em **bens diferentes**, a leitura é
+  /// [ResultadoLeitura.ambiguo] e nada é gravado. No SUAP isso é comum e não
+  /// é erro de cadastro: como `tombo = numero + 42535`, a plaqueta antiga
+  /// 23254 (bem `-19281`) e a plaqueta nova 23254 (bem `23254`, tombo 65789)
+  /// convivem. O modo de leitura não basta para decidir — o padrão é código
+  /// de barras, e quase ninguém o troca ao passar de uma plaqueta para outra.
+  ///
+  /// Nenhuma chamada de rede participa disso: é acesso por índice no banco
+  /// local, que é o que mantém o ritmo do levantamento.
   Leitura procurar({
     required String inventarioId,
     required String codigo,
@@ -200,13 +246,26 @@ class RepositorioPatrimonios {
         ? 'codigo_barras_chave'
         : 'tombo_chave';
 
-    var linhas = _buscarPor(inventarioId, primeiro, chave);
-    var cruzado = false;
+    final noModo = _buscarPor(inventarioId, primeiro, chave);
+    final idsNoModo = {for (final r in noModo) r['id'] as String};
+    // O mesmo bem achado pelos dois campos (tombo igual ao número) não é
+    // ambiguidade: é um bem só.
+    final noOutro = [
+      for (final r in _buscarPor(inventarioId, segundo, chave))
+        if (!idsNoModo.contains(r['id'])) r,
+    ];
 
-    if (linhas.isEmpty) {
-      linhas = _buscarPor(inventarioId, segundo, chave);
-      cruzado = linhas.isNotEmpty;
+    if (noModo.isNotEmpty && noOutro.isNotEmpty) {
+      return Leitura(
+        resultado: ResultadoLeitura.ambiguo,
+        candidatos: [
+          for (final r in [...noModo, ...noOutro]) _daLinha(r),
+        ],
+      );
     }
+
+    final linhas = noModo.isNotEmpty ? noModo : noOutro;
+    final cruzado = noModo.isEmpty && noOutro.isNotEmpty;
 
     if (linhas.isEmpty) {
       return const Leitura(resultado: ResultadoLeitura.naoLocalizado);
@@ -257,8 +316,9 @@ class RepositorioPatrimonios {
     if (!mesmoTexto(patrimonio.salaAtual, config.sala)) {
       campos[CampoPatrimonio.salaAtual] = config.sala;
     }
-    if (patrimonio.conservacao != config.conservacao) {
-      campos[CampoPatrimonio.conservacao] = config.conservacao.valor;
+    // Estado sem escolha significa "manter o do SUAP", como o responsável.
+    if (config.conservacao case final c? when patrimonio.conservacao != c) {
+      campos[CampoPatrimonio.conservacao] = c.valor;
     }
     if (patrimonio.situacao != config.situacao) {
       campos[CampoPatrimonio.situacao] = config.situacao.valor;
@@ -300,14 +360,14 @@ class RepositorioPatrimonios {
   /// Num item já verificado, quem o encontrou permanece; a edição fica no
   /// histórico, com o seu autor.
   ///
-  /// [sala] e [responsavel] em branco valem `null`: o valor da planilha
-  /// permanece, como na regra do SLAP para o responsável. Devolve o item como
-  /// ficou.
+  /// [sala] e [responsavel] em branco, e [conservacao] `null`, mantêm o valor
+  /// da planilha, como na regra do SLAP para o responsável. Devolve o item
+  /// como ficou.
   Patrimonio alterarLevantamento({
     required Patrimonio patrimonio,
     required String? sala,
     required String? responsavel,
-    required EstadoConservacao conservacao,
+    required EstadoConservacao? conservacao,
     required SituacaoUso situacao,
     String? usuarioNome,
     String? usuarioMatricula,
@@ -329,7 +389,7 @@ class RepositorioPatrimonios {
       campos[CampoPatrimonio.responsavelAtual] = responsavelNovo;
     }
     if (patrimonio.conservacao != conservacao) {
-      campos[CampoPatrimonio.conservacao] = conservacao.valor;
+      campos[CampoPatrimonio.conservacao] = conservacao?.valor;
     }
     if (patrimonio.situacao != situacao) {
       campos[CampoPatrimonio.situacao] = situacao.valor;
@@ -396,8 +456,8 @@ class RepositorioPatrimonios {
       final stmt = _db.prepare(
         'INSERT INTO patrimonios (id, inventario_id, tombo, codigo_barras, '
         'ed, descricao, responsavel_original, sala_original, valor, '
-        'tombo_chave, codigo_barras_chave) '
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+        'conservacao_original, tombo_chave, codigo_barras_chave) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -413,6 +473,7 @@ class RepositorioPatrimonios {
             i.responsavel,
             i.sala,
             i.valor,
+            i.conservacao?.valor,
             chaveBusca(i.tombo),
             i.codigoBarras == null ? null : chaveBusca(i.codigoBarras),
           ]);
@@ -444,8 +505,9 @@ class RepositorioPatrimonios {
       final stmt = _db.prepare(
         'INSERT OR IGNORE INTO patrimonios (id, inventario_id, tombo, '
         'codigo_barras, ed, descricao, responsavel_original, sala_original, '
-        'valor, tombo_chave, codigo_barras_chave, ignorado) '
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+        'valor, conservacao_original, tombo_chave, codigo_barras_chave, '
+        'ignorado) '
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
       );
 
       try {
@@ -460,6 +522,7 @@ class RepositorioPatrimonios {
             p.responsavelOriginal,
             p.salaOriginal,
             p.valor,
+            p.conservacaoOriginal?.valor,
             chaveBusca(p.tombo),
             p.codigoBarras == null ? null : chaveBusca(p.codigoBarras),
             p.ignorado ? 1 : 0,
@@ -568,8 +631,10 @@ class RepositorioPatrimonios {
     porTexto(_responsavelEfetivo, campos.responsavelAtual);
     porTexto('verificado_por', campos.verificadoPor);
 
+    // Estado efetivo: o encontrado ou, mantido, o do SUAP — como a sala e o
+    // responsável atuais.
     if (campos.conservacao case final c?) {
-      condicoes.add('conservacao = ?');
+      condicoes.add('COALESCE(conservacao, conservacao_original) = ?');
       parametros.add(c.valor);
     }
     if (campos.situacao case final s?) {
@@ -592,14 +657,17 @@ class RepositorioPatrimonios {
         parametros.add('%${_semCuringas(texto)}%');
       }
       // Tombo e código pelo começo. Chave vazia — busca só de símbolos —
-      // casaria com tudo, e fica de fora.
+      // casaria com tudo, e fica de fora. Aqui, que é só consulta, "19281"
+      // acha também "-19281": a lista mostra os dois, cada um com seu tombo, e
+      // quem procura escolhe. Na leitura o sinal decide (ver [procurar]).
       if (chave.isNotEmpty) {
-        alternativas
-          ..add("tombo_chave LIKE ? ESCAPE '\\'")
-          ..add("codigo_barras_chave LIKE ? ESCAPE '\\'");
-        parametros
-          ..add('${_semCuringas(chave)}%')
-          ..add('${_semCuringas(chave)}%');
+        final prefixos = [chave, if (!chave.startsWith('-')) '-$chave'];
+        for (final coluna in ['tombo_chave', 'codigo_barras_chave']) {
+          for (final prefixo in prefixos) {
+            alternativas.add("$coluna LIKE ? ESCAPE '\\'");
+            parametros.add('${_semCuringas(prefixo)}%');
+          }
+        }
       }
 
       condicoes.add(
@@ -802,6 +870,9 @@ class RepositorioPatrimonios {
     responsavelOriginal: r['responsavel_original'] as String?,
     salaOriginal: r['sala_original'] as String?,
     valor: r['valor'] as String?,
+    conservacaoOriginal: EstadoConservacao.de(
+      r['conservacao_original'] as String?,
+    ),
     ignorado: (r['ignorado'] as int) == 1,
 
     verificado: (r['verificado'] as int) == 1,

@@ -254,7 +254,7 @@ void main() {
         patrimonio: noB,
         config: const ConfiguracaoLevantamento(
           sala: 'Auditório',
-          conservacao: EstadoConservacao.ruim,
+          conservacao: EstadoConservacao.recuperavel,
         ),
         usuarioNome: 'Bruno',
       );
@@ -266,7 +266,7 @@ void main() {
       expect(resultado.responsavelAtual, 'Pedro');
       expect(
         resultado.conservacao,
-        EstadoConservacao.ruim,
+        EstadoConservacao.recuperavel,
         reason: 'as duas alterações sobrevivem',
       );
     });

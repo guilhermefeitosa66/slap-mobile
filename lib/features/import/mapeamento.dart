@@ -2,11 +2,11 @@ import '../../core/codigo.dart';
 
 /// Campo do patrimônio que uma coluna da planilha alimenta.
 ///
-/// Só o que vem do SUAP. Estado de conservação e situação de uso são
-/// levantados em campo, nunca importados: a exportação real traz uma coluna
-/// `ESTADO DE CONSERVAÇÃO` e uma `STATUS`, mas com outro vocabulário (Bom /
-/// Antieconômico / Recuperável; Ativo / Baixado / Pendente), e o valor que
-/// vale é o que a comissão encontra na sala.
+/// Só o que vem do SUAP. O estado de conservação entra porque o levantamento
+/// usa o mesmo vocabulário do SUAP (Bom, Ocioso, Recuperável, Antieconômico,
+/// Irreversível): é a base com que o estado encontrado se compara. `STATUS`
+/// (Ativo / Baixado / Pendente) não entra — é situação cadastral, não algo
+/// que se confere na sala —, e situação de uso é só levantada em campo.
 ///
 /// Na ordem da planilha do SLAP (`COD. BARRAS`, `TOMBO`, `ED`, `DESCRIÇÃO`,
 /// `RESPONSAVEL ATUAL`, `SALA ATUAL`, `VALOR`), que é a que a tela "Confira as
@@ -19,7 +19,8 @@ enum CampoImportacao {
   descricao('Descrição'),
   responsavel('Responsável'),
   sala('Sala'),
-  valor('Valor');
+  valor('Valor'),
+  conservacao('Estado de conservação');
 
   final String rotulo;
 
@@ -135,6 +136,13 @@ const Map<CampoImportacao, List<String>> sinonimos = {
     'localdoitem',
     'unidade',
     'lotacao',
+  ],
+  CampoImportacao.conservacao: [
+    'estadodeconservacao',
+    'estadoconservacao',
+    'conservacao',
+    'estadodobem',
+    'estadofisico',
   ],
   CampoImportacao.valor: [
     'valor',

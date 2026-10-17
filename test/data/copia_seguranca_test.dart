@@ -191,14 +191,12 @@ void main() {
 
   test('cópia feita antes da versão 4 do esquema continua restaurável', () {
     // Até a versão 3, `patrimonios` tinha `conservacao_original` e
-    // `situacao_original`. Uma cópia guardada naquela época tem as colunas a
-    // mais, e a restauração não pode tropeçar nelas.
+    // `situacao_original`, no vocabulário antigo. Uma cópia guardada naquela
+    // época tem as colunas a mais, e a restauração não pode tropeçar nelas —
+    // nem ler como estado do SUAP o que era do esquema antigo.
     verificar(a, 'item-1', 'Auditório');
     CopiaDeSeguranca.exportar(a.banco, arquivo('antiga'));
     final antiga = sqlite3.open(arquivo('antiga'));
-    antiga.execute(
-      'ALTER TABLE patrimonios ADD COLUMN conservacao_original TEXT',
-    );
     antiga.execute('ALTER TABLE patrimonios ADD COLUMN situacao_original TEXT');
     antiga.execute(
       "UPDATE patrimonios SET conservacao_original = 'bom', "
@@ -213,6 +211,28 @@ void main() {
     expect(resultado.inventariosNovos, 1);
     expect(estado(novo), estado(a));
     expect(novo.patrimonios.porId('item-2')!.salaOriginal, 'Sala 2');
+    expect(novo.patrimonios.porId('item-2')!.conservacaoOriginal, isNull);
+  });
+
+  test('cópia anterior à versão 6 volta com as chaves de busca com sinal', () {
+    CopiaDeSeguranca.exportar(a.banco, arquivo('v5'));
+    final antiga = sqlite3.open(arquivo('v5'));
+    // Como uma cópia da versão 5 guardava: chave sem sinal.
+    antiga.execute(
+      "UPDATE patrimonios SET codigo_barras = '-19281', "
+      "codigo_barras_chave = '19281' WHERE id = 'item-2'",
+    );
+    antiga.execute('PRAGMA user_version = 5');
+    antiga.close();
+
+    final novo = Aparelho('Novo');
+    addTearDown(novo.fechar);
+    CopiaDeSeguranca.restaurar(novo.banco, arquivo('v5'));
+
+    final linha = novo.banco.db.select(
+      "SELECT codigo_barras_chave FROM patrimonios WHERE id = 'item-2'",
+    );
+    expect(linha.single['codigo_barras_chave'], '-19281');
   });
 
   test('restaurar no próprio aparelho devolve o que foi apagado', () {

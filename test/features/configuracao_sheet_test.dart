@@ -5,6 +5,7 @@ import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
+import 'package:slap_mobile/domain/valores.dart';
 import 'package:slap_mobile/features/survey/configuracao_sheet.dart';
 import 'package:slap_mobile/features/survey/estado_levantamento.dart';
 
@@ -106,6 +107,10 @@ void main() {
       'Carla Menezes',
     );
 
+    // A folha rola: com os estados do SUAP, o responsável fica abaixo da
+    // dobra numa tela baixa.
+    await tester.ensureVisible(find.byTooltip('Limpar o responsável'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Limpar o responsável'));
     await tester.pumpAndSettle();
     await aplicar(tester);
@@ -113,6 +118,34 @@ void main() {
     final config = c.read(configuracaoProvider(inventario.id))!;
     expect(config.sala, 'Auditório');
     expect(config.responsavel, isNull);
+  });
+
+  testWidgets('o estado parte de "manter o do SUAP" e usa o vocabulário dele', (
+    tester,
+  ) async {
+    final c = await abrir(tester);
+    await tester.enterText(campo('Sala onde você está'), 'Auditório');
+
+    final manter = find.widgetWithText(ChoiceChip, 'Manter o do SUAP');
+    expect(tester.widget<ChoiceChip>(manter).selected, isTrue);
+    for (final e in EstadoConservacao.selecionaveis) {
+      expect(find.widgetWithText(ChoiceChip, e.rotulo), findsOneWidget);
+    }
+    expect(find.text('Regular (antigo)'), findsNothing);
+    expect(find.text('Ruim (antigo)'), findsNothing);
+
+    await aplicar(tester);
+    expect(c.read(configuracaoProvider(inventario.id))!.conservacao, isNull);
+
+    await tester.tap(find.text('Configurar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Antieconômico'));
+    await tester.pumpAndSettle();
+    await aplicar(tester);
+    expect(
+      c.read(configuracaoProvider(inventario.id))!.conservacao,
+      EstadoConservacao.antieconomico,
+    );
   });
 
   testWidgets('só espaços também é em branco', (tester) async {

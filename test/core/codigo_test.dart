@@ -3,12 +3,20 @@ import 'package:slap_mobile/core/codigo.dart';
 
 void main() {
   group('chaveBusca', () {
-    test('o código negativo da base real casa com a leitura positiva', () {
-      // A planilha do SUAP exporta códigos de barras negativos. No SLAP, ler
-      // 19281 no leitor não encontra o item gravado como -19281, e o
-      // patrimônio aparece como não localizado mesmo estando na base.
-      expect(chaveBusca('-19281'), chaveBusca('19281'));
-      expect(chaveBusca('-17033'), '17033');
+    test('o sinal negativo do SUAP separa dois bens', () {
+      // No SUAP, tombo = numero + 42535. O bem -19281 é a plaqueta antiga
+      // 23254; o bem 19281 é outro, de tombo 61816. Até a versão 1.2.4 os
+      // dois tinham a mesma chave, e ler um registrava o outro.
+      expect(chaveBusca('-19281'), '-19281');
+      expect(chaveBusca('-19281'), isNot(chaveBusca('19281')));
+      expect(chaveBusca('-017033'), '-17033');
+      expect(chaveBusca(' - 17033'), '-17033');
+      expect(chaveBusca('+17033'), '17033');
+    });
+
+    test('zero não tem sinal', () {
+      expect(chaveBusca('-0'), '0');
+      expect(chaveBusca('-000'), '0');
     });
 
     test('zeros à esquerda não impedem o encontro', () {
@@ -27,7 +35,7 @@ void main() {
       // código diferente, que não existe em lugar nenhum.
       expect(chaveBusca('19281.0'), '19281');
       expect(chaveBusca('19281.00'), '19281');
-      expect(chaveBusca('-19281.0'), '19281');
+      expect(chaveBusca('-19281.0'), '-19281');
     });
 
     test('preserva dígitos internos e letras', () {
@@ -57,13 +65,34 @@ void main() {
 
   group('mesmoCodigo', () {
     test('reconhece as variações da base real', () {
-      expect(mesmoCodigo('-19281', '19281'), isTrue);
+      expect(mesmoCodigo('-019281', '-19281'), isTrue);
       expect(mesmoCodigo('019281', '19281'), isTrue);
+    });
+
+    test('a plaqueta antiga e o bem novo com os mesmos dígitos são outros', () {
+      expect(mesmoCodigo('-19281', '19281'), isFalse);
     });
 
     test('código vazio não casa com nada, nem com outro vazio', () {
       expect(mesmoCodigo('', ''), isFalse);
       expect(mesmoCodigo(null, '123'), isFalse);
+    });
+  });
+
+  group('tomboPeloNumero', () {
+    test('segue a regra do SUAP: tombo = numero + 42535', () {
+      // Os pares da planilha de exemplo do SLAP e do cadastro do SUAP.
+      expect(tomboPeloNumero('-19281'), '23254');
+      expect(tomboPeloNumero('-17033'), '25502');
+      expect(tomboPeloNumero('-17025'), '25510');
+      expect(tomboPeloNumero('19281'), '61816');
+      expect(tomboPeloNumero('-19281.0'), '23254');
+    });
+
+    test('sem número, sem tombo', () {
+      expect(tomboPeloNumero(null), isNull);
+      expect(tomboPeloNumero('-'), isNull);
+      expect(tomboPeloNumero('ABC'), isNull);
     });
   });
 

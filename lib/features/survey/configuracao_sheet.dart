@@ -8,6 +8,7 @@ import '../../data/repos/patrimonios.dart';
 import '../../domain/valores.dart';
 import 'campo_com_sugestoes.dart';
 import 'estado_levantamento.dart';
+import 'seletor_conservacao.dart';
 
 /// Abre a configuração que será aplicada às próximas leituras.
 ///
@@ -55,8 +56,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
   late final TextEditingController _sala = TextEditingController(
     text: widget.inicial?.sala ?? '',
   );
-  late EstadoConservacao _conservacao =
-      widget.inicial?.conservacao ?? EstadoConservacao.bom;
+  late EstadoConservacao? _conservacao = widget.inicial?.conservacao;
   late SituacaoUso _situacao = widget.inicial?.situacao ?? SituacaoUso.ativo;
   late final TextEditingController _responsavel = TextEditingController(
     text: widget.inicial?.responsavel ?? '',
@@ -133,15 +133,15 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
 
             const _Rotulo('Estado de conservação'),
             const SizedBox(height: 8),
-            SegmentedButton<EstadoConservacao>(
-              showSelectedIcon: false,
-              expandedInsets: EdgeInsets.zero,
-              segments: [
-                for (final e in EstadoConservacao.values)
-                  ButtonSegment(value: e, label: Text(e.rotulo)),
-              ],
-              selected: {_conservacao},
-              onSelectionChanged: (s) => setState(() => _conservacao = s.first),
+            SeletorConservacao(
+              valor: _conservacao,
+              aoEscolher: (e) => setState(() => _conservacao = e),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Mantido, cada item fica com o estado que o SUAP registra. '
+              'Escolha um só se todos os itens daqui estiverem nesse estado.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
 
@@ -213,7 +213,8 @@ class BarraConfiguracao extends StatelessWidget {
   Widget build(BuildContext context) {
     final apoio = CoresApoio.of(context);
     final detalhe =
-        '${config.conservacao.rotulo} · ${config.situacao.rotulo} · '
+        '${config.conservacao?.rotulo ?? 'estado do SUAP'} · '
+        '${config.situacao.rotulo} · '
         '${config.responsavel ?? 'responsável não alterado'}';
 
     return Semantics(

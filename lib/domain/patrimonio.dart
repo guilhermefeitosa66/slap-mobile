@@ -19,8 +19,9 @@ class Patrimonio {
   /// significativos e um inteiro os perderia.
   final String tombo;
 
-  /// Código de barras. Campo **independente** do tombo: em bens antigos os
-  /// dois divergem, e a base real tem códigos negativos.
+  /// Código de barras — o `NUMERO` do SUAP. No SUAP, `tombo = numero +
+  /// 42535`; nos bens de plaqueta antiga o número é negativo, e o sinal faz
+  /// parte dele (ver `chaveBusca`).
   final String? codigoBarras;
 
   /// Elemento de despesa. Usado para excluir categorias do inventário.
@@ -31,10 +32,12 @@ class Patrimonio {
   final String? salaOriginal;
   final String? valor;
 
-  // Estado de conservação e situação de uso não têm versão "original": são
-  // levantados em campo e nunca vêm da planilha. Sem valor anterior não há
-  // divergência possível nesses campos — só a marca de atenção de
-  // [exigeAtencao], que não depende de base.
+  /// Estado de conservação registrado no SUAP, quando a planilha o traz.
+  ///
+  /// Mesmo vocabulário do levantamento, por isso comparável: é a base da
+  /// divergência de estado. Situação de uso não tem versão original — o SUAP
+  /// não tem esse campo.
+  final EstadoConservacao? conservacaoOriginal;
 
   /// Item cujo ED foi excluído do inventário. Fica fora dos relatórios e fora
   /// do denominador do progresso — não é pendência de ninguém.
@@ -62,6 +65,7 @@ class Patrimonio {
     this.responsavelOriginal,
     this.salaOriginal,
     this.valor,
+    this.conservacaoOriginal,
     this.ignorado = false,
     this.verificado = false,
     this.salaAtual,
@@ -83,10 +87,18 @@ class Patrimonio {
   /// significa manter o original, não esvaziar o campo.
   String? get responsavelEfetivo => responsavelAtual ?? responsavelOriginal;
 
+  /// Estado que vale hoje: o encontrado, ou o do SUAP se o levantamento o
+  /// manteve. Mesma regra da sala e do responsável.
+  EstadoConservacao? get conservacaoEfetiva =>
+      conservacao ?? conservacaoOriginal;
+
   /// Item que precisa de providência independentemente de haver valor anterior
-  /// para comparar: bem em mau estado ou inservível.
+  /// para comparar: bem inservível. Num item encontrado vale o estado efetivo
+  /// — o inservível que já era inservível no SUAP continua pedindo baixa.
   bool get exigeAtencao =>
-      (conservacao?.exigeAtencao ?? false) || (situacao?.exigeAtencao ?? false);
+      ((verificado ? conservacaoEfetiva : conservacao)?.exigeAtencao ??
+          false) ||
+      (situacao?.exigeAtencao ?? false);
 
   Patrimonio copyWith({
     bool? verificado,
@@ -110,6 +122,7 @@ class Patrimonio {
       responsavelOriginal: responsavelOriginal,
       salaOriginal: salaOriginal,
       valor: valor,
+      conservacaoOriginal: conservacaoOriginal,
       ignorado: ignorado ?? this.ignorado,
 
       verificado: verificado ?? this.verificado,

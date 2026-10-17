@@ -3,12 +3,13 @@ import 'valores.dart';
 
 /// Campo em que o inventário encontrou valor diferente do cadastro do SUAP.
 ///
-/// Só sala e responsável: são os únicos campos do levantamento que também
-/// vêm na planilha. Estado de conservação e situação de uso não têm valor
-/// anterior com que comparar.
+/// Sala, responsável e estado de conservação: os campos do levantamento que
+/// também vêm na planilha do SUAP. Situação de uso não tem valor anterior com
+/// que comparar — o SUAP não tem esse campo.
 enum CampoDivergente {
   sala('Sala'),
-  responsavel('Responsável');
+  responsavel('Responsável'),
+  conservacao('Estado de conservação');
 
   final String rotulo;
   const CampoDivergente(this.rotulo);
@@ -47,14 +48,12 @@ enum Classificacao {
 /// Só faz sentido para item verificado: um item não encontrado não tem valor
 /// levantado com que comparar.
 ///
-/// Estado de conservação e situação de uso ficam de fora de propósito. Eles
-/// nunca vêm da planilha — a exportação do SUAP traz uma coluna com esse nome,
-/// mas com outro vocabulário, e a importação a ignora —, então não existe
-/// valor anterior: o levantado é informação nova, não divergência. Inventar
-/// uma divergência aí encheria o relatório de linhas em que a coluna "valor
-/// SUAP" viria vazia, sem nada para conferir. O que precisa de providência
-/// nesses campos (`ruim`, `inserv.`) sai pela marca de atenção de
-/// [Patrimonio.exigeAtencao], que não depende de base.
+/// O estado de conservação só diverge quando o SUAP tem estado para o item:
+/// sem valor anterior, o levantado é informação nova, e inventar uma
+/// divergência aí encheria o relatório de linhas em que a coluna "valor SUAP"
+/// viria vazia. Situação de uso fica de fora pelo mesmo motivo — o SUAP não a
+/// registra. O que precisa de providência nesses campos sai pela marca de
+/// atenção de [Patrimonio.exigeAtencao], que não depende de base.
 List<Divergencia> divergenciasDe(Patrimonio p) {
   if (!p.verificado || p.ignorado) return const [];
 
@@ -72,6 +71,17 @@ List<Divergencia> divergenciasDe(Patrimonio p) {
         CampoDivergente.responsavel,
         p.responsavelOriginal,
         p.responsavelEfetivo,
+      ),
+    );
+  }
+
+  final original = p.conservacaoOriginal;
+  if (original != null && p.conservacaoEfetiva != original) {
+    divergencias.add(
+      Divergencia(
+        CampoDivergente.conservacao,
+        original.rotulo,
+        p.conservacaoEfetiva?.rotulo,
       ),
     );
   }

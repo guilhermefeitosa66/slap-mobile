@@ -22,7 +22,12 @@ class LinhaLeitura extends StatelessWidget {
     final tema = Theme.of(context);
     final p = registro.patrimonio;
 
-    final detalhe = p == null
+    final candidatos = registro.leitura.candidatos;
+    final detalhe = registro.resultado == ResultadoLeitura.ambiguo
+        ? 'É de ${candidatos.length} bens: '
+              '${candidatos.map((c) => 'tombo ${c.tombo}').join(', ')}. '
+              'Nada foi gravado.'
+        : p == null
         ? 'Não localizado neste inventário'
         : 'Tombo ${p.tombo} · $rotulo'
               '${p.verificadoPor == null ? '' : ' por ${p.verificadoPor}'}';
@@ -52,7 +57,9 @@ class LinhaLeitura extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    p?.descricao ?? 'Código ${registro.codigoLido}',
+                    registro.resultado == ResultadoLeitura.ambiguo
+                        ? 'Código ${registro.codigoLido}'
+                        : p?.descricao ?? 'Código ${registro.codigoLido}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: tema.textTheme.bodyMedium?.copyWith(
@@ -99,6 +106,10 @@ String anuncioDaLeitura(LeituraRegistrada registro) {
           '${p?.descricao ?? ''}. Manter ou regravar?',
     ResultadoLeitura.naoLocalizado =>
       'Não localizado. Código ${registro.codigoLido}.',
+    ResultadoLeitura.ambiguo =>
+      'Código ${registro.codigoLido} é de '
+          '${registro.leitura.candidatos.length} bens. Nada foi gravado. '
+          'Escolha qual.',
   };
 }
 
