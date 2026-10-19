@@ -122,6 +122,7 @@ Future<Inventario> duplicarEstrutura({
         responsavel: p.responsavelOriginal,
         sala: p.salaOriginal,
         valor: p.valor,
+        conservacao: p.conservacaoOriginal,
       ),
   ];
 

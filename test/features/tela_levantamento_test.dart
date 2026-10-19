@@ -90,6 +90,17 @@ void main() {
 
   int operacoes() => ops.vetorDe(inventario.id)[banco.dispositivoId];
 
+  testWidgets('o teclado da digitação tem o sinal de menos', (tester) async {
+    // O número das plaquetas antigas no SUAP é negativo (-19281). O teclado
+    // numérico simples do Android não tem o "-", e o bem ficava impossível
+    // de digitar pelo número.
+    await abrir(tester);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).keyboardType,
+      const TextInputType.numberWithOptions(signed: true),
+    );
+  });
+
   testWidgets('o foco volta ao campo depois de cada leitura', (tester) async {
     await abrir(tester);
     expect(campoComFoco(tester), isTrue, reason: 'pronto para o leitor');

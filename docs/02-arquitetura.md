@@ -91,14 +91,33 @@ mesmo com dezenas de milhares de itens.
 Os dois são **texto**, nunca inteiro — zeros à esquerda são significativos. Cada um é gravado
 duas vezes: o valor cru (`tombo`) e uma forma normalizada usada só para busca.
 
-A normalização corrige a sujeira encontrada na base real (§3 da análise):
+A normalização corrige a sujeira de formatação encontrada na base real (§3 da análise):
 
-1. remove espaços, pontos e hífens de formatação;
-2. remove um sinal `-` inicial (a exportação do SUAP produz códigos negativos);
+1. remove espaços, pontos e hífens **de formatação** (no meio do número);
+2. converte a célula numérica do Excel (`19281.0`) no inteiro;
 3. remove zeros à esquerda **apenas na chave de busca**, preservando o valor original no dado.
 
-Assim `-19281`, `19281` e `019281` casam entre si na busca, mas o item continua exibindo o
-valor exato que veio do SUAP.
+O sinal `-` inicial **fica na chave** (esquema v6). No SUAP, número e tombo são inteiros únicos,
+com sinal, ligados por uma regra fixa (`suap/patrimonio/models.py`,
+`EntradaPermanente._create_inventario_on_save_ifpi`):
+
+```
+tombo = numero + 42535
+```
+
+Bens migrados do sistema anterior têm a plaqueta antiga, com tombo até 42535, e por isso número
+zero ou negativo: a plaqueta 23254 é o bem `-19281`. Bens cadastrados no SUAP têm número
+positivo. `-19281` e `19281` são **bens diferentes** (tombos 23254 e 61816). Até a versão 1.2.4 a
+normalização removia o sinal, e a leitura de um registrava o outro. A migração para o esquema v6
+recalcula todas as chaves gravadas; a restauração de uma cópia de segurança também.
+
+Assim `19281` e `019281` casam entre si, `-19281` e `-019281` também, mas o item continua
+exibindo o valor exato que veio do SUAP. Na busca da lista de itens, que é só consulta, `19281`
+encontra os dois bens, cada um com seu tombo.
+
+A importação aplica a mesma regra: linha sem tombo e com número recebe `numero + 42535`, e linha
+com tombo que não segue a regra é apontada na prévia — sinal de coluna trocada ou planilha
+editada à mão.
 
 ### Busca cruzada
 
@@ -112,6 +131,16 @@ tem duas etapas:
 
 O item é encontrado, mas o usuário sabe que há inconsistência no cadastro.
 
+**Ambiguidade.** Pela regra do SUAP, um mesmo número pode ser o número de um bem e o tombo de
+outro: a plaqueta antiga 23254 (bem `-19281`) e a plaqueta nova 23254 (bem `23254`, tombo 65789).
+Quando os dois campos casam com **bens diferentes**, a leitura é `ambiguo` e **nada é gravado**.
+O modo de leitura não basta para decidir — o padrão é código de barras, e quase ninguém o troca
+ao passar de uma plaqueta para outra. Na digitação, o levantamento mostra os bens, com tombo,
+número, descrição e sala, e a pessoa toca no que tem na mão; a escolha segue como uma leitura
+comum. Pela câmera, que não para para perguntar, a leitura fica marcada na lista com o som de
+alerta, e a escolha se faz digitando o número. O mesmo bem achado pelos dois campos (tombo igual
+ao número) não é ambiguidade.
+
 ---
 
 ## 3. Divergências: uma correção à especificação
@@ -119,26 +148,29 @@ O item é encontrado, mas o usuário sabe que há inconsistência no cadastro.
 A spec §29 pede divergência de **quatro** campos: sala, responsável, estado de conservação e
 situação de uso.
 
-**Os dois últimos não têm base de comparação.** Estado de conservação e situação de uso são
-levantados em campo; a importação não os lê. A exportação do SUAP até traz uma coluna
-`ESTADO DE CONSERVAÇÃO` e uma `STATUS`, mas com outro vocabulário (Bom / Antieconômico /
-Recuperável / Irrecuperável; Ativo / Baixado / Pendente) — tratá-las como valor de origem
-inventava divergência onde só há vocabulário diferente. O SLAP grava esses campos e nunca os
-compara com nada, e o app novo faz o mesmo: sem valor anterior não existe divergência; existe
-apenas informação nova.
+**Estado de conservação no vocabulário do SUAP (esquema v6).** Até a versão 1.2.4 o
+levantamento usava o vocabulário do SLAP antigo (`bom`, `regular`, `ruim`), que o SUAP não
+conhece, e a coluna `ESTADO DE CONSERVAÇÃO` da planilha era ignorada. Agora o levantamento usa
+os valores do SUAP (`Inventario.CHOICES_CONSERVACAO`): `bom`, `ocioso`, `recuperavel`,
+`antieconomico` e `irreversivel` — rótulos Bom, Ocioso, Recuperável, Antieconômico e
+Irreversível ("Irreversível" é como o SUAP chama o irrecuperável). Com o mesmo vocabulário, o
+estado da planilha volta a ser base de comparação:
 
-Tratamento adotado:
+- O importador lê `ESTADO DE CONSERVAÇÃO` (rótulo do SUAP, valor do banco do SUAP ou o código
+  numérico do `inventario.ifpi.edu.br`) para `conservacao_original`. Vazio, `-`, "Não aplicar" e
+  texto fora do vocabulário ficam sem origem, e a prévia conta os não reconhecidos.
+- A configuração das leituras tem "Manter o do SUAP" como padrão, como o responsável em branco:
+  a leitura confirma o estado do cadastro em vez de reescrever o de cada bem da sala.
+- Estado efetivo (`conservacao ?? conservacao_original`) diferente do SUAP é **divergência**,
+  com os rótulos do SUAP no relatório. Sem estado no SUAP, o levantado é informação nova.
+- Antieconômico e irreversível — os inservíveis do Decreto 9.373/2018 — recebem a marca de
+  atenção, mesmo quando o SUAP já os registra assim.
+- `regular` e `ruim` continuam legíveis (inventários levantados antes, aparelhos não
+  atualizados), marcados como "(antigo)" e com a etiqueta "Reclassificar estado"; não se
+  escolhem mais.
 
-- O importador **não oferece** estado nem situação entre os campos da planilha, e o patrimônio
-  não tem `conservation_original` / `usage_original` — as colunas existiram até a versão 3 do
-  esquema e a migração para a 4 as remove.
-- O valor levantado é registrado como informação nova e **não** torna o item divergente por si
-  só.
-- Itens em estado `ruim` ou situação `inserv.` recebem uma marca de atenção, que aparece como
-  coluna nos relatórios. São acionáveis mesmo sem valor anterior.
-
-Isso mantém os três grupos da spec §31 limpos, sem inventar uma divergência que o dado não
-sustenta.
+**Situação de uso continua sem base de comparação**: o SUAP não tem esse campo. Ela é
+levantada em campo, registrada como informação nova, e `inserv.` recebe a marca de atenção.
 
 ### Classificação final
 
@@ -439,7 +471,9 @@ Em claro ficam só a apresentação (`/hello`: identidade do aparelho, nome do u
 horário — o mesmo que o beacon já anuncia) e o identificador do inventário na query, necessário
 para o servidor saber com qual chave conferir a assinatura antes de confiar em qualquer coisa.
 
-**Versões.** A mudança de formato subiu o protocolo para 2. Pedido com outra versão recebe `426`
+**Versões.** A mudança de formato subiu o protocolo para 2. O vocabulário de estado do SUAP,
+com o estado de origem no pacote do inventário, subiu para 3: um aparelho na versão 2 gravaria
+`regular` e `ruim`, que o SUAP não conhece. Pedido com outra versão recebe `426`
 com a versão de quem responde, e a apresentação também traz a versão: nos dois sentidos, a tela
 diz qual aparelho está com versão anterior ou mais nova e pede para atualizar os dois. Aparelho de
 outra versão continua aparecendo na lista de descoberta — escondê-lo faria a pessoa procurar

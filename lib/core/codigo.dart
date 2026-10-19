@@ -1,20 +1,33 @@
 /// Normalização de tombo e código de barras.
 ///
-/// A base real do IFPI tem sujeira que faz a busca do SLAP falhar. A planilha
-/// exportada do SUAP traz códigos de barras **negativos** (`-19281`), e o SLAP
-/// normaliza tudo com `to_i`, que preserva o sinal. Quem lê `19281` no leitor
-/// nunca encontra o item gravado como `-19281` — o patrimônio existe na base e
-/// mesmo assim aparece como "não localizado".
+/// No SUAP os dois números são inteiros únicos e **com sinal**, ligados por
+/// uma regra fixa (`suap/patrimonio/models.py`,
+/// `EntradaPermanente._create_inventario_on_save_ifpi`):
 ///
-/// Aqui o valor original nunca é alterado: ele é exibido e exportado
-/// exatamente como veio do SUAP. O que se normaliza é apenas a **chave de
-/// busca**, guardada em coluna própria e indexada.
+///     tombo = numero + 42535
+///
+/// O bem migrado do sistema anterior tem a plaqueta antiga, com tombo até
+/// 42535, e por isso um `numero` zero ou negativo: a plaqueta 23254 é o bem
+/// de número `-19281`. O bem cadastrado no SUAP tem `numero` positivo. Assim,
+/// `-19281` e `19281` são **dois bens diferentes** — o primeiro tem tombo
+/// 23254; o segundo, tombo 61816. Tratar o sinal como sujeira de formatação,
+/// como fazia esta normalização até a versão 1.2.4, fazia a leitura de um
+/// registrar o outro.
+///
+/// O valor original nunca é alterado: ele é exibido e exportado exatamente
+/// como veio do SUAP. O que se normaliza é apenas a **chave de busca**,
+/// guardada em coluna própria e indexada.
 library;
+
+/// Diferença fixa entre tombo e número no SUAP: `tombo = numero + 42535`.
+const int ajustePlaquetaAntiga = 42535;
 
 /// Reduz um código à forma usada para busca.
 ///
-/// Faz `-19281`, `19281`, `019281` e `19.281` casarem entre si, sem que
-/// nenhum deles deixe de ser exibido como está no cadastro.
+/// Faz `19281`, `019281`, `19.281` e `19281.0` casarem entre si, e `-19281`
+/// com `-019281`, sem que nenhum deles deixe de ser exibido como está no
+/// cadastro. O sinal negativo **fica** na chave: no SUAP ele separa a plaqueta
+/// antiga do bem novo com os mesmos dígitos.
 ///
 /// Devolve string vazia quando não sobra nada aproveitável, o que sinaliza ao
 /// chamador que não vale a pena consultar o banco.
@@ -33,8 +46,12 @@ String chaveBusca(String? bruto) {
     texto = inteiroComDecimalZerado.group(1)!;
   }
 
-  // Separadores de formatação e o sinal negativo espúrio da exportação do SUAP.
-  texto = texto.toUpperCase().replaceAll(RegExp(r'[\s.,\-_/\\()]'), '');
+  // O sinal só conta no começo, antes de qualquer dígito. Um hífen no meio
+  // ("12-345") é formatação, como o ponto e o espaço.
+  final negativo = RegExp(r'^-\s*\d').hasMatch(texto);
+  if (negativo || texto.startsWith('+')) texto = texto.substring(1);
+
+  texto = texto.toUpperCase().replaceAll(RegExp(r'[\s.,\-_/\\()+]'), '');
 
   if (texto.isEmpty) return '';
 
@@ -43,8 +60,17 @@ String chaveBusca(String? bruto) {
   final semZeros = texto.replaceFirst(RegExp(r'^0+'), '');
 
   // Um código composto só de zeros é degenerado, mas não é vazio; preserva-se
-  // um zero para que ele ainda seja distinguível de um campo em branco.
-  return semZeros.isEmpty ? '0' : semZeros;
+  // um zero para que ele ainda seja distinguível de um campo em branco. Zero
+  // não tem sinal.
+  if (semZeros.isEmpty) return '0';
+  return negativo ? '-$semZeros' : semZeros;
+}
+
+/// Tombo que o SUAP atribui ao bem de [numero], pela regra
+/// `tombo = numero + 42535`. `null` quando [numero] não é um inteiro.
+String? tomboPeloNumero(String? numero) {
+  final n = int.tryParse(chaveBusca(numero));
+  return n == null ? null : '${n + ajustePlaquetaAntiga}';
 }
 
 /// Verdadeiro quando os dois códigos se referem ao mesmo patrimônio, ignorando

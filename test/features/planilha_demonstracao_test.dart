@@ -27,5 +27,13 @@ void main() {
     expect(previa.semTombo, 0);
     expect(previa.tombosDuplicados, isEmpty);
     expect(previa.itens.first.tombo, '023101');
+    expect(previa.itens.first.codigoBarras, '-19434');
+    expect(
+      previa.foraDaRegraDoSuap,
+      isEmpty,
+      reason: 'a demonstração segue tombo = numero + 42535',
+    );
+    expect(previa.estadosNaoReconhecidos, 0);
+    expect(previa.itens.every((i) => i.conservacao != null), isTrue);
   });
 }

@@ -6,7 +6,7 @@
 /// serem a mesma estrutura, em vez de três mecanismos concorrentes.
 library;
 
-const int versaoEsquema = 5;
+const int versaoEsquema = 6;
 
 /// Campos de patrimônio que o levantamento altera.
 ///
@@ -64,8 +64,9 @@ const List<String> ddlEsquema = [
     conservacao_original TEXT,
     situacao_original    TEXT,
 
-    -- Formas normalizadas, usadas só na busca. Fazem -19281, 19281 e 019281
-    -- casarem entre si sem que o valor exibido deixe de ser o do cadastro.
+    -- Formas normalizadas, usadas só na busca. Fazem 19281 e 019281 casarem
+    -- entre si sem que o valor exibido deixe de ser o do cadastro. Desde a
+    -- versão 6, guardam o sinal: -19281 é outro bem (ver chaveBusca).
     tombo_chave         TEXT NOT NULL,
     codigo_barras_chave TEXT,
 
@@ -266,6 +267,23 @@ const List<String> migracaoV4 = [
 /// passa a se ordenar pelo tombo.
 const List<String> migracaoV5 = ['ALTER TABLE patrimonios DROP COLUMN ordem'];
 
+/// Versão 6: adequação ao SUAP.
+///
+/// - **Estado de conservação do SUAP como origem.** Com o vocabulário do SUAP
+///   no levantamento (ver `EstadoConservacao`), o estado que a planilha traz
+///   passa a ser comparável, e volta a ter coluna própria. Diferente da
+///   coluna removida na versão 4, esta só recebe valores que o SUAP conhece.
+/// - **Chaves de busca com sinal.** Até aqui `-19281` e `19281` tinham a mesma
+///   chave, e no SUAP são bens diferentes (ver `chaveBusca`). As chaves são
+///   recalculadas pela regra nova; o valor exibido não muda. A função
+///   `chave_busca` é a mesma do Dart, registrada pelo `Banco`.
+const List<String> migracaoV6 = [
+  'ALTER TABLE patrimonios ADD COLUMN conservacao_original TEXT',
+  'UPDATE patrimonios SET tombo_chave = chave_busca(tombo), '
+      'codigo_barras_chave = CASE WHEN codigo_barras IS NULL THEN NULL '
+      'ELSE chave_busca(codigo_barras) END',
+];
+
 /// Migrações por versão de destino. Um banco novo passa por todas, em ordem:
 /// é o mesmo caminho de quem atualiza, e por isso é o caminho testado.
 const Map<int, List<String>> migracoes = {
@@ -274,6 +292,7 @@ const Map<int, List<String>> migracoes = {
   3: migracaoV3,
   4: migracaoV4,
   5: migracaoV5,
+  6: migracaoV6,
 };
 
 /// Chaves da tabela `config`.

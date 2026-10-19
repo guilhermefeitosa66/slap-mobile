@@ -7,6 +7,7 @@ import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
+import 'package:slap_mobile/domain/valores.dart';
 import 'package:slap_mobile/features/import/importador.dart';
 import 'package:slap_mobile/features/import/leitor_planilha.dart';
 import 'package:slap_mobile/features/import/mapeamento.dart';
@@ -33,6 +34,7 @@ void main() {
       'Responsável',
       'Sala',
       'Valor',
+      'Estado de conservação',
     ]);
   });
 
@@ -83,8 +85,8 @@ void main() {
       // `#` é a numeração das linhas, que não se importa, e `NUMERO` é o
       // código de barras. `NUMERO NOTA FISCAL`
       // e `NÚMERO DE SÉRIE` contêm "numero" e não podem roubar a coluna;
-      // `STATUS` e `ESTADO DE CONSERVAÇÃO` têm outro vocabulário e ficam de
-      // fora.
+      // `STATUS` é situação cadastral e fica de fora. `ESTADO DE
+      // CONSERVAÇÃO` entra: é o mesmo vocabulário do levantamento.
       final planilha = LeitorPlanilha.ler(
         nomeArquivo: 'suap-real.xlsx',
         bytes: planilhaXlsx([
@@ -143,6 +145,7 @@ void main() {
         CampoImportacao.responsavel: 7,
         CampoImportacao.sala: 17,
         CampoImportacao.valor: 10,
+        CampoImportacao.conservacao: 18,
       };
       expect(m.valido, isTrue);
       expect(m.colunas, esperado);
@@ -159,6 +162,12 @@ void main() {
       final previa = Importador.preparar(planilha, m);
       expect(previa.itens.single.codigoBarras, '-019281');
       expect(previa.itens.single.tombo, '23254');
+      expect(previa.itens.single.conservacao, EstadoConservacao.bom);
+      expect(
+        previa.foraDaRegraDoSuap,
+        isEmpty,
+        reason: '-19281 + 42535 = 23254',
+      );
     });
 
     test('reconhece o cabeçalho do inventario.ifpi.edu.br', () {
@@ -227,10 +236,13 @@ void main() {
       );
       expect(m.colunaDe(CampoImportacao.responsavel), 11);
 
-      // Levantados em campo, nunca importados: o vocabulário da planilha é
-      // outro, e o valor que vale é o que a comissão encontra na sala.
+      // Status é situação cadastral e não se importa; o estado de
+      // conservação usa o vocabulário do SUAP e é a base de comparação.
       expect(m.campoDaColuna(5), isNull, reason: 'Status');
-      expect(m.campoDaColuna(10), isNull, reason: 'Estado de Conservação');
+      expect(m.colunaDe(CampoImportacao.conservacao), 10);
+
+      final previa = Importador.preparar(planilha, m);
+      expect(previa.foraDaRegraDoSuap, isEmpty, reason: '-42313 + 42535 = 222');
       // Sem coluna de valor neste formato.
       expect(m.colunaDe(CampoImportacao.valor), isNull);
     });
@@ -525,7 +537,8 @@ void main() {
       expect(depois.patrimonio!.salaAtual, 'Auditório');
     });
 
-    test('o código de barras negativo da base real fica encontrável', () {
+    test('a plaqueta antiga é achada pelo tombo, e não pelo número sem '
+        'sinal', () {
       Importador.aplicar(
         repositorio: patrimonios,
         inventarioId: inventario.id,
@@ -535,18 +548,180 @@ void main() {
         ]),
       );
 
-      final leitura = patrimonios.procurar(
+      Leitura ler(String codigo, ModoLeitura modo) => patrimonios.procurar(
         inventarioId: inventario.id,
-        codigo: '19281',
-        modo: ModoLeitura.codigoBarras,
+        codigo: codigo,
+        modo: modo,
       );
 
-      expect(leitura.resultado, ResultadoLeitura.sucesso);
+      final pelaPlaqueta = ler('23254', ModoLeitura.codigoBarras);
+      expect(pelaPlaqueta.resultado, ResultadoLeitura.sucesso);
+      expect(pelaPlaqueta.achadoNoOutroCampo, isTrue);
       expect(
-        leitura.patrimonio!.codigoBarras,
+        pelaPlaqueta.patrimonio!.codigoBarras,
         '-19281',
         reason: 'o valor do cadastro é preservado como veio',
       );
+
+      expect(
+        ler('-019281', ModoLeitura.codigoBarras).resultado,
+        ResultadoLeitura.sucesso,
+      );
+      // 19281 é outro bem no SUAP (tombo 61816), que não está aqui.
+      expect(
+        ler('19281', ModoLeitura.codigoBarras).resultado,
+        ResultadoLeitura.naoLocalizado,
+      );
+    });
+
+    group('número de um bem e tombo de outro', () {
+      // No SUAP, tombo = numero + 42535: a plaqueta antiga 23254 é o bem
+      // -19281, e o bem novo 23254 tem tombo 65789. Os dois convivem.
+      setUp(() {
+        Importador.aplicar(
+          repositorio: patrimonios,
+          inventarioId: inventario.id,
+          previa: prever([
+            ['NUMERO', 'TOMBO', 'DESCRICAO'],
+            ['-19281', '23254', 'ESTABILIZADOR'],
+            ['23254', '65789', 'MONITOR'],
+          ]),
+        );
+      });
+
+      for (final modo in ModoLeitura.values) {
+        test('é ambíguo e não grava nada, no modo ${modo.rotulo}', () {
+          final leitura = patrimonios.procurar(
+            inventarioId: inventario.id,
+            codigo: '23254',
+            modo: modo,
+          );
+
+          expect(leitura.resultado, ResultadoLeitura.ambiguo);
+          expect(leitura.patrimonio, isNull);
+          expect(leitura.candidatos.map((p) => p.descricao).toSet(), {
+            'ESTABILIZADOR',
+            'MONITOR',
+          });
+          expect(
+            leitura.candidatos.first.descricao,
+            modo == ModoLeitura.tombo ? 'ESTABILIZADOR' : 'MONITOR',
+            reason: 'o campo do modo vem primeiro',
+          );
+          expect(
+            patrimonios
+                .todos(inventario.id, incluirIgnorados: true)
+                .where((p) => p.verificado),
+            isEmpty,
+          );
+        });
+      }
+
+      test('o número com sinal ou o tombo exclusivo não são ambíguos', () {
+        final antigo = patrimonios.procurar(
+          inventarioId: inventario.id,
+          codigo: '-19281',
+          modo: ModoLeitura.codigoBarras,
+        );
+        expect(antigo.resultado, ResultadoLeitura.sucesso);
+        expect(antigo.patrimonio!.descricao, 'ESTABILIZADOR');
+
+        final novo = patrimonios.procurar(
+          inventarioId: inventario.id,
+          codigo: '65789',
+          modo: ModoLeitura.codigoBarras,
+        );
+        expect(novo.resultado, ResultadoLeitura.sucesso);
+        expect(novo.patrimonio!.descricao, 'MONITOR');
+      });
+
+      test('a escolha vira leitura comum do bem escolhido', () {
+        final ambigua = patrimonios.procurar(
+          inventarioId: inventario.id,
+          codigo: '23254',
+          modo: ModoLeitura.codigoBarras,
+        );
+        final escolhida = Leitura.escolhida(ambigua.candidatos.last);
+        expect(escolhida.resultado, ResultadoLeitura.sucesso);
+        expect(escolhida.patrimonio!.descricao, 'ESTABILIZADOR');
+      });
+    });
+
+    test('tombo igual ao número no mesmo bem não é ambiguidade', () {
+      Importador.aplicar(
+        repositorio: patrimonios,
+        inventarioId: inventario.id,
+        previa: prever([
+          ['NUMERO', 'TOMBO', 'DESCRICAO'],
+          ['555', '555', 'MESA'],
+        ]),
+      );
+
+      final leitura = patrimonios.procurar(
+        inventarioId: inventario.id,
+        codigo: '555',
+        modo: ModoLeitura.codigoBarras,
+      );
+      expect(leitura.resultado, ResultadoLeitura.sucesso);
+    });
+
+    test('sem tombo na planilha, o tombo vem do número pela regra do SUAP', () {
+      final previa = prever([
+        ['NUMERO', 'TOMBO', 'DESCRICAO'],
+        ['-19281', '-', 'ESTABILIZADOR'],
+        ['19281', '', 'MONITOR'],
+        ['', '', 'TOTAL'],
+      ]);
+
+      expect(previa.total, 2);
+      expect(previa.tombosPeloNumero, 2);
+      expect(previa.semTombo, 1);
+      expect(previa.itens.map((i) => i.tombo), ['23254', '61816']);
+    });
+
+    test('tombo fora da regra do SUAP é apontado e entra como veio', () {
+      final previa = prever([
+        ['NUMERO', 'TOMBO', 'DESCRICAO'],
+        ['-19281', '23254', 'CERTO'],
+        ['-19281', '19281', 'TOMBO SEM O AJUSTE'],
+      ]);
+
+      expect(previa.total, 2);
+      expect(previa.foraDaRegraDoSuap, ['19281']);
+    });
+
+    test('o estado de conservação do SUAP vira a origem do item', () {
+      final previa = prever([
+        ['TOMBO', 'DESCRICAO', 'ESTADO DE CONSERVAÇÃO'],
+        ['1', 'MESA', 'Antieconômico'],
+        ['2', 'CADEIRA', 'irreversivel'],
+        ['3', 'ARMÁRIO', '-'],
+        ['4', 'ESTANTE', 'Regular'],
+        ['5', 'QUADRO', 'Não aplicar'],
+      ]);
+
+      expect(previa.itens.map((i) => i.conservacao), [
+        EstadoConservacao.antieconomico,
+        EstadoConservacao.irreversivel,
+        null,
+        null,
+        null,
+      ]);
+      expect(
+        previa.estadosNaoReconhecidos,
+        1,
+        reason: 'só "Regular", que não é do SUAP',
+      );
+
+      Importador.aplicar(
+        repositorio: patrimonios,
+        inventarioId: inventario.id,
+        previa: previa,
+      );
+      final mesa = patrimonios
+          .todos(inventario.id)
+          .firstWhere((p) => p.descricao == 'MESA');
+      expect(mesa.conservacaoOriginal, EstadoConservacao.antieconomico);
     });
   });
 }

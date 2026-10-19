@@ -203,7 +203,7 @@ mais importante do sistema: é dela que vem a velocidade do levantamento.
 | Campo | O que fazer |
 |---|---|
 | **Sala onde você está** | Texto livre, com sugestões da planilha. Pode ser um nome novo, que o SUAP ainda não conhece. |
-| **Estado de conservação** | Bom, Regular ou Ruim. |
+| **Estado de conservação** | **Manter o do SUAP** (padrão), Bom, Ocioso, Recuperável, Antieconômico ou Irreversível — os mesmos do SUAP. |
 | **Situação de uso** | Ativo, Ocioso ou Inservível. |
 | **Responsável** | Texto livre, com sugestões. **Em branco significa "não alterar"**. |
 
@@ -214,10 +214,13 @@ configura uma vez e lê dezenas de itens sem tocar na tela.
 lido mantém o responsável que veio do SUAP — que é o certo quando você está conferindo a
 carga de outra pessoa. Preencha apenas quando a carga realmente mudou.
 
-**Estado de conservação e situação de uso não vêm da planilha.** Eles são levantados em
-campo, e não existem antes da sua leitura. Por isso nunca aparecem como "divergência": o que
-você registra é informação nova. O que exige providência — `Ruim`, `Inservível` — ganha uma
-marca de atenção na lista e nos relatórios.
+**Estado de conservação: "Manter o do SUAP" é o padrão.** Cada item lido fica com o estado
+que o SUAP registra. Escolha outro estado só quando todos os itens que você vai ler estiverem
+nele — ou corrija item a item no detalhe. Estado diferente do SUAP aparece como divergência.
+Antieconômico e Irreversível ganham uma marca de atenção na lista e nos relatórios.
+
+**Situação de uso não vem da planilha** — o SUAP não tem esse campo. Ela é levantada em
+campo e nunca aparece como divergência; `Inservível` ganha a marca de atenção.
 
 **Trocar a configuração:** toque na faixa verde no alto da tela de levantamento. Mudar de
 sala é o motivo mais frequente, mas não é o único: o responsável, o estado e a situação mudam
@@ -296,8 +299,15 @@ filtrada por ele. **Todos os itens** abre a lista inteira.
 
 ![Todos os itens, com busca e filtros por sala, responsável e situação](imagens/itens.png)
 
-**Busca** por tombo, código de barras ou descrição. Zeros à esquerda e sinal de menos não
-atrapalham: `19281`, `019281` e `-19281` encontram o mesmo bem.
+**Busca** por tombo, número (código de barras) ou descrição. Zeros à esquerda não
+atrapalham: `19281` e `019281` encontram o mesmo bem. Na busca, `19281` também mostra o bem
+`-19281` — mas são bens diferentes no SUAP (veja "Plaqueta antiga e plaqueta nova", abaixo).
+
+**Plaqueta antiga e plaqueta nova.** No SUAP, tombo = número + 42535. A plaqueta antiga 23254
+é o bem de número `-19281`, e pode existir um bem novo de número 23254. Se o número lido for de
+dois bens, o aplicativo **não grava nada**: mostra os dois, com tombo, número e sala, e você
+toca no que tem na mão. Pela câmera a leitura fica marcada como **Ambíguo** na lista; digite o
+número no levantamento para escolher.
 
 **Filtros** — combinam entre si, com a busca e com o grupo que está aberto:
 
@@ -399,10 +409,10 @@ São quatro, cada um em **XLSX** ou **CSV**:
 Os três primeiros são o resultado do processo, na divisão que a comissão precisa apresentar.
 O quarto é a base completa, para conferência.
 
-**Divergência existe em dois campos: sala e responsável.** São os únicos que também vêm da
-planilha e que, portanto, têm um valor anterior com que comparar. Estado de conservação e
-situação de uso são levantados em campo e não têm base — quando exigem providência
-(`Ruim`, `Inservível`), saem marcados como atenção no relatório completo.
+**Divergência existe em três campos: sala, responsável e estado de conservação.** São os que
+também vêm da planilha do SUAP e que, portanto, têm um valor anterior com que comparar — o
+estado, quando o SUAP tem um. Situação de uso é levantada em campo e não tem base. O que exige
+providência (Antieconômico, Irreversível, `Inservível`) sai marcado como atenção.
 
 **Para que servem depois.** Os arquivos alimentam o relatório final do processo de
 inventário, que é documentado e arquivado, e vão ao setor de patrimônio para atualizar as

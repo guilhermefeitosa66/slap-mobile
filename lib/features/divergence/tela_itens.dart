@@ -13,6 +13,7 @@ import '../../domain/filtro_itens.dart';
 import '../../domain/patrimonio.dart';
 import '../../domain/valores.dart';
 import '../survey/campo_com_sugestoes.dart';
+import '../survey/seletor_conservacao.dart';
 
 /// Lista de patrimônios, filtrada por grupo do resultado.
 class TelaItens extends ConsumerStatefulWidget {
@@ -988,6 +989,7 @@ List<({String texto, TomResultado tom})> etiquetasDoItem(
       texto: switch (d.campo) {
         CampoDivergente.sala => 'Mudou de sala',
         CampoDivergente.responsavel => 'Mudou de responsável',
+        CampoDivergente.conservacao => 'Mudou de estado',
       },
       tom: cores.de(Classificacao.divergente),
     ));
@@ -996,8 +998,16 @@ List<({String texto, TomResultado tom})> etiquetasDoItem(
   // O motivo da providência, e não a palavra "providência": o que se faz com
   // o bem depende de ele estar ruim ou inservível, e são coisas diferentes.
   final atencao = cores.de(Classificacao.naoLocalizado);
-  if (patrimonio.conservacao?.exigeAtencao ?? false) {
-    etiquetas.add((texto: 'Estado ruim', tom: atencao));
+  final estado = patrimonio.verificado
+      ? patrimonio.conservacaoEfetiva
+      : patrimonio.conservacao;
+  if (estado case final e? when e.exigeAtencao) {
+    // O estado por extenso: antieconômico e irreversível pedem providências
+    // diferentes, e "ruim" é do vocabulário antigo.
+    etiquetas.add((texto: e.legado ? 'Estado ruim' : e.rotulo, tom: atencao));
+  }
+  if (estado case final e? when e.legado) {
+    etiquetas.add((texto: 'Reclassificar estado', tom: atencao));
   }
   if (patrimonio.situacao?.exigeAtencao ?? false) {
     etiquetas.add((texto: 'Inservível', tom: atencao));
@@ -1175,11 +1185,12 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
           const SizedBox(height: 20),
           const _TituloSecao('Dados da planilha (SUAP)'),
           _Campo('Tombo', p.tombo),
-          _Campo('Código de barras', p.codigoBarras ?? '—'),
+          _Campo('Número (código de barras)', p.codigoBarras ?? '—'),
           _Campo('Elemento de despesa', p.ed ?? '—'),
           _Campo('Valor', p.valor ?? '—'),
           _Campo('Sala', p.salaOriginal ?? '—'),
           _Campo('Responsável', p.responsavelOriginal ?? '—'),
+          _Campo('Estado de conservação', p.conservacaoOriginal?.rotulo ?? '—'),
 
           // 3. O que o inventário produz.
           const SizedBox(height: 20),
@@ -1204,7 +1215,24 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
                 valor: p.responsavelAtual ?? 'não alterado',
                 igual: mesmoTexto(p.responsavelOriginal, p.responsavelEfetivo),
               ),
-              _Campo('Estado de conservação', p.conservacao?.rotulo ?? '—'),
+              // Sem estado no SUAP não há com que comparar: o encontrado é
+              // informação nova, e a linha fica sem o tom de igual/diferente.
+              if (p.conservacaoOriginal == null)
+                _Campo('Estado de conservação', switch (p.conservacao) {
+                  final c? when c.legado => '${c.rotulo} — reclassifique',
+                  final c? => c.rotulo,
+                  null => '—',
+                })
+              else
+                _CampoComTom(
+                  rotulo: 'Estado de conservação',
+                  valor: switch (p.conservacao) {
+                    final c? when c.legado => '${c.rotulo} — reclassifique',
+                    final c? => c.rotulo,
+                    null => 'não alterado',
+                  },
+                  igual: p.conservacaoEfetiva == p.conservacaoOriginal,
+                ),
               _Campo('Situação de uso', p.situacao?.rotulo ?? '—'),
             ],
 
@@ -1308,13 +1336,15 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
 
 /// O que está sendo editado na seção "Levantamento".
 ///
-/// Sala e responsável mostram só o que o levantamento gravou: em branco, o
-/// valor da planilha permanece — e salvar sem mexer em nada não gera
-/// operação. Estado e situação sem valor partem do padrão das leituras.
+/// Sala, responsável e estado mostram só o que o levantamento gravou: em
+/// branco (no estado, "manter"), o valor da planilha permanece — e salvar sem
+/// mexer em nada não gera operação. Situação sem valor parte do padrão das
+/// leituras.
 class _EdicaoLevantamento {
   final TextEditingController sala;
   final TextEditingController responsavel;
-  EstadoConservacao conservacao;
+  EstadoConservacao? conservacao;
+  final EstadoConservacao? conservacaoOriginal;
   SituacaoUso situacao;
   final List<String> salas;
   final List<String> responsaveis;
@@ -1325,7 +1355,8 @@ class _EdicaoLevantamento {
     required this.responsaveis,
   }) : sala = TextEditingController(text: p.salaAtual ?? ''),
        responsavel = TextEditingController(text: p.responsavelAtual ?? ''),
-       conservacao = p.conservacao ?? EstadoConservacao.bom,
+       conservacao = p.conservacao,
+       conservacaoOriginal = p.conservacaoOriginal,
        situacao = p.situacao ?? SituacaoUso.ativo;
 
   void dispose() {
@@ -1387,15 +1418,13 @@ class _FormularioLevantamentoState extends State<_FormularioLevantamento> {
         const SizedBox(height: 16),
         Text('Estado de conservação', style: tema.textTheme.labelLarge),
         const SizedBox(height: 8),
-        SegmentedButton<EstadoConservacao>(
-          showSelectedIcon: false,
-          expandedInsets: EdgeInsets.zero,
-          segments: [
-            for (final c in EstadoConservacao.values)
-              ButtonSegment(value: c, label: Text(c.rotulo)),
-          ],
-          selected: {e.conservacao},
-          onSelectionChanged: (s) => setState(() => e.conservacao = s.first),
+        SeletorConservacao(
+          valor: e.conservacao,
+          aoEscolher: (c) => setState(() => e.conservacao = c),
+          rotuloManter: switch (e.conservacaoOriginal) {
+            final o? => 'Manter: ${o.rotulo}',
+            null => 'Sem estado',
+          },
         ),
         const SizedBox(height: 16),
         Text('Situação de uso', style: tema.textTheme.labelLarge),

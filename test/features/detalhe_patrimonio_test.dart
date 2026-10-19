@@ -65,12 +65,13 @@ void main() {
       verificar('000001', sala: 'Auditório');
       final antes = operacoes(item('000001'));
 
-      // O mesmo valor escrito diferente não é mudança.
+      // O mesmo valor escrito diferente não é mudança — nem manter o estado
+      // do SUAP, que a leitura já manteve.
       a.patrimonios.alterarLevantamento(
         patrimonio: item('000001'),
         sala: 'auditório ',
         responsavel: '',
-        conservacao: EstadoConservacao.bom,
+        conservacao: null,
         situacao: SituacaoUso.ativo,
       );
       expect(operacoes(item('000001')), antes, reason: 'nada mudou');
@@ -80,7 +81,7 @@ void main() {
         patrimonio: item('000001'),
         sala: 'Sala 3',
         responsavel: '',
-        conservacao: EstadoConservacao.regular,
+        conservacao: EstadoConservacao.recuperavel,
         situacao: SituacaoUso.ativo,
         usuarioNome: 'Bruno',
       );
@@ -95,7 +96,7 @@ void main() {
       );
       final depois = item('000001');
       expect(depois.salaAtual, 'Sala 3');
-      expect(depois.conservacao, EstadoConservacao.regular);
+      expect(depois.conservacao, EstadoConservacao.recuperavel);
       expect(depois.situacao, SituacaoUso.ativo);
       expect(depois.verificadoPor, 'Ana Souza', reason: 'quem encontrou fica');
     });
@@ -108,7 +109,7 @@ void main() {
         patrimonio: antes,
         sala: 'Auditório',
         responsavel: 'Servidor Novo',
-        conservacao: EstadoConservacao.ruim,
+        conservacao: EstadoConservacao.antieconomico,
         situacao: SituacaoUso.ocioso,
         usuarioNome: 'Bruno',
         usuarioMatricula: '77',
@@ -122,7 +123,7 @@ void main() {
       expect(depois.verificadoEm, isNotNull);
       expect(depois.salaAtual, 'Auditório');
       expect(depois.responsavelAtual, 'Servidor Novo');
-      expect(depois.conservacao, EstadoConservacao.ruim);
+      expect(depois.conservacao, EstadoConservacao.antieconomico);
       expect(depois.situacao, SituacaoUso.ocioso);
       expect(operacoes(depois), 5);
     });
@@ -136,7 +137,7 @@ void main() {
         patrimonio: item('000001'),
         sala: 'Biblioteca',
         responsavel: '  ',
-        conservacao: EstadoConservacao.bom,
+        conservacao: null,
         situacao: SituacaoUso.ativo,
       );
 
@@ -158,7 +159,7 @@ void main() {
         patrimonio: item('000001'),
         sala: 'Sala 3',
         responsavel: 'Servidor Novo',
-        conservacao: EstadoConservacao.regular,
+        conservacao: EstadoConservacao.recuperavel,
         situacao: SituacaoUso.ativo,
       );
       RedeSimulada.sincronizar(a, b, inventario.id);
@@ -342,7 +343,11 @@ void main() {
       expect(depois.verificadoPorMatricula, '2091234');
       expect(depois.salaAtual, 'Auditório');
       expect(depois.responsavelAtual, isNull);
-      expect(depois.conservacao, EstadoConservacao.bom);
+      expect(
+        depois.conservacao,
+        isNull,
+        reason: 'sem escolha, o estado do SUAP é mantido',
+      );
       expect(depois.situacao, SituacaoUso.ativo);
       expect(find.text('Divergente'), findsOneWidget);
       expect(find.text('Este aparelho'), findsOneWidget);

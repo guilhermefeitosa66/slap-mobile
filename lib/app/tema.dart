@@ -151,6 +151,7 @@ class CoresResultado extends ThemeExtension<CoresResultado> {
     ResultadoLeitura.sucesso => registrado,
     ResultadoLeitura.jaVerificado => jaVerificado,
     ResultadoLeitura.naoLocalizado => naoLocalizado,
+    ResultadoLeitura.ambiguo => jaVerificado,
   };
 
   static IconData icone(Classificacao c) => switch (c) {
@@ -164,6 +165,7 @@ class CoresResultado extends ThemeExtension<CoresResultado> {
     ResultadoLeitura.sucesso => Icons.check_circle_outline,
     ResultadoLeitura.jaVerificado => Icons.replay,
     ResultadoLeitura.naoLocalizado => Icons.search_off,
+    ResultadoLeitura.ambiguo => Icons.call_split,
   };
 
   /// O nome do resultado, como é dito na tela e anunciado pelo leitor de tela.
@@ -171,6 +173,7 @@ class CoresResultado extends ThemeExtension<CoresResultado> {
     ResultadoLeitura.sucesso => 'Registrado',
     ResultadoLeitura.jaVerificado => 'Já verificado',
     ResultadoLeitura.naoLocalizado => 'Não localizado',
+    ResultadoLeitura.ambiguo => 'Ambíguo',
   };
 
   @override

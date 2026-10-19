@@ -43,8 +43,18 @@ const _bens = [
   ('52', 'ESTABILIZADOR ELETRÔNICO 1000VA', 310.00),
 ];
 
-// Estado de conservação e situação de uso ficam de fora de propósito: são
-// levantados em campo, e a importação não os lê.
+// Estado de conservação como o SUAP exporta, com os rótulos dele. Situação de
+// uso fica de fora: o SUAP não tem esse campo, e ela é só levantada em campo.
+const _estados = [
+  'Bom',
+  'Bom',
+  'Bom',
+  'Ocioso',
+  'Bom',
+  'Recuperável',
+  'Bom',
+  'Antieconômico',
+];
 
 void main() {
   final excel = Excel.createExcel();
@@ -60,6 +70,7 @@ void main() {
       'RESPONSAVEL ATUAL',
       'SALA ATUAL',
       'VALOR',
+      'ESTADO DE CONSERVAÇÃO',
     ])
       TextCellValue(titulo),
   ]);
@@ -72,15 +83,19 @@ void main() {
       ordem++;
       final (ed, descricao, valor) = _bens[b];
       final tombo = (23100 + ordem).toString().padLeft(6, '0');
+      // A regra do SUAP: tombo = numero + 42535. Tombos abaixo de 42535 são
+      // de plaqueta antiga, e o número deles é negativo.
+      final numero = 23100 + ordem - 42535;
       aba.appendRow([
         IntCellValue(ordem),
-        TextCellValue(tombo),
+        TextCellValue('$numero'),
         TextCellValue(tombo),
         TextCellValue(ed),
         TextCellValue(descricao),
         TextCellValue(_responsaveis[(s + b) % _responsaveis.length]),
         TextCellValue(_salas[s]),
         DoubleCellValue(valor),
+        TextCellValue(_estados[ordem % _estados.length]),
       ]);
     }
   }
