@@ -1,3 +1,4 @@
+import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/domain/patrimonio.dart';
@@ -91,5 +92,29 @@ void main() {
   test('não localizados levam o estado que o SUAP registra', () {
     final r = gerar(TipoRelatorio.naoLocalizados);
     expect(r.linhas.single[r.cabecalho.indexOf('Estado (SUAP)')], 'Ocioso');
+  });
+
+  test('o .xlsx sai legível mesmo com caractere de controle na descrição', () {
+    // Patrimônio importado antes da limpeza na leitura, com o "\x02" que
+    // cadastros antigos do SUAP trazem no lugar do hífen.
+    final relatorio = GeradorRelatorios.gerar(
+      tipo: TipoRelatorio.completo,
+      inventario: inventario,
+      patrimonios: const [
+        Patrimonio(
+          id: '9',
+          inventarioId: 'i',
+          tombo: '269382',
+          codigoBarras: '226847',
+          descricao: 'NO-BREAK TRUE ON\u0002LINE',
+        ),
+      ],
+    );
+
+    final planilha = Excel.decodeBytes(GeradorRelatorios.paraXlsx(relatorio));
+    final aba = planilha.tables.values.single;
+    final descricao = aba.rows[1][relatorio.cabecalho.indexOf('Descrição')];
+
+    expect(descricao?.value.toString(), 'NO-BREAK TRUE ON-LINE');
   });
 }
