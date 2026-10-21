@@ -382,6 +382,18 @@ void main() {
       expect(planilha.linhas[1][1], 'Coordenação');
     });
 
+    test('caracteres de controle da descrição do SUAP não entram', () {
+      // Cadastros antigos do SUAP trazem "\x02" no lugar do hífen; guardado
+      // no aparelho, ele tornava o relatório .xlsx ilegível.
+      final csv = 'TOMBO;DESCRIÇÃO\n123;NO-BREAK TRUE ON\u0002LINE\n';
+      final planilha = LeitorPlanilha.ler(
+        nomeArquivo: 'suap.csv',
+        bytes: Uint8List.fromList(utf8.encode(csv)),
+      );
+
+      expect(planilha.linhas[1][1], 'NO-BREAK TRUE ON-LINE');
+    });
+
     test('arquivo .xls é recusado com orientação, não com erro obscuro', () {
       expect(
         () => LeitorPlanilha.ler(

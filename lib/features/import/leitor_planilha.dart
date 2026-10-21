@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 
+import '../../core/texto.dart';
+
 /// Formatos aceitos na importação.
 enum FormatoPlanilha { xlsx, csv }
 
@@ -123,11 +125,14 @@ class LeitorPlanilha {
   /// O cuidado principal é com número inteiro guardado como ponto flutuante:
   /// o `toString()` de um `double` produz "19281.0", e um tombo com essa
   /// sujeira não casa com a leitura do código de barras.
+  ///
+  /// Caracteres de controle saem já aqui, para não irem parar no banco e,
+  /// depois, nos relatórios (ver [semCaracteresDeControle]).
   static String? _textoDaCelula(CellValue? valor) {
     if (valor == null) return null;
 
     return switch (valor) {
-      TextCellValue() => valor.value.toString(),
+      TextCellValue() => semCaracteresDeControle(valor.value.toString()),
       IntCellValue() => valor.value.toString(),
       DoubleCellValue() => _textoDoDecimal(valor.value),
       BoolCellValue() => valor.value ? 'sim' : 'não',
@@ -168,7 +173,9 @@ class LeitorPlanilha {
     final total = brutas.length;
     final linhas = <List<String?>>[];
     for (final l in brutas) {
-      linhas.add([for (final c in l) c?.toString()]);
+      linhas.add([
+        for (final c in l) c == null ? null : semCaracteresDeControle('$c'),
+      ]);
       _avisar(aoProgredir, linhas.length, total);
     }
     aoProgredir?.call(total, total);

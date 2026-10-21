@@ -5,6 +5,7 @@ import 'package:csv/csv.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/texto.dart';
 import '../../data/repos/inventarios.dart';
 import '../../domain/divergencia.dart';
 import '../../domain/patrimonio.dart';
@@ -260,9 +261,13 @@ class GeradorRelatorios {
     planilha.rename(planilha.getDefaultSheet()!, nomeAba);
     final aba = planilha.sheets[nomeAba]!;
 
-    aba.appendRow([for (final c in relatorio.cabecalho) TextCellValue(c)]);
+    // Inventários importados antes da limpeza na leitura podem ter guardado
+    // caracteres de controle; no XLSX eles tornariam o arquivo ilegível.
+    TextCellValue celula(String c) => TextCellValue(semCaracteresDeControle(c));
+
+    aba.appendRow([for (final c in relatorio.cabecalho) celula(c)]);
     for (final linha in relatorio.linhas) {
-      aba.appendRow([for (final c in linha) TextCellValue(c)]);
+      aba.appendRow([for (final c in linha) celula(c)]);
     }
 
     final bytes = planilha.encode();
