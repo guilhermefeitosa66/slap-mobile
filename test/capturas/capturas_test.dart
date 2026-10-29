@@ -35,6 +35,10 @@ void main() {
     // 1800 × 3200, também 9:16: a Play Store pede essa proporção, e o
     // tamanho serve tanto para o espaço de 7 quanto para o de 10 polegadas.
     'tablet': (const Size(900, 1600), 2.0),
+    // 1206 × 2622: iPhone de 6,3 polegadas, o tamanho que a App Store pede.
+    'iphone': (const Size(402, 874), 3.0),
+    // 2064 × 2752: iPad de 13 polegadas, exigido porque o app roda no iPad.
+    'ipad': (const Size(1032, 1376), 2.0),
   };
 
   setUpAll(carregarFontes);

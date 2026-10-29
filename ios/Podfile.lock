@@ -1,0 +1,22 @@
+PODS:
+  - Flutter (1.0.0)
+  - nsd_ios (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - nsd_ios (from `.symlinks/plugins/nsd_ios/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  nsd_ios:
+    :path: ".symlinks/plugins/nsd_ios/ios"
+
+SPEC CHECKSUMS:
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+  nsd_ios: eda5491e87ba9e2cd59636770b5953149eb93c5c
+
+PODFILE CHECKSUM: 3ba3a73b1b12adcf321a227a745625fe0888cc82
+
+COCOAPODS: 1.17.0
