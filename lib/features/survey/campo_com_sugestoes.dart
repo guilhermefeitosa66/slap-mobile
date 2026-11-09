@@ -96,7 +96,12 @@ class _CampoComSugestoesState extends State<CampoComSugestoes> {
                   : IconButton(
                       tooltip: widget.rotuloLimpar,
                       icon: const Icon(Icons.clear),
-                      onPressed: controlador.clear,
+                      // O foco abre o teclado e a lista de sugestões: quem
+                      // limpa o campo quer procurar outra opção.
+                      onPressed: () {
+                        controlador.clear();
+                        foco.requestFocus();
+                      },
                     ),
             ),
           ),

@@ -11,7 +11,9 @@ import '../../core/sons.dart';
 import '../../data/repos/patrimonios.dart';
 import '../../data/schema.dart';
 import '../../domain/divergencia.dart';
+import '../../domain/filtro_itens.dart';
 import '../../domain/patrimonio.dart';
+import '../divergence/tela_itens.dart';
 import 'configuracao_sheet.dart';
 import 'estado_levantamento.dart';
 import 'linha_leitura.dart';
@@ -43,10 +45,6 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
   /// a releitura acidental é comum, e sobrescrever sem avisar apagaria a
   /// informação de quem verificou antes.
   Patrimonio? _aguardandoConfirmacao;
-
-  /// Leitura cujo código é de mais de um bem — o número de um e o tombo de
-  /// outro —, aguardando a pessoa dizer qual está na mão dela.
-  LeituraRegistrada? _aguardandoEscolha;
 
   /// Guardado na abertura: no `dispose` o `ref` já não pode ser usado.
   late final Banco _banco;
@@ -130,11 +128,8 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 
     // Um "Regravar" oferecido antes da pergunta é de uma leitura feita na
     // sala antiga: não pode ir para a sala escolhida agora.
-    if (_aguardandoConfirmacao != null || _aguardandoEscolha != null) {
-      setState(() {
-        _aguardandoConfirmacao = null;
-        _aguardandoEscolha = null;
-      });
+    if (_aguardandoConfirmacao != null) {
+      setState(() => _aguardandoConfirmacao = null);
     }
     _confirmandoSala = true;
     try {
@@ -248,15 +243,6 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
         som = Som.naoLocalizado;
         _registrar(LeituraRegistrada(leitura: leitura, codigoLido: texto));
 
-      case ResultadoLeitura.ambiguo:
-        // Nada é gravado: a pessoa escolhe o bem no aviso logo abaixo do
-        // campo. O som é o de alerta, o mesmo de "já verificado" — pede
-        // atenção, mas não diz que o item não existe.
-        som = Som.jaVerificado;
-        final registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
-        _registrar(registro);
-        setState(() => _aguardandoEscolha = registro);
-
       case ResultadoLeitura.jaVerificado:
         som = Som.jaVerificado;
         setState(() => _aguardandoConfirmacao = leitura.patrimonio);
@@ -300,50 +286,6 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     if (leitura.resultado != ResultadoLeitura.jaVerificado) {
       setState(() => _aguardandoConfirmacao = null);
     }
-    // Uma leitura nova responde à pergunta anterior: ela fica sem escolha.
-    if (_aguardandoEscolha != null) {
-      setState(() => _aguardandoEscolha = null);
-    }
-  }
-
-  /// A pessoa disse qual dos bens de uma leitura ambígua está na mão dela.
-  ///
-  /// Daqui em diante é uma leitura comum desse bem: grava se ainda não foi
-  /// verificado, pede confirmação se já foi.
-  Future<void> _escolher(Patrimonio candidato) async {
-    final pendente = _aguardandoEscolha;
-    if (pendente == null) return;
-    if (!await _salaConfirmada()) {
-      _devolverFoco();
-      return;
-    }
-    final config = ref.read(configuracaoProvider(widget.inventarioId));
-    if (config == null || !mounted) return;
-
-    // Relido do banco: outro aparelho pode ter verificado o bem enquanto o
-    // aviso estava aberto.
-    final atual = ref.read(patrimoniosProvider).porId(candidato.id);
-    if (atual == null) return;
-
-    final leitura = Leitura.escolhida(atual);
-    if (leitura.resultado == ResultadoLeitura.jaVerificado) {
-      _registrar(
-        LeituraRegistrada(leitura: leitura, codigoLido: pendente.codigoLido),
-      );
-      setState(() => _aguardandoConfirmacao = atual);
-      ref.read(sonsProvider).tocar(Som.jaVerificado);
-    } else {
-      final depois = _gravar(atual, config);
-      _registrar(
-        LeituraRegistrada(
-          leitura: leitura,
-          codigoLido: pendente.codigoLido,
-          depois: depois,
-        ),
-      );
-      ref.read(sonsProvider).tocar(Som.sucesso);
-    }
-    _devolverFoco();
   }
 
   Future<void> _confirmarSobrescrita() async {
@@ -392,6 +334,59 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
     if (mounted) _devolverFoco();
   }
 
+  /// A ficha de um item lido, para corrigir ou desfazer o que foi gravado.
+  Future<void> _abrirDetalhe(Patrimonio patrimonio) async {
+    await abrirDetalhePatrimonio(
+      context,
+      patrimonio.id,
+      configuracao: ref.read(configuracaoProvider(widget.inventarioId)),
+    );
+    _aoVoltarDosItens();
+  }
+
+  /// Os itens que a planilha aponta para a sala, com a verificação manual a
+  /// um toque. O filtro é o mesmo critério do contador que abre a lista.
+  Future<void> _abrirItensDaSala(ConfiguracaoLevantamento config) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TelaItens(
+          inventarioId: widget.inventarioId,
+          filtroInicial: FiltroItens(sala: config.sala),
+          configuracao: config,
+        ),
+      ),
+    );
+    _aoVoltarDosItens();
+  }
+
+  /// O gesto de deslizar uma leitura da lista.
+  void _desfazerLeitura(LeituraRegistrada registro) {
+    desfazerLeitura(ref, widget.inventarioId, registro);
+    if (_aguardandoConfirmacao?.id == registro.patrimonio?.id) {
+      setState(() => _aguardandoConfirmacao = null);
+    }
+    _devolverFoco();
+  }
+
+  /// O que estava na tela pode ter mudado na ficha do item.
+  void _aoVoltarDosItens() {
+    if (!mounted) return;
+    final repo = ref.read(patrimoniosProvider);
+    ref
+        .read(historicosProvider.notifier)
+        .reler(widget.inventarioId, repo.porId);
+
+    // Um "Regravar" oferecido antes partiria do item antigo. Se a verificação
+    // foi desfeita, não há mais o que confirmar.
+    if (_aguardandoConfirmacao case final pendente?) {
+      final atual = repo.porId(pendente.id);
+      setState(
+        () => _aguardandoConfirmacao = atual?.verificado == true ? atual : null,
+      );
+    }
+    _devolverFoco();
+  }
+
   @override
   Widget build(BuildContext context) {
     final inventario = ref.watch(inventarioProvider(widget.inventarioId));
@@ -415,7 +410,11 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
           title: const Text('Levantamento'),
           actions: [
             if (config != null)
-              ContadorSala(sala: config.sala, progresso: progresso),
+              ContadorSala(
+                sala: config.sala,
+                progresso: progresso,
+                aoTocar: () => _abrirItensDaSala(config),
+              ),
           ],
         ),
         body: Column(
@@ -502,16 +501,6 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                 ],
               ),
             ),
-            if (_aguardandoEscolha case final pendente?)
-              _EscolherBem(
-                codigoLido: pendente.codigoLido,
-                candidatos: pendente.leitura.candidatos,
-                aoEscolher: _escolher,
-                aoCancelar: () {
-                  setState(() => _aguardandoEscolha = null);
-                  _devolverFoco();
-                },
-              ),
             if (_aguardandoConfirmacao != null)
               _ConfirmarSobrescrita(
                 patrimonio: _aguardandoConfirmacao!,
@@ -530,8 +519,17 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
                       itemCount: historico.length,
                       separatorBuilder: (_, _) =>
                           const Divider(height: 1, indent: 50),
-                      itemBuilder: (_, i) =>
-                          LinhaLeitura(registro: historico[i]),
+                      itemBuilder: (_, i) {
+                        final registro = historico[i];
+                        final bem = registro.patrimonio;
+                        return LeituraDeslizavel(
+                          registro: registro,
+                          aoDesfazer: () => _desfazerLeitura(registro),
+                          aoTocar: bem == null
+                              ? null
+                              : () => _abrirDetalhe(bem),
+                        );
+                      },
                     ),
             ),
           ],
@@ -555,11 +553,20 @@ class _TelaLevantamentoState extends ConsumerState<TelaLevantamento> {
 /// em tom secundário, e só quando existe. Sem isso, uma sala que recebeu
 /// muita coisa fica com o contador parado enquanto se lê item após item, o
 /// que passa a impressão de que as leituras não estão entrando.
+///
+/// Tocar abre os itens esperados na sala. Sala fora da planilha não espera
+/// item nenhum, e aí o contador não é botão.
 class ContadorSala extends StatelessWidget {
   final String sala;
   final ProgressoSala progresso;
+  final VoidCallback? aoTocar;
 
-  const ContadorSala({super.key, required this.sala, required this.progresso});
+  const ContadorSala({
+    super.key,
+    required this.sala,
+    required this.progresso,
+    this.aoTocar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -611,13 +618,46 @@ class ContadorSala extends StatelessWidget {
           '${lidos > 0 ? ', mais $lidos ${lidos == 1 ? 'item de outra sala' : 'itens de outras salas'}' : ''}';
     }
 
+    final valor = Text.rich(texto, style: estilo, maxLines: 1);
+    final acao = progresso.semBase ? null : aoTocar;
+
+    if (acao == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: Semantics(label: rotulo, excludeSemantics: true, child: valor),
+        ),
+      );
+    }
+
     return Center(
       child: Padding(
-        padding: const EdgeInsets.only(right: 16),
+        padding: const EdgeInsets.only(right: 4),
         child: Semantics(
+          button: true,
           label: rotulo,
+          hint: 'Toque para ver os itens da sala.',
+          onTap: acao,
           excludeSemantics: true,
-          child: Text.rich(texto, style: estilo, maxLines: 1),
+          child: InkWell(
+            onTap: acao,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: alvoMinimo),
+              padding: const EdgeInsets.only(left: 8, right: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  valor,
+                  Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: cores.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -733,106 +773,6 @@ class _ConfirmarSobrescrita extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Aviso de leitura ambígua: o código é o número de um bem e o tombo de
-/// outro. Um botão por bem, com o que o distingue na plaqueta — tombo e
-/// número —, a descrição e a sala do SUAP.
-class _EscolherBem extends StatelessWidget {
-  final String codigoLido;
-  final List<Patrimonio> candidatos;
-  final ValueChanged<Patrimonio> aoEscolher;
-  final VoidCallback aoCancelar;
-
-  const _EscolherBem({
-    required this.codigoLido,
-    required this.candidatos,
-    required this.aoEscolher,
-    required this.aoCancelar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tom = CoresResultado.of(context).jaVerificado;
-    final tema = Theme.of(context);
-    final estilo = tema.textTheme.bodyMedium?.copyWith(
-      color: tom.texto,
-      fontSize: 13,
-    );
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: tom.fundo,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '$codigoLido é de ${candidatos.length} bens',
-            style: tema.textTheme.titleSmall?.copyWith(
-              color: tom.texto,
-              fontSize: 14,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 8),
-            child: Text(
-              'No SUAP, a plaqueta antiga e a nova podem ter o mesmo número. '
-              'Nada foi gravado: toque no bem que está na sua mão.',
-              style: estilo,
-            ),
-          ),
-          for (final c in candidatos)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: OutlinedButton(
-                onPressed: () => aoEscolher(c),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: tom.texto,
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  minimumSize: const Size.fromHeight(alvoMinimo),
-                  side: BorderSide(
-                    color: tom.texto.withValues(alpha: 0.55),
-                    width: 1.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tombo ${c.tombo}'
-                      '${c.codigoBarras == null ? '' : ' · número ${c.codigoBarras}'}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      [
-                        c.descricao ?? 'Sem descrição',
-                        if (c.salaOriginal != null) c.salaOriginal!,
-                        if (c.verificado) 'já verificado',
-                      ].join(' · '),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          TextButton(
-            onPressed: aoCancelar,
-            style: TextButton.styleFrom(foregroundColor: tom.texto),
-            child: const Text('Nenhum destes'),
           ),
         ],
       ),

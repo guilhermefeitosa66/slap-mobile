@@ -37,15 +37,70 @@ Future<ConfiguracaoLevantamento?> abrirConfiguracao(
   return escolhida;
 }
 
+/// Pede os valores de uma conferência em massa.
+///
+/// Parte da configuração do levantamento, como quem conferiu a sala item a
+/// item a veria, mas não a altera: valer para estes itens não muda o que vale
+/// para as próximas leituras.
+Future<ConfiguracaoLevantamento?> escolherConferenciaEmMassa(
+  BuildContext context,
+  WidgetRef ref,
+  String inventarioId, {
+  required int quantidade,
+  required int jaVerificados,
+}) {
+  final repo = ref.read(patrimoniosProvider);
+
+  return showModalBottomSheet<ConfiguracaoLevantamento>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _FolhaConfiguracao(
+      inicial: ref.read(configuracaoProvider(inventarioId)),
+      salas: repo.salas(inventarioId),
+      responsaveis: repo.responsaveis(inventarioId),
+      titulo: 'Conferir em massa',
+      explicacao: quantidade == 1
+          ? 'Estes valores serão gravados no item selecionado.'
+          : 'Estes valores serão gravados nos '
+                '${formatarInteiro(quantidade)} itens selecionados.',
+      // Item já verificado não é sobrescrito em silêncio.
+      aviso: switch (jaVerificados) {
+        0 => null,
+        1 => '1 item já foi verificado e terá os valores substituídos.',
+        _ =>
+          '${formatarInteiro(jaVerificados)} itens já foram verificados e '
+              'terão os valores substituídos.',
+      },
+      rotuloConfirmar: quantidade == 1
+          ? 'Conferir 1 item'
+          : 'Conferir ${formatarInteiro(quantidade)} itens',
+      iconeConfirmar: Icons.check,
+    ),
+  );
+}
+
 class _FolhaConfiguracao extends StatefulWidget {
   final ConfiguracaoLevantamento? inicial;
   final List<String> salas;
   final List<String> responsaveis;
+  final String titulo;
+  final String explicacao;
+  final String? aviso;
+  final String rotuloConfirmar;
+  final IconData iconeConfirmar;
 
   const _FolhaConfiguracao({
     required this.salas,
     required this.responsaveis,
     this.inicial,
+    this.titulo = 'Aplicar às próximas leituras',
+    this.explicacao =
+        'Estes valores são gravados em cada patrimônio que você ler, '
+        'até que você os altere.',
+    this.aviso,
+    this.rotuloConfirmar = 'Aplicar e continuar',
+    this.iconeConfirmar = Icons.play_arrow,
   });
 
   @override
@@ -107,15 +162,24 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Aplicar às próximas leituras',
+              widget.titulo,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 4),
             Text(
-              'Estes valores são gravados em cada patrimônio que você ler, '
-              'até que você os altere.',
+              widget.explicacao,
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (widget.aviso case final aviso?) ...[
+              const SizedBox(height: 8),
+              Text(
+                aviso,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: CoresResultado.of(context).jaVerificado.texto,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // Texto livre com sugestões: o SLAP só permite escolher uma sala
@@ -127,6 +191,7 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
               rotulo: 'Sala onde você está',
               icone: Icons.room_outlined,
               ajuda: 'Pode ser um nome novo, que não esteja na planilha.',
+              rotuloLimpar: 'Limpar a sala',
               autofoco: widget.inicial == null,
             ),
             const SizedBox(height: 20),
@@ -175,8 +240,8 @@ class _FolhaConfiguracaoState extends State<_FolhaConfiguracao> {
 
             FilledButton.icon(
               onPressed: _confirmar,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Aplicar e continuar'),
+              icon: Icon(widget.iconeConfirmar),
+              label: Text(widget.rotuloConfirmar),
             ),
             const SizedBox(height: 8),
           ],

@@ -242,7 +242,7 @@ class GeradorRelatorios {
             // Vazio quando o levantamento manteve o do SUAP, como a sala.
             p.conservacao?.rotulo ?? '',
             p.situacao?.rotulo ?? '',
-            classificar(p).rotulo,
+            classificar(p).rotuloNoRelatorio,
             p.exigeAtencao ? 'Sim' : '',
             p.verificadoPor ?? '',
             p.verificadoPorMatricula ?? '',

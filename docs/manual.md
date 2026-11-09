@@ -251,9 +251,9 @@ no denominador, porque ninguém os procuraria neste ambiente.
   fechar entre um e outro.
 - **Digitando** — o tombo ou o código, e Enter.
 
-O seletor acima do campo escolhe o que o número significa: **Cód. barras** ou **Tombo**. Se
-não achar no campo escolhido, o aplicativo tenta o outro antes de desistir — ler no modo
-errado não custa nada.
+O seletor acima do campo escolhe o que o número significa: **Cód. barras** ou **Tombo**. A busca
+acontece só no campo escolhido, na digitação e na câmera. Se o número não estiver nele, a leitura
+é "Não localizado", mesmo que outro bem tenha esse número no outro campo.
 
 ![Leitura do código de barras pela câmera](imagens/camera.png)
 

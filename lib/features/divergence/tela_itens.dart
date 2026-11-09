@@ -8,19 +8,55 @@ import '../../app/componentes.dart';
 import '../../app/providers.dart';
 import '../../app/tema.dart';
 import '../../core/formato.dart';
+import '../../data/repos/patrimonios.dart';
 import '../../domain/divergencia.dart';
 import '../../domain/filtro_itens.dart';
 import '../../domain/patrimonio.dart';
 import '../../domain/valores.dart';
 import '../survey/campo_com_sugestoes.dart';
+import '../survey/configuracao_sheet.dart';
+import '../survey/estado_levantamento.dart';
+import '../survey/linha_leitura.dart' show FundoDesfazer;
 import '../survey/seletor_conservacao.dart';
+
+/// Abre a ficha de um patrimônio em folha sobre a tela atual.
+///
+/// [configuracao] é a do levantamento em curso, quando a ficha sai dele.
+Future<void> abrirDetalhePatrimonio(
+  BuildContext context,
+  String patrimonioId, {
+  ConfiguracaoLevantamento? configuracao,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => DetalhePatrimonio(
+      patrimonioId: patrimonioId,
+      configuracao: configuracao,
+    ),
+  );
+}
 
 /// Lista de patrimônios, filtrada por grupo do resultado.
 class TelaItens extends ConsumerStatefulWidget {
   final String inventarioId;
   final Classificacao? classificacao;
 
-  const TelaItens({super.key, required this.inventarioId, this.classificacao});
+  /// Filtro com que a lista abre. A pessoa pode trocá-lo ou removê-lo.
+  final FiltroItens filtroInicial;
+
+  /// A configuração do levantamento em curso, quando a lista sai dele: é o
+  /// que a verificação manual aproveita (ver [DetalhePatrimonio.configuracao]).
+  final ConfiguracaoLevantamento? configuracao;
+
+  const TelaItens({
+    super.key,
+    required this.inventarioId,
+    this.classificacao,
+    this.filtroInicial = FiltroItens.nenhum,
+    this.configuracao,
+  });
 
   @override
   ConsumerState<TelaItens> createState() => _TelaItensState();
@@ -36,12 +72,16 @@ class _TelaItensState extends ConsumerState<TelaItens> {
   static const _esperaBusca = Duration(milliseconds: 250);
 
   late Classificacao? _classificacao = widget.classificacao;
-  FiltroItens _filtro = FiltroItens.nenhum;
+  late FiltroItens _filtro = widget.filtroInicial;
   final _busca = TextEditingController();
   final _rolagem = ScrollController();
   Timer? _atraso;
 
   final _itens = <Patrimonio>[];
+
+  /// Itens marcados para a conferência em massa. Com algum marcado, a lista
+  /// está em modo de seleção; desmarcar o último sai dele.
+  final _selecionados = <String>{};
   int _total = 0;
   bool _fim = false;
 
@@ -117,6 +157,7 @@ class _TelaItensState extends ConsumerState<TelaItens> {
   }
 
   void _aoDigitar(String _) {
+    _selecionados.clear();
     _atraso?.cancel();
     _atraso = Timer(_esperaBusca, () {
       if (mounted) _recarregar();
@@ -125,6 +166,7 @@ class _TelaItensState extends ConsumerState<TelaItens> {
   }
 
   void _filtrar(Classificacao? c) {
+    _selecionados.clear();
     _classificacao = c;
     _recarregar();
     if (_rolagem.hasClients) _rolagem.jumpTo(0);
@@ -133,9 +175,85 @@ class _TelaItensState extends ConsumerState<TelaItens> {
   /// Aplica o filtro escolhido e volta ao topo: a posição da rolagem anterior
   /// não diz nada sobre a lista nova.
   void _aplicar(FiltroItens filtro) {
+    _selecionados.clear();
     _filtro = filtro;
     _recarregar();
     if (_rolagem.hasClients) _rolagem.jumpTo(0);
+  }
+
+  void _alternar(Patrimonio p) => setState(() {
+    if (!_selecionados.remove(p.id)) _selecionados.add(p.id);
+  });
+
+  bool get _todosSelecionados => _selecionados.length >= _total;
+
+  /// Marca tudo o que o filtro e a busca encontram, inclusive o que ainda não
+  /// foi carregado pela rolagem.
+  void _alternarTodos() {
+    if (_todosSelecionados) {
+      setState(_selecionados.clear);
+      return;
+    }
+    final ids = ref
+        .read(patrimoniosProvider)
+        .idsDe(
+          inventarioId: widget.inventarioId,
+          classificacao: _classificacao,
+          filtro: _filtro,
+          busca: _busca.text,
+        );
+    setState(() => _selecionados.addAll(ids));
+  }
+
+  Future<void> _conferirEmMassa() async {
+    final repo = ref.read(patrimoniosProvider);
+    final ids = _selecionados.toList();
+    final config = await escolherConferenciaEmMassa(
+      context,
+      ref,
+      widget.inventarioId,
+      quantidade: ids.length,
+      jaVerificados: repo.contarVerificados(ids),
+    );
+    if (config == null || !mounted) return;
+
+    final mensageiro = ScaffoldMessenger.of(context);
+    // Outro aparelho pode ter encerrado o inventário com a folha aberta.
+    if (ref.read(inventarioProvider(widget.inventarioId))?.encerrado ?? false) {
+      mensageiro.showSnackBar(
+        const SnackBar(
+          content: Text('Inventário encerrado: nada foi alterado.'),
+        ),
+      );
+      return;
+    }
+
+    final identidade = ref.read(identidadeProvider);
+    final gravados = repo.registrarVerificacoes(
+      ids: ids,
+      config: config,
+      usuarioNome: identidade.nome,
+      usuarioMatricula: identidade.matricula,
+    );
+    setState(_selecionados.clear);
+    ref.read(revisaoProvider.notifier).mudou();
+    mensageiro.showSnackBar(
+      SnackBar(
+        content: Text(
+          gravados == 1
+              ? '1 item conferido'
+              : '${formatarInteiro(gravados)} itens conferidos',
+        ),
+      ),
+    );
+  }
+
+  /// O gesto de deslizar. A própria recarga tira o item das listas de
+  /// verificados; nas outras ele fica, agora como não verificado, e por isso
+  /// a linha nunca é descartada pelo gesto.
+  Future<bool> _desfazerNoGesto(Patrimonio p) async {
+    desfazerVerificacao(ref, p);
+    return false;
   }
 
   /// Abre a folha de filtros com os valores que existem neste inventário.
@@ -190,179 +308,231 @@ class _TelaItensState extends ConsumerState<TelaItens> {
     ref.listen(revisaoProvider, (_, _) => _recarregar(manterQuantidade: true));
 
     final ativos = _filtro.quantidade;
+    final encerrado =
+        ref.watch(inventarioProvider(widget.inventarioId))?.encerrado ?? false;
+    final selecionando = !encerrado && _selecionados.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_classificacao?.rotulo ?? 'Patrimônios'),
-        actions: [
-          IconButton(
-            onPressed: _abrirFiltros,
-            // O número entra no rótulo falado: o distintivo é visual, e o
-            // leitor de tela não o enxerga.
-            tooltip: switch (ativos) {
-              0 => 'Filtrar',
-              1 => 'Filtros (1 ativo)',
-              _ => 'Filtros ($ativos ativos)',
-            },
-            icon: Badge(
-              isLabelVisible: ativos > 0,
-              label: Text('$ativos'),
-              child: const Icon(Icons.filter_list),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-            child: TextField(
-              controller: _busca,
-              decoration: InputDecoration(
-                hintText: 'Buscar por tombo, código ou descrição',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _busca.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Limpar a busca',
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _busca.clear();
-                          _recarregar();
-                        },
-                      ),
-              ),
-              onChanged: _aoDigitar,
-            ),
-          ),
-          SizedBox(
-            height: 56,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _Filtro(
-                  rotulo: 'Todos',
-                  ativo: _classificacao == null,
-                  aoTocar: () => _filtrar(null),
+    return PopScope(
+      // O "voltar" sai da seleção antes de sair da tela.
+      canPop: !selecionando,
+      onPopInvokedWithResult: (saiu, _) {
+        if (!saiu) setState(_selecionados.clear);
+      },
+      child: Scaffold(
+        appBar: selecionando
+            ? AppBar(
+                leading: IconButton(
+                  tooltip: 'Cancelar a seleção',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(_selecionados.clear),
                 ),
-                for (final c in Classificacao.values)
-                  _Filtro(
-                    rotulo: c.rotulo,
-                    ativo: _classificacao == c,
-                    cor: CoresResultado.of(context).de(c).texto,
-                    aoTocar: () => _filtrar(c),
-                  ),
-              ],
-            ),
-          ),
-          // Uma ficha por filtro ativo, logo abaixo da busca: sem elas, uma
-          // lista curta parece inventário pequeno. Em Wrap, e não em fila
-          // rolável, para caberem com a fonte do sistema ampliada.
-          if (_filtro.algumAtivo)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final MapEntry(key: campo, value: valor)
-                      in _filtro.ativos.entries)
-                    _FichaFiltro(
-                      rotulo: '${campo.rotulo}: $valor',
-                      dica: 'Remover o filtro ${campo.rotulo}',
-                      aoTocar: () => _aplicar(_filtro.sem(campo)),
+                title: Text(
+                  _selecionados.length == 1
+                      ? '1 selecionado'
+                      : '${formatarInteiro(_selecionados.length)} selecionados',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: _alternarTodos,
+                    child: Text(
+                      _todosSelecionados
+                          ? 'Desmarcar todos'
+                          : 'Selecionar todos',
                     ),
-                  if (ativos > 1)
-                    _FichaFiltro(
-                      rotulo: 'Limpar filtros',
-                      dica: 'Limpar todos os filtros',
-                      aoTocar: () => _aplicar(FiltroItens.nenhum),
+                  ),
+                ],
+              )
+            : AppBar(
+                title: Text(_classificacao?.rotulo ?? 'Patrimônios'),
+                actions: [
+                  IconButton(
+                    onPressed: _abrirFiltros,
+                    // O número entra no rótulo falado: o distintivo é visual, e o
+                    // leitor de tela não o enxerga.
+                    tooltip: switch (ativos) {
+                      0 => 'Filtrar',
+                      1 => 'Filtros (1 ativo)',
+                      _ => 'Filtros ($ativos ativos)',
+                    },
+                    icon: Badge(
+                      isLabelVisible: ativos > 0,
+                      label: Text('$ativos'),
+                      child: const Icon(Icons.filter_list),
+                    ),
+                  ),
+                ],
+              ),
+        floatingActionButton: selecionando
+            ? FloatingActionButton.extended(
+                onPressed: _conferirEmMassa,
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('Conferir em massa'),
+              )
+            : null,
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+              child: TextField(
+                controller: _busca,
+                decoration: InputDecoration(
+                  hintText: 'Buscar por tombo, código ou descrição',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _busca.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Limpar a busca',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _busca.clear();
+                            _selecionados.clear();
+                            _recarregar();
+                          },
+                        ),
+                ),
+                onChanged: _aoDigitar,
+              ),
+            ),
+            SizedBox(
+              height: 56,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _Filtro(
+                    rotulo: 'Todos',
+                    ativo: _classificacao == null,
+                    aoTocar: () => _filtrar(null),
+                  ),
+                  for (final c in Classificacao.values)
+                    _Filtro(
+                      rotulo: c.rotulo,
+                      ativo: _classificacao == c,
+                      cor: CoresResultado.of(context).de(c).texto,
+                      aoTocar: () => _filtrar(c),
                     ),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Semantics(
-                liveRegion: true,
-                child: Text(
-                  _total == 1
-                      ? '1 patrimônio'
-                      : '${formatarInteiro(_total)} patrimônios',
-                  style: Theme.of(context).textTheme.labelMedium,
+            // Uma ficha por filtro ativo, logo abaixo da busca: sem elas, uma
+            // lista curta parece inventário pequeno. Em Wrap, e não em fila
+            // rolável, para caberem com a fonte do sistema ampliada.
+            if (_filtro.algumAtivo)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final MapEntry(key: campo, value: valor)
+                        in _filtro.ativos.entries)
+                      _FichaFiltro(
+                        rotulo: '${campo.rotulo}: $valor',
+                        dica: 'Remover o filtro ${campo.rotulo}',
+                        aoTocar: () => _aplicar(_filtro.sem(campo)),
+                      ),
+                    if (ativos > 1)
+                      _FichaFiltro(
+                        rotulo: 'Limpar filtros',
+                        dica: 'Limpar todos os filtros',
+                        aoTocar: () => _aplicar(FiltroItens.nenhum),
+                      ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _total == 1
+                        ? '1 patrimônio'
+                        : '${formatarInteiro(_total)} patrimônios',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
                 ),
               ),
             ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _itens.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(_mensagemVazia, textAlign: TextAlign.center),
-                          if (_filtro.algumAtivo) ...[
-                            const SizedBox(height: 12),
-                            TextButton.icon(
-                              onPressed: () => _aplicar(FiltroItens.nenhum),
-                              icon: const Icon(Icons.filter_list_off),
-                              label: const Text('Limpar filtros'),
-                            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _itens.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_mensagemVazia, textAlign: TextAlign.center),
+                            if (_filtro.algumAtivo) ...[
+                              const SizedBox(height: 12),
+                              TextButton.icon(
+                                onPressed: () => _aplicar(FiltroItens.nenhum),
+                                icon: const Icon(Icons.filter_list_off),
+                                label: const Text('Limpar filtros'),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  )
-                : ListView.separated(
-                    controller: _rolagem,
-                    itemCount: _itens.length + (_fim ? 0 : 1),
-                    separatorBuilder: (_, _) =>
-                        const Divider(height: 1, indent: 50),
-                    itemBuilder: (_, i) {
-                      if (i >= _itens.length) {
-                        // Chegou ao fim do que foi carregado sem o ouvinte de
-                        // rolagem disparar (lista curta que não rola).
-                        WidgetsBinding.instance.addPostFrameCallback(
-                          (_) => mounted ? _proximaPagina() : null,
-                        );
-                        return const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Center(
-                            child: SizedBox.square(
-                              dimension: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
+                    )
+                  : ListView.separated(
+                      controller: _rolagem,
+                      // O botão flutuante não pode cobrir a última linha.
+                      padding: EdgeInsets.only(bottom: selecionando ? 88 : 0),
+                      itemCount: _itens.length + (_fim ? 0 : 1),
+                      separatorBuilder: (_, _) =>
+                          const Divider(height: 1, indent: 50),
+                      itemBuilder: (_, i) {
+                        if (i >= _itens.length) {
+                          // Chegou ao fim do que foi carregado sem o ouvinte de
+                          // rolagem disparar (lista curta que não rola).
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => mounted ? _proximaPagina() : null,
+                          );
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Center(
+                              child: SizedBox.square(
+                                dimension: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                ),
                               ),
                             ),
+                          );
+                        }
+                        final p = _itens[i];
+                        return Dismissible(
+                          key: ValueKey(p.id),
+                          // Só item verificado tem leitura a desfazer.
+                          direction: !encerrado && !selecionando && p.verificado
+                              ? DismissDirection.endToStart
+                              : DismissDirection.none,
+                          background: const FundoDesfazer(),
+                          confirmDismiss: (_) => _desfazerNoGesto(p),
+                          child: _LinhaPatrimonio(
+                            patrimonio: p,
+                            aoTocar: () =>
+                                selecionando ? _alternar(p) : _abrirDetalhe(p),
+                            aoSegurar: encerrado ? null : () => _alternar(p),
+                            selecionando: selecionando,
+                            selecionado: _selecionados.contains(p.id),
+                            classificacaoFiltrada: _classificacao,
                           ),
                         );
-                      }
-                      return _LinhaPatrimonio(
-                        patrimonio: _itens[i],
-                        aoTocar: () => _abrirDetalhe(_itens[i]),
-                        classificacaoFiltrada: _classificacao,
-                      );
-                    },
-                  ),
-          ),
-        ],
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _abrirDetalhe(Patrimonio p) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => DetalhePatrimonio(patrimonioId: p.id),
-    );
+    abrirDetalhePatrimonio(context, p.id, configuracao: widget.configuracao);
   }
 }
 
@@ -615,7 +785,7 @@ class _FolhaFiltrosState extends State<_FolhaFiltros> {
             // evita a lista vazia sem explicação.
             Text(
               naoLocalizado
-                  ? 'A lista está em "Não localizado". Esses itens não têm '
+                  ? 'A lista está em "Não verificado". Esses itens não têm '
                         'estado, situação nem quem verificou: filtrar por um '
                         'deles não deixa nenhum item.'
                   : 'Estado, situação e "verificado por" só existem em item '
@@ -862,9 +1032,17 @@ class _LinhaPatrimonio extends StatelessWidget {
   final Patrimonio patrimonio;
   final VoidCallback aoTocar;
 
+  /// Começa a seleção. Sem ele, com o inventário encerrado, não há seleção.
+  final VoidCallback? aoSegurar;
+  final bool selecionando;
+  final bool selecionado;
+
   const _LinhaPatrimonio({
     required this.patrimonio,
     required this.aoTocar,
+    this.aoSegurar,
+    this.selecionando = false,
+    this.selecionado = false,
     this.classificacaoFiltrada,
   });
 
@@ -882,6 +1060,7 @@ class _LinhaPatrimonio extends StatelessWidget {
 
     return InkWell(
       onTap: aoTocar,
+      onLongPress: aoSegurar,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
@@ -889,12 +1068,22 @@ class _LinhaPatrimonio extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 1),
-              child: Icon(
-                CoresResultado.icone(classificacao),
-                color: tom.texto,
-                size: 22,
-                semanticLabel: classificacao.rotulo,
-              ),
+              child: selecionando
+                  ? SizedBox.square(
+                      dimension: 22,
+                      child: Checkbox(
+                        value: selecionado,
+                        onChanged: (_) => aoTocar(),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )
+                  : Icon(
+                      CoresResultado.icone(classificacao),
+                      color: tom.texto,
+                      size: 22,
+                      semanticLabel: classificacao.rotulo,
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1030,7 +1219,18 @@ List<({String texto, TomResultado tom})> etiquetasDoItem(
 class DetalhePatrimonio extends ConsumerStatefulWidget {
   final String patrimonioId;
 
-  const DetalhePatrimonio({super.key, required this.patrimonioId});
+  /// A configuração do levantamento em curso, se a ficha foi aberta nele.
+  ///
+  /// A verificação manual de um item ainda não encontrado parte dela, como
+  /// uma leitura partiria: sala, estado, situação e responsável já vêm
+  /// preenchidos. Item já verificado mostra o que foi gravado.
+  final ConfiguracaoLevantamento? configuracao;
+
+  const DetalhePatrimonio({
+    super.key,
+    required this.patrimonioId,
+    this.configuracao,
+  });
 
   @override
   ConsumerState<DetalhePatrimonio> createState() => _DetalhePatrimonioState();
@@ -1057,6 +1257,7 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
         p,
         salas: repo.salas(p.inventarioId),
         responsaveis: repo.responsaveis(p.inventarioId),
+        padrao: p.verificado ? null : widget.configuracao,
       );
     });
   }
@@ -1107,15 +1308,7 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
   }
 
   void _desfazer(Patrimonio p) {
-    final identidade = ref.read(identidadeProvider);
-    ref
-        .read(patrimoniosProvider)
-        .desfazerVerificacao(
-          patrimonio: p,
-          usuarioNome: identidade.nome,
-          usuarioMatricula: identidade.matricula,
-        );
-    ref.read(revisaoProvider.notifier).mudou();
+    desfazerVerificacao(ref, p);
     Navigator.of(context).pop();
   }
 
@@ -1339,7 +1532,7 @@ class _DetalhePatrimonioState extends ConsumerState<DetalhePatrimonio> {
 /// Sala, responsável e estado mostram só o que o levantamento gravou: em
 /// branco (no estado, "manter"), o valor da planilha permanece — e salvar sem
 /// mexer em nada não gera operação. Situação sem valor parte do padrão das
-/// leituras.
+/// leituras. Com [padrao], os campos partem da configuração do levantamento.
 class _EdicaoLevantamento {
   final TextEditingController sala;
   final TextEditingController responsavel;
@@ -1353,11 +1546,14 @@ class _EdicaoLevantamento {
     Patrimonio p, {
     required this.salas,
     required this.responsaveis,
-  }) : sala = TextEditingController(text: p.salaAtual ?? ''),
-       responsavel = TextEditingController(text: p.responsavelAtual ?? ''),
-       conservacao = p.conservacao,
+    ConfiguracaoLevantamento? padrao,
+  }) : sala = TextEditingController(text: padrao?.sala ?? p.salaAtual ?? ''),
+       responsavel = TextEditingController(
+         text: padrao?.responsavel ?? p.responsavelAtual ?? '',
+       ),
+       conservacao = padrao?.conservacao ?? p.conservacao,
        conservacaoOriginal = p.conservacaoOriginal,
-       situacao = p.situacao ?? SituacaoUso.ativo;
+       situacao = padrao?.situacao ?? p.situacao ?? SituacaoUso.ativo;
 
   void dispose() {
     sala.dispose();

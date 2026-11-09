@@ -35,7 +35,11 @@ void main() {
       ops,
     ).criar(nome: 'Campus Picos', ano: 2026);
     RepositorioPatrimonios(banco, ops).inserirLote(inventario.id, const [
-      PatrimonioImportado(tombo: '023101', descricao: 'MESA'),
+      PatrimonioImportado(
+        tombo: '023101',
+        codigoBarras: '023101',
+        descricao: 'MESA',
+      ),
     ]);
   });
 

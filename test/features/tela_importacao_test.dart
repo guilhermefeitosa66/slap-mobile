@@ -189,12 +189,11 @@ void main() {
       ).porId(inventario.id)!.edsExcluidos,
       ['44905218'],
     );
-    ResultadoLeitura ler(String codigo) => repo
-        .procurar(
-          inventarioId: inventario.id,
-          codigo: codigo,
-          modo: ModoLeitura.codigoBarras,
-        )
+    ResultadoLeitura ler(
+      String codigo, {
+      ModoLeitura modo = ModoLeitura.codigoBarras,
+    }) => repo
+        .procurar(inventarioId: inventario.id, codigo: codigo, modo: modo)
         .resultado;
     expect(
       ler('-19434'),
@@ -202,7 +201,7 @@ void main() {
       reason: 'o número negativo do SUAP fica encontrável',
     );
     expect(
-      ler('23101'),
+      ler('23101', modo: ModoLeitura.tombo),
       ResultadoLeitura.sucesso,
       reason: 'a plaqueta antiga, pelo tombo',
     );
