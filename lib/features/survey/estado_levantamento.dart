@@ -140,10 +140,19 @@ class LeituraRegistrada {
     required this.leitura,
     required this.codigoLido,
     this.depois,
-  }) : quando = DateTime.now();
+    DateTime? quando,
+  }) : quando = quando ?? DateTime.now();
 
   ResultadoLeitura get resultado => leitura.resultado;
   Patrimonio? get patrimonio => depois ?? leitura.patrimonio;
+
+  /// A mesma leitura, mostrando o bem como ele está agora.
+  LeituraRegistrada comBem(Patrimonio atual) => LeituraRegistrada(
+    leitura: leitura,
+    codigoLido: codigoLido,
+    depois: atual,
+    quando: quando,
+  );
 }
 
 class ControladorHistoricos
@@ -164,9 +173,80 @@ class ControladorHistoricos
     };
   }
 
+  /// Atualiza as linhas com o estado atual de cada bem.
+  ///
+  /// A leitura guarda uma fotografia do item, e a ficha dele pode alterar ou
+  /// desfazer a verificação depois. Só ao voltar da ficha, e não a cada
+  /// mudança: no caminho quente, seriam 50 consultas por leitura.
+  void reler(String inventarioId, Patrimonio? Function(String id) porId) {
+    final atual = state[inventarioId];
+    if (atual == null) return;
+    state = {
+      ...state,
+      inventarioId: [
+        for (final registro in atual)
+          switch (registro.patrimonio) {
+            final p? => switch (porId(p.id)) {
+              final novo? => registro.comBem(novo),
+              null => registro,
+            },
+            null => registro,
+          },
+      ],
+    };
+  }
+
+  /// Tira do histórico as linhas que [criterio] aceitar.
+  void remover(String inventarioId, bool Function(LeituraRegistrada) criterio) {
+    final atual = state[inventarioId];
+    if (atual == null) return;
+    state = {...state, inventarioId: atual.where((l) => !criterio(l)).toList()};
+  }
+
   void limpar(String inventarioId) {
     state = {...state}..remove(inventarioId);
   }
+}
+
+/// Desfaz a verificação de um bem. Vai pelo log de operações, como toda
+/// alteração: chega aos outros aparelhos e fica no histórico do item.
+void desfazerVerificacao(WidgetRef ref, Patrimonio patrimonio) {
+  final identidade = ref.read(identidadeProvider);
+  ref
+      .read(patrimoniosProvider)
+      .desfazerVerificacao(
+        patrimonio: patrimonio,
+        usuarioNome: identidade.nome,
+        usuarioMatricula: identidade.matricula,
+      );
+  ref.read(revisaoProvider.notifier).mudou();
+}
+
+/// Se [outra] é a leitura [registro] ou uma leitura do mesmo bem.
+bool mesmaLeitura(LeituraRegistrada registro, LeituraRegistrada outra) {
+  final id = registro.patrimonio?.id;
+  return identical(registro, outra) ||
+      (id != null && outra.patrimonio?.id == id);
+}
+
+/// O gesto de deslizar uma leitura: limpa o que ela gravou e tira a linha da
+/// lista, junto com as outras leituras do mesmo bem, que diriam o contrário.
+///
+/// Código não localizado e verificação já desfeita não têm o que limpar: só
+/// saem da lista.
+void desfazerLeitura(
+  WidgetRef ref,
+  String inventarioId,
+  LeituraRegistrada registro,
+) {
+  // Relido: o item pode ter mudado desde a leitura.
+  final id = registro.patrimonio?.id;
+  final atual = id == null ? null : ref.read(patrimoniosProvider).porId(id);
+  if (atual != null && atual.verificado) desfazerVerificacao(ref, atual);
+
+  ref
+      .read(historicosProvider.notifier)
+      .remover(inventarioId, (l) => mesmaLeitura(registro, l));
 }
 
 final historicosProvider =
@@ -184,7 +264,7 @@ final historicoProvider = Provider.family<List<LeituraRegistrada>, String>((
 
 // ------------------------------------------------------------------ modo ---
 
-/// Campo em que a leitura procura primeiro.
+/// Campo em que a leitura procura.
 class ControladorModo extends Notifier<ModoLeitura> {
   @override
   ModoLeitura build() => ModoLeitura.codigoBarras;

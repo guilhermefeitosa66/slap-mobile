@@ -125,13 +125,6 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
         som = Som.naoLocalizado;
         registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
 
-      case ResultadoLeitura.ambiguo:
-        // Como no "já verificado", a câmera não para para perguntar. Nada é
-        // gravado; o item fica marcado na lista, e a escolha se faz digitando
-        // o número no levantamento.
-        som = Som.jaVerificado;
-        registro = LeituraRegistrada(leitura: leitura, codigoLido: texto);
-
       case ResultadoLeitura.jaVerificado:
         // Pela câmera não se pede confirmação: interromper o fluxo com um
         // diálogo derrubaria o ritmo. O item aparece marcado na lista, e a
@@ -165,6 +158,17 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
     }
     // Por último, e sem esperar: a lista não pode ficar atrás do áudio.
     ref.read(sonsProvider).tocar(som);
+  }
+
+  /// Desfaz uma leitura e deixa o código pronto para ser lido de novo.
+  void _desfazer(LeituraRegistrada registro) {
+    desfazerLeitura(ref, widget.inventarioId, registro);
+    setState(() {
+      for (final l in _lidos.where((l) => mesmaLeitura(registro, l))) {
+        _processados.remove(chaveBusca(l.codigoLido));
+      }
+      _lidos.removeWhere((l) => mesmaLeitura(registro, l));
+    });
   }
 
   @override
@@ -252,7 +256,10 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
                       itemCount: _lidos.length,
                       separatorBuilder: (_, _) =>
                           const Divider(height: 1, indent: 50),
-                      itemBuilder: (_, i) => LinhaLeitura(registro: _lidos[i]),
+                      itemBuilder: (_, i) => LeituraDeslizavel(
+                        registro: _lidos[i],
+                        aoDesfazer: () => _desfazer(_lidos[i]),
+                      ),
                     ),
             ),
           ],

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
@@ -23,13 +25,6 @@ enum ResultadoLeitura {
 
   /// Nenhum patrimônio do inventário corresponde ao código.
   naoLocalizado,
-
-  /// O código é o número de um bem e o tombo de outro — no SUAP, a plaqueta
-  /// nova de um e a plaqueta antiga do outro. Nada é gravado: escolher por
-  /// conta própria registraria o bem errado em silêncio, e o erro só
-  /// apareceria quando os dois fossem atualizados no SUAP. Os dois vão em
-  /// [Leitura.candidatos] para a pessoa decidir.
-  ambiguo,
 }
 
 /// O que aconteceu com uma leitura.
@@ -37,45 +32,20 @@ class Leitura {
   final ResultadoLeitura resultado;
   final Patrimonio? patrimonio;
 
-  /// O número foi achado no *outro* campo: lido como tombo e encontrado no
-  /// código de barras, ou o contrário.
-  ///
-  /// O item é registrado normalmente, mas o usuário fica sabendo que há
-  /// inconsistência no cadastro. O SLAP nunca faz essa segunda tentativa, e é
-  /// uma das causas mais comuns de falso "não localizado".
-  final bool achadoNoOutroCampo;
-
   /// Mais de um patrimônio com o mesmo código no inventário. O SLAP escolhe um
   /// com `.first` e não avisa ninguém.
   final int duplicados;
 
-  /// Os bens entre os quais escolher, quando o resultado é
-  /// [ResultadoLeitura.ambiguo]: primeiro os do campo do modo de leitura,
-  /// depois os do outro campo.
-  final List<Patrimonio> candidatos;
-
   const Leitura({
     required this.resultado,
     this.patrimonio,
-    this.achadoNoOutroCampo = false,
     this.duplicados = 0,
-    this.candidatos = const [],
   });
-
-  /// A leitura de um bem escolhido entre os [candidatos] de uma leitura
-  /// ambígua. Daqui em diante segue como uma leitura comum: grava se ainda não
-  /// foi verificado, pede confirmação se já foi.
-  factory Leitura.escolhida(Patrimonio p) => Leitura(
-    resultado: p.verificado
-        ? ResultadoLeitura.jaVerificado
-        : ResultadoLeitura.sucesso,
-    patrimonio: p,
-  );
 
   bool get temDuplicados => duplicados > 1;
 }
 
-/// Campo em que procurar primeiro.
+/// O campo em que a leitura procura. Só nele: ver [RepositorioPatrimonios.procurar].
 enum ModoLeitura {
   tombo('Tombo'),
   codigoBarras('Código de barras');
@@ -216,16 +186,11 @@ class RepositorioPatrimonios {
 
   /// Procura um patrimônio pelo código lido.
   ///
-  /// Procura nos dois campos — tombo e código de barras (o `NUMERO` do SUAP)
-  /// — e o modo selecionado diz qual vem primeiro. Achado só no outro campo,
-  /// o item é registrado com o aviso de cadastro inconsistente.
-  ///
-  /// Achado nos dois campos, mas em **bens diferentes**, a leitura é
-  /// [ResultadoLeitura.ambiguo] e nada é gravado. No SUAP isso é comum e não
-  /// é erro de cadastro: como `tombo = numero + 42535`, a plaqueta antiga
-  /// 23254 (bem `-19281`) e a plaqueta nova 23254 (bem `23254`, tombo 65789)
-  /// convivem. O modo de leitura não basta para decidir — o padrão é código
-  /// de barras, e quase ninguém o troca ao passar de uma plaqueta para outra.
+  /// Procura **só no campo do modo selecionado**, sem tentar o outro. No SUAP
+  /// um mesmo número pode ser o número de um bem e o tombo de outro
+  /// (`tombo = numero + 42535`), e tentar o outro campo registrava o bem
+  /// errado: 222 digitado como código de barras achava o bem de tombo 222,
+  /// cujo número é -42313.
   ///
   /// Nenhuma chamada de rede participa disso: é acesso por índice no banco
   /// local, que é o que mantém o ritmo do levantamento.
@@ -239,33 +204,11 @@ class RepositorioPatrimonios {
       return const Leitura(resultado: ResultadoLeitura.naoLocalizado);
     }
 
-    final primeiro = modo == ModoLeitura.tombo
-        ? 'tombo_chave'
-        : 'codigo_barras_chave';
-    final segundo = modo == ModoLeitura.tombo
-        ? 'codigo_barras_chave'
-        : 'tombo_chave';
-
-    final noModo = _buscarPor(inventarioId, primeiro, chave);
-    final idsNoModo = {for (final r in noModo) r['id'] as String};
-    // O mesmo bem achado pelos dois campos (tombo igual ao número) não é
-    // ambiguidade: é um bem só.
-    final noOutro = [
-      for (final r in _buscarPor(inventarioId, segundo, chave))
-        if (!idsNoModo.contains(r['id'])) r,
-    ];
-
-    if (noModo.isNotEmpty && noOutro.isNotEmpty) {
-      return Leitura(
-        resultado: ResultadoLeitura.ambiguo,
-        candidatos: [
-          for (final r in [...noModo, ...noOutro]) _daLinha(r),
-        ],
-      );
-    }
-
-    final linhas = noModo.isNotEmpty ? noModo : noOutro;
-    final cruzado = noModo.isEmpty && noOutro.isNotEmpty;
+    final linhas = _buscarPor(
+      inventarioId,
+      modo == ModoLeitura.tombo ? 'tombo_chave' : 'codigo_barras_chave',
+      chave,
+    );
 
     if (linhas.isEmpty) {
       return const Leitura(resultado: ResultadoLeitura.naoLocalizado);
@@ -277,7 +220,6 @@ class RepositorioPatrimonios {
           ? ResultadoLeitura.jaVerificado
           : ResultadoLeitura.sucesso,
       patrimonio: p,
-      achadoNoOutroCampo: cruzado,
       duplicados: linhas.length,
     );
   }
@@ -349,6 +291,34 @@ class RepositorioPatrimonios {
     );
 
     return porId(patrimonio.id)!;
+  }
+
+  /// Grava a mesma configuração em vários itens, numa transação: ou entram
+  /// todos ou nenhum. Devolve quantos foram gravados.
+  ///
+  /// Item já verificado é regravado, como no "Regravar" da leitura; a folha
+  /// da conferência em massa avisa quantos são antes de confirmar.
+  int registrarVerificacoes({
+    required List<String> ids,
+    required ConfiguracaoLevantamento config,
+    String? usuarioNome,
+    String? usuarioMatricula,
+  }) {
+    return banco.transacao(() {
+      var gravados = 0;
+      for (final id in ids) {
+        final patrimonio = porId(id);
+        if (patrimonio == null) continue;
+        registrarVerificacao(
+          patrimonio: patrimonio,
+          config: config,
+          usuarioNome: usuarioNome,
+          usuarioMatricula: usuarioMatricula,
+        );
+        gravados++;
+      }
+      return gravados;
+    });
   }
 
   /// Altera os campos do levantamento de um item, pelo detalhe dele.
@@ -587,6 +557,33 @@ class RepositorioPatrimonios {
     final r = _db.select(
       'SELECT COUNT(*) AS n FROM patrimonios WHERE ${consulta.onde}',
       consulta.parametros,
+    );
+    return r.first['n'] as int;
+  }
+
+  /// Os ids de tudo o que o filtro encontra, e não só da página carregada: é
+  /// o "selecionar todos" da lista.
+  List<String> idsDe({
+    required String inventarioId,
+    Classificacao? classificacao,
+    FiltroItens filtro = FiltroItens.nenhum,
+    String? busca,
+  }) {
+    final consulta = _filtro(inventarioId, classificacao, filtro, busca);
+    final linhas = _db.select(
+      'SELECT id FROM patrimonios WHERE ${consulta.onde}',
+      consulta.parametros,
+    );
+    return [for (final r in linhas) r['id'] as String];
+  }
+
+  /// Quantos destes itens já foram verificados.
+  int contarVerificados(List<String> ids) {
+    if (ids.isEmpty) return 0;
+    final r = _db.select(
+      'SELECT COUNT(*) AS n FROM patrimonios WHERE verificado = 1 '
+      'AND id IN (SELECT value FROM json_each(?))',
+      [jsonEncode(ids)],
     );
     return r.first['n'] as int;
   }

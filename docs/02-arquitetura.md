@@ -119,27 +119,15 @@ A importação aplica a mesma regra: linha sem tombo e com número recebe `numer
 com tombo que não segue a regra é apontada na prévia — sinal de coluna trocada ou planilha
 editada à mão.
 
-### Busca cruzada
+### Busca só no campo escolhido
 
-A análise mostrou que o SLAP nunca testa um número lido como tombo contra o campo de código de
-barras, e a spec §25.2 aponta isso como causa frequente de falso "não localizado". Aqui a busca
-tem duas etapas:
+A leitura procura **apenas no campo do modo selecionado** (tombo ou código de barras), pela
+digitação, pelo leitor externo e pela câmera. Não há segunda tentativa no outro campo.
 
-1. busca no campo do modo selecionado (tombo ou código de barras);
-2. se não achar, busca no outro campo e, se achar, registra sucesso **sinalizando ao usuário**
-   que o número estava no outro campo.
-
-O item é encontrado, mas o usuário sabe que há inconsistência no cadastro.
-
-**Ambiguidade.** Pela regra do SUAP, um mesmo número pode ser o número de um bem e o tombo de
-outro: a plaqueta antiga 23254 (bem `-19281`) e a plaqueta nova 23254 (bem `23254`, tombo 65789).
-Quando os dois campos casam com **bens diferentes**, a leitura é `ambiguo` e **nada é gravado**.
-O modo de leitura não basta para decidir — o padrão é código de barras, e quase ninguém o troca
-ao passar de uma plaqueta para outra. Na digitação, o levantamento mostra os bens, com tombo,
-número, descrição e sala, e a pessoa toca no que tem na mão; a escolha segue como uma leitura
-comum. Pela câmera, que não para para perguntar, a leitura fica marcada na lista com o som de
-alerta, e a escolha se faz digitando o número. O mesmo bem achado pelos dois campos (tombo igual
-ao número) não é ambiguidade.
+Pela regra do SUAP, um mesmo número pode ser o número de um bem e o tombo de outro: a plaqueta
+antiga 23254 (bem `-19281`) e a plaqueta nova 23254 (bem `23254`, tombo 65789). Com fallback, um
+código que não existe na coluna escolhida registrava em silêncio o bem que tivesse aquele número
+na outra coluna, como `222` no modo código de barras achando o bem de tombo 222 (número `-42313`).
 
 ---
 
