@@ -711,7 +711,7 @@ void main() {
 
       expect(find.text('PROJETOR'), findsOneWidget);
       // O título da tela já diz: repetir em toda linha não informa nada.
-      expect(find.widgetWithText(Container, 'Não localizado'), findsNothing);
+      expect(find.widgetWithText(Container, 'Não verificado'), findsNothing);
     });
 
     testWidgets('as etiquetas passam na auditoria de acessibilidade', (

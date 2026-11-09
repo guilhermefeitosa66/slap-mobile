@@ -232,7 +232,7 @@ class _CartaoProgresso extends StatelessWidget {
   }
 }
 
-/// Os três grupos do resultado final.
+/// Todos os itens e os três grupos do resultado final.
 class _Grupos extends StatelessWidget {
   final String inventarioId;
   final ProgressoInventario progresso;
@@ -254,7 +254,7 @@ class _Grupos extends StatelessWidget {
       ),
       (
         Classificacao.naoLocalizado,
-        'Não localizados',
+        'Não verificados',
         progresso.naoLocalizados,
         'Ainda não encontrados',
       ),
@@ -262,6 +262,13 @@ class _Grupos extends StatelessWidget {
 
     return CartaoAgrupado(
       linhas: [
+        ListTile(
+          leading: IconeEmTom(icone: Icons.list_alt, tom: cores.neutro),
+          title: Text('Todos os itens', style: tema.textTheme.titleSmall),
+          subtitle: const Text('Buscar e conferir patrimônios'),
+          trailing: _Quantidade(progresso.total),
+          onTap: () => context.push('/inventario/$inventarioId/itens'),
+        ),
         for (final (classificacao, titulo, quantidade, descricao) in grupos)
           ListTile(
             leading: IconeEmTom(
@@ -270,24 +277,35 @@ class _Grupos extends StatelessWidget {
             ),
             title: Text(titulo, style: tema.textTheme.titleSmall),
             subtitle: Text(descricao),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  formatarInteiro(quantidade),
-                  style: tema.textTheme.titleLarge?.copyWith(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const SetaNavegacao(),
-              ],
-            ),
+            trailing: _Quantidade(quantidade),
             onTap: () => context.push(
               '/inventario/$inventarioId/itens?grupo=${classificacao.name}',
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _Quantidade extends StatelessWidget {
+  final int valor;
+
+  const _Quantidade(this.valor);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          formatarInteiro(valor),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 4),
+        const SetaNavegacao(),
       ],
     );
   }
@@ -367,12 +385,6 @@ class _Acoes extends StatelessWidget {
         'Relatórios',
         'Exportar em XLSX ou CSV',
         'relatorios',
-      ),
-      (
-        Icons.list_alt,
-        'Todos os itens',
-        'Buscar e conferir patrimônios',
-        'itens',
       ),
       if (!encerrado)
         (

@@ -324,7 +324,7 @@ void main() {
 
     testWidgets('verificar manualmente um item não localizado', (tester) async {
       await abrir(tester, '000002');
-      expect(find.text('Não localizado'), findsOneWidget);
+      expect(find.text('Não verificado'), findsOneWidget);
       expect(
         find.text('Ainda não encontrado no levantamento.'),
         findsOneWidget,

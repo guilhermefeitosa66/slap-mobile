@@ -566,9 +566,8 @@ void main() {
         modo: modo,
       );
 
-      final pelaPlaqueta = ler('23254', ModoLeitura.codigoBarras);
+      final pelaPlaqueta = ler('23254', ModoLeitura.tombo);
       expect(pelaPlaqueta.resultado, ResultadoLeitura.sucesso);
-      expect(pelaPlaqueta.achadoNoOutroCampo, isTrue);
       expect(
         pelaPlaqueta.patrimonio!.codigoBarras,
         '-19281',
@@ -597,65 +596,50 @@ void main() {
             ['NUMERO', 'TOMBO', 'DESCRICAO'],
             ['-19281', '23254', 'ESTABILIZADOR'],
             ['23254', '65789', 'MONITOR'],
+            ['-42313', '222', 'CADEIRA'],
           ]),
         );
       });
 
-      for (final modo in ModoLeitura.values) {
-        test('é ambíguo e não grava nada, no modo ${modo.rotulo}', () {
-          final leitura = patrimonios.procurar(
-            inventarioId: inventario.id,
-            codigo: '23254',
-            modo: modo,
-          );
+      Leitura ler(String codigo, ModoLeitura modo) => patrimonios.procurar(
+        inventarioId: inventario.id,
+        codigo: codigo,
+        modo: modo,
+      );
 
-          expect(leitura.resultado, ResultadoLeitura.ambiguo);
-          expect(leitura.patrimonio, isNull);
-          expect(leitura.candidatos.map((p) => p.descricao).toSet(), {
-            'ESTABILIZADOR',
-            'MONITOR',
-          });
-          expect(
-            leitura.candidatos.first.descricao,
-            modo == ModoLeitura.tombo ? 'ESTABILIZADOR' : 'MONITOR',
-            reason: 'o campo do modo vem primeiro',
-          );
-          expect(
-            patrimonios
-                .todos(inventario.id, incluirIgnorados: true)
-                .where((p) => p.verificado),
-            isEmpty,
-          );
-        });
-      }
-
-      test('o número com sinal ou o tombo exclusivo não são ambíguos', () {
-        final antigo = patrimonios.procurar(
-          inventarioId: inventario.id,
-          codigo: '-19281',
-          modo: ModoLeitura.codigoBarras,
+      test('cada modo acha o bem da sua coluna', () {
+        expect(
+          ler('23254', ModoLeitura.codigoBarras).patrimonio!.descricao,
+          'MONITOR',
         );
-        expect(antigo.resultado, ResultadoLeitura.sucesso);
-        expect(antigo.patrimonio!.descricao, 'ESTABILIZADOR');
-
-        final novo = patrimonios.procurar(
-          inventarioId: inventario.id,
-          codigo: '65789',
-          modo: ModoLeitura.codigoBarras,
+        expect(
+          ler('23254', ModoLeitura.tombo).patrimonio!.descricao,
+          'ESTABILIZADOR',
         );
-        expect(novo.resultado, ResultadoLeitura.sucesso);
-        expect(novo.patrimonio!.descricao, 'MONITOR');
       });
 
-      test('a escolha vira leitura comum do bem escolhido', () {
-        final ambigua = patrimonios.procurar(
-          inventarioId: inventario.id,
-          codigo: '23254',
-          modo: ModoLeitura.codigoBarras,
+      test('o número só existe na outra coluna: não localizado', () {
+        // O defeito relatado: 222 como código de barras achava o tombo 222.
+        expect(
+          ler('222', ModoLeitura.codigoBarras).resultado,
+          ResultadoLeitura.naoLocalizado,
         );
-        final escolhida = Leitura.escolhida(ambigua.candidatos.last);
-        expect(escolhida.resultado, ResultadoLeitura.sucesso);
-        expect(escolhida.patrimonio!.descricao, 'ESTABILIZADOR');
+        expect(
+          ler('-42313', ModoLeitura.tombo).resultado,
+          ResultadoLeitura.naoLocalizado,
+        );
+        expect(
+          ler('65789', ModoLeitura.codigoBarras).resultado,
+          ResultadoLeitura.naoLocalizado,
+        );
+      });
+
+      test('na coluna certa, o sinal continua valendo', () {
+        expect(
+          ler('-19281', ModoLeitura.codigoBarras).patrimonio!.descricao,
+          'ESTABILIZADOR',
+        );
+        expect(ler('222', ModoLeitura.tombo).patrimonio!.descricao, 'CADEIRA');
       });
     });
 

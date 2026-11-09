@@ -12,81 +12,143 @@ import 'estado_levantamento.dart';
 class LinhaLeitura extends StatelessWidget {
   final LeituraRegistrada registro;
 
-  const LinhaLeitura({super.key, required this.registro});
+  /// Abre o item lido. Sem ele a linha é só informativa.
+  final VoidCallback? aoTocar;
+
+  const LinhaLeitura({super.key, required this.registro, this.aoTocar});
 
   @override
   Widget build(BuildContext context) {
-    final tom = CoresResultado.of(context).daLeitura(registro.resultado);
-    final icone = CoresResultado.iconeDaLeitura(registro.resultado);
-    final rotulo = CoresResultado.rotuloDaLeitura(registro.resultado);
+    final cores = CoresResultado.of(context);
     final tema = Theme.of(context);
     final p = registro.patrimonio;
 
-    final candidatos = registro.leitura.candidatos;
-    final detalhe = registro.resultado == ResultadoLeitura.ambiguo
-        ? 'É de ${candidatos.length} bens: '
-              '${candidatos.map((c) => 'tombo ${c.tombo}').join(', ')}. '
-              'Nada foi gravado.'
-        : p == null
+    // A verificação pode ter sido desfeita na ficha do item depois da leitura:
+    // o marcador verde diria o contrário do que está no banco.
+    final desfeita = p != null && !p.verificado;
+    final tom = desfeita ? cores.neutro : cores.daLeitura(registro.resultado);
+    final icone = desfeita
+        ? Icons.undo
+        : CoresResultado.iconeDaLeitura(registro.resultado);
+
+    final identificacao = p == null
+        ? null
+        : 'Cód. barras: ${p.codigoBarras ?? '—'} | Tombo: ${p.tombo}';
+    final detalhe = p == null
         ? 'Não localizado neste inventário'
-        : 'Tombo ${p.tombo} · $rotulo'
+        : desfeita
+        ? 'Verificação desfeita'
+        : '${registro.resultado == ResultadoLeitura.jaVerificado ? 'Já verificado' : 'Verificado'}'
               '${p.verificadoPor == null ? '' : ' por ${p.verificadoPor}'}';
 
     final avisos = [
-      if (registro.leitura.achadoNoOutroCampo)
-        'Encontrado no outro campo — cadastro inconsistente',
       if (registro.leitura.temDuplicados)
         '${registro.leitura.duplicados} itens com este código',
       if (p != null && p.ignorado)
         'Este item está fora do inventário (ED excluído)',
     ];
 
+    final estiloDetalhe = tema.textTheme.bodySmall?.copyWith(color: tom.texto);
+
     return MergeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(icone, color: tom.texto, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    registro.resultado == ResultadoLeitura.ambiguo
-                        ? 'Código ${registro.codigoLido}'
-                        : p?.descricao ?? 'Código ${registro.codigoLido}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tema.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    detalhe,
-                    style: tema.textTheme.bodySmall?.copyWith(color: tom.texto),
-                  ),
-                  for (final aviso in avisos)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        aviso,
-                        style: tema.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w400,
-                        ),
+      child: InkWell(
+        onTap: aoTocar,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(icone, color: tom.texto, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p?.descricao ?? 'Código ${registro.codigoLido}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tema.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                ],
+                    const SizedBox(height: 1),
+                    if (identificacao != null)
+                      Text(identificacao, style: estiloDetalhe),
+                    Text(detalhe, style: estiloDetalhe),
+                    for (final aviso in avisos)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          aviso,
+                          style: tema.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// O que aparece atrás da linha enquanto ela desliza para a esquerda.
+class FundoDesfazer extends StatelessWidget {
+  const FundoDesfazer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final tom = CoresResultado.of(context).naoLocalizado;
+
+    return ColoredBox(
+      color: tom.fundo,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Icon(Icons.undo, color: tom.texto, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'Desfazer',
+              style: TextStyle(color: tom.texto, fontWeight: FontWeight.w600),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Uma [LinhaLeitura] que some ao deslizar da direita para a esquerda.
+class LeituraDeslizavel extends StatelessWidget {
+  final LeituraRegistrada registro;
+  final VoidCallback aoDesfazer;
+  final VoidCallback? aoTocar;
+
+  const LeituraDeslizavel({
+    super.key,
+    required this.registro,
+    required this.aoDesfazer,
+    this.aoTocar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: ObjectKey(registro),
+      direction: DismissDirection.endToStart,
+      background: const FundoDesfazer(),
+      onDismissed: (_) => aoDesfazer(),
+      child: LinhaLeitura(registro: registro, aoTocar: aoTocar),
     );
   }
 }
@@ -106,10 +168,6 @@ String anuncioDaLeitura(LeituraRegistrada registro) {
           '${p?.descricao ?? ''}. Manter ou regravar?',
     ResultadoLeitura.naoLocalizado =>
       'Não localizado. Código ${registro.codigoLido}.',
-    ResultadoLeitura.ambiguo =>
-      'Código ${registro.codigoLido} é de '
-          '${registro.leitura.candidatos.length} bens. Nada foi gravado. '
-          'Escolha qual.',
   };
 }
 

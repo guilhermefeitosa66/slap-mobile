@@ -34,13 +34,18 @@ enum Classificacao {
   divergente('Divergente'),
 
   /// Estava na planilha e não foi encontrado durante o inventário.
-  naoLocalizado('Não localizado'),
+  naoLocalizado('Não verificado'),
 
   /// ED excluído do inventário. Fora dos relatórios e do progresso.
   ignorado('Ignorado');
 
   final String rotulo;
   const Classificacao(this.rotulo);
+
+  /// Como sai no relatório. Durante o trabalho o item ainda não foi
+  /// verificado; o relatório fecha o inventário, e ali ele não foi localizado.
+  String get rotuloNoRelatorio =>
+      this == Classificacao.naoLocalizado ? 'Não localizado' : rotulo;
 }
 
 /// Lista as diferenças entre o cadastro do SUAP e o que foi levantado.

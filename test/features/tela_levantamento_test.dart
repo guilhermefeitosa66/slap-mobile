@@ -8,6 +8,10 @@ import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/repos/inventarios.dart';
 import 'package:slap_mobile/data/repos/operacoes.dart';
 import 'package:slap_mobile/data/repos/patrimonios.dart';
+import 'package:slap_mobile/domain/patrimonio.dart';
+import 'package:slap_mobile/domain/valores.dart';
+import 'package:slap_mobile/features/divergence/tela_itens.dart';
+import 'package:slap_mobile/features/survey/configuracao_sheet.dart';
 import 'package:slap_mobile/features/survey/estado_levantamento.dart';
 import 'package:slap_mobile/features/survey/linha_leitura.dart';
 import 'package:slap_mobile/features/survey/tela_levantamento.dart';
@@ -233,7 +237,7 @@ void main() {
         (
           ResultadoLeitura.sucesso,
           Icons.check_circle_outline,
-          'Tombo 023101 · Registrado',
+          'Cód. barras: 887101 | Tombo: 023101',
         ),
         (ResultadoLeitura.jaVerificado, Icons.replay, 'Já verificado'),
         (
@@ -334,6 +338,212 @@ void main() {
     await ler(tester, '887201');
     expect(contador(tester), '1/1 +1');
     semantica.dispose();
+  });
+
+  /// Espaço para a ficha inteira caber: o conteúdo dela é lazy.
+  void telaAlta(WidgetTester tester) {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
+  Patrimonio item(String tombo) =>
+      repo.todos(inventario.id).firstWhere((p) => p.tombo == tombo);
+
+  testWidgets(
+    'a linha mostra código, tombo e quem verificou em linhas próprias',
+    (tester) async {
+      await abrir(tester);
+      await ler(tester, '887101');
+
+      expect(find.text('MESA DE REUNIÃO'), findsOneWidget);
+      expect(find.text('Cód. barras: 887101 | Tombo: 023101'), findsOneWidget);
+      expect(find.textContaining('Verificado'), findsOneWidget);
+    },
+  );
+
+  testWidgets('tocar no item lido abre a ficha, e o que muda volta à lista', (
+    tester,
+  ) async {
+    telaAlta(tester);
+    await abrir(tester);
+    await ler(tester, '887101');
+
+    await tester.tap(find.byType(LinhaLeitura));
+    await tester.pumpAndSettle();
+    expect(find.text('Editar levantamento'), findsOneWidget);
+
+    await tester.tap(find.text('Desfazer verificação'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DetalhePatrimonio), findsNothing);
+    expect(item('023101').verificado, isFalse);
+    expect(
+      find.text('Verificação desfeita'),
+      findsOneWidget,
+      reason: 'a marca verde diria o contrário do que está gravado',
+    );
+    expect(campoComFoco(tester), isTrue, reason: 'pronto para o leitor');
+  });
+
+  testWidgets('desfazer na ficha cancela o "Regravar" que estava aberto', (
+    tester,
+  ) async {
+    telaAlta(tester);
+    await abrir(tester);
+    await ler(tester, '887101');
+    await ler(tester, '887101');
+    expect(find.text('Regravar'), findsOneWidget);
+
+    await tester.tap(find.byType(LinhaLeitura).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Desfazer verificação'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Regravar'), findsNothing);
+  });
+
+  testWidgets('código não localizado não tem ficha para abrir', (tester) async {
+    await abrir(tester);
+    await ler(tester, '555555');
+
+    await tester.tap(find.byType(LinhaLeitura));
+    await tester.pumpAndSettle();
+    expect(find.byType(DetalhePatrimonio), findsNothing);
+  });
+
+  testWidgets('o contador abre os itens esperados na sala', (tester) async {
+    telaAlta(tester);
+    repo.inserirLote(inventario.id, const [
+      PatrimonioImportado(
+        tombo: '023103',
+        codigoBarras: '887103',
+        descricao: 'ARMÁRIO',
+        sala: 'Auditório',
+      ),
+    ]);
+    await montar(
+      tester,
+      TelaLevantamento(inventarioId: inventario.id),
+      banco: banco,
+      sons: sons,
+      preparar: (c) => c
+          .read(configuracoesProvider.notifier)
+          .definir(
+            inventario.id,
+            const ConfiguracaoLevantamento(
+              sala: 'biblioteca',
+              conservacao: EstadoConservacao.ocioso,
+              situacao: SituacaoUso.ocioso,
+              responsavel: 'Ana',
+            ),
+          ),
+    );
+    await tester.pumpAndSettle();
+    expect(contador(tester), '0/2');
+
+    await tester.tap(find.byType(ContadorSala));
+    await tester.pumpAndSettle();
+    expect(find.byType(TelaItens), findsOneWidget);
+    expect(find.text('2 patrimônios'), findsOneWidget);
+    expect(find.text('ARMÁRIO'), findsNothing);
+
+    // A verificação manual parte do que uma leitura gravaria aqui.
+    await tester.tap(find.text('CADEIRA FIXA'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Verificar manualmente'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar'));
+    await tester.pumpAndSettle();
+
+    final verificado = item('023102');
+    expect(verificado.verificado, isTrue);
+    expect(verificado.salaAtual, 'biblioteca');
+    expect(verificado.responsavelAtual, 'Ana');
+    expect(verificado.conservacao, EstadoConservacao.ocioso);
+    expect(verificado.situacao, SituacaoUso.ocioso);
+
+    Navigator.of(tester.element(find.byType(DetalhePatrimonio))).pop();
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(TelaItens))).pop();
+    await tester.pumpAndSettle();
+
+    expect(contador(tester), '1/2');
+    expect(campoComFoco(tester), isTrue);
+  });
+
+  testWidgets('deslizar a linha desfaz a leitura e a tira da lista', (
+    tester,
+  ) async {
+    await abrir(tester, sala: 'Biblioteca');
+    await ler(tester, '887101');
+    expect(contador(tester), '1/2');
+
+    await tester.drag(find.byType(LinhaLeitura), const Offset(-700, 0));
+    await tester.pumpAndSettle();
+
+    final p = item('023101');
+    expect(p.verificado, isFalse);
+    expect(p.salaAtual, isNull);
+    expect(p.situacao, isNull);
+    expect(find.byType(LinhaLeitura), findsNothing);
+    expect(contador(tester), '0/2');
+    expect(campoComFoco(tester), isTrue);
+
+    await ler(tester, '887101');
+    expect(item('023101').verificado, isTrue, reason: 'pode ser lido de novo');
+  });
+
+  testWidgets('deslizar um código não localizado só tira a linha', (
+    tester,
+  ) async {
+    await abrir(tester);
+    await ler(tester, '555555');
+    final antes = operacoes();
+
+    await tester.drag(find.byType(LinhaLeitura), const Offset(-700, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LinhaLeitura), findsNothing);
+    expect(operacoes(), antes);
+  });
+
+  testWidgets('o tombo digitado no modo cód. barras não acha o bem', (
+    tester,
+  ) async {
+    await abrir(tester);
+    await ler(tester, '023101');
+    expect(sons.tocados, [Som.naoLocalizado]);
+    expect(item('023101').verificado, isFalse);
+  });
+
+  testWidgets('sala fora da planilha não tem lista a abrir', (tester) async {
+    await abrir(tester);
+    await tester.tap(find.byType(ContadorSala));
+    await tester.pumpAndSettle();
+    expect(find.byType(TelaItens), findsNothing);
+  });
+
+  testWidgets('o X da sala limpa o campo e mostra as outras opções', (
+    tester,
+  ) async {
+    telaAlta(tester);
+    await abrir(tester, sala: 'Biblioteca');
+    await tester.tap(find.byType(BarraConfiguracao));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Limpar a sala'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Limpar a sala'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.text('Biblioteca'),
+      ),
+      findsOneWidget,
+      reason: 'a lista de sugestões abre para escolher outra sala',
+    );
   });
 
   testWidgets('sem sala definida, a configuração aparece antes de ler', (
