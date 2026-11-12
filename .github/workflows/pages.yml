@@ -1,9 +1,11 @@
 # Publica o site do projeto no GitHub Pages: a apresentação do aplicativo, com
 # as capturas de docs/imagens/ e a logomarca de docs/marca/, o manual completo,
 # gerado de docs/manual.md, e a política de privacidade, gerada de
-# docs/privacidade.md. As lojas pedem a política numa URL estável:
+# docs/privacidade.md, e os termos de uso, de docs/termos.md. As lojas pedem a
+# política e os termos numa URL estável:
 #
 #   https://guilhermefeitosa66.github.io/slap-mobile/privacidade/
+#   https://guilhermefeitosa66.github.io/slap-mobile/termos/
 #
 # Uma vez só, antes da primeira execução: Settings → Pages → Source:
 # "GitHub Actions".
@@ -14,6 +16,7 @@ on:
     branches: [main]
     paths:
       - docs/privacidade.md
+      - docs/termos.md
       - docs/manual.md
       - docs/imagens/**
       - docs/marca/**

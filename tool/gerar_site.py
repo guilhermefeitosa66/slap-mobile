@@ -14,6 +14,7 @@ Saída:
     index.html                   apresentação, como usar, capturas, instalação
     manual/index.html            o manual completo, de docs/manual.md
     privacidade/index.html       a política
+    termos/index.html            os termos de uso, de docs/termos.md
     entrar/index.html            reserva do link de entrada num inventário
     .well-known/assetlinks.json  verificação do App Link (ver abaixo)
     fontes/, imagens/, marca/    o que as páginas usam
@@ -55,6 +56,8 @@ SELOS = ("google-play-pt.png", "app-store-pt.svg")
 
 # docs/privacidade.md e o que ele cita por caminho relativo.
 FONTE_POLITICA = RAIZ / "docs" / "privacidade.md"
+# Os termos de uso, que a Google Play mostra na ficha do app.
+FONTE_TERMOS = RAIZ / "docs" / "termos.md"
 # O manual completo, também escrito em Markdown no repositório: assim ele é
 # lido e revisado ao lado do código, em vez de virar string dentro deste
 # gerador.
@@ -994,6 +997,7 @@ Feito para o inventário patrimonial do Instituto Federal do Piauí.</div>
 <a href="{REPOSITORIO}">Código-fonte</a>
 <a href="{REPOSITORIO}/issues">Issues</a>
 <a href="privacidade/">Privacidade</a>
+<a href="termos/">Termos de uso</a>
 </nav>
 </div>
 </footer>"""
@@ -1032,6 +1036,23 @@ def pagina_politica() -> str:
         titulo,
         "Quais dados o SLAP Mobile guarda, para onde vão e por quê.",
         f'<main class="texto">{topo}{converter(texto)}{rodape_politica}</main>',
+        prefixo="../",
+    )
+
+
+def pagina_termos() -> str:
+    texto = FONTE_TERMOS.read_text(encoding="utf-8")
+    titulo = re.search(r"^# (.+)$", texto, re.MULTILINE).group(1).strip()
+    topo = '<a class="topo" href="../"><img src="../icone.png" alt="">SLAP Mobile</a>'
+    rodape_termos = (
+        f'<footer>Fonte: <a href="{REPOSITORIO}/blob/main/docs/termos.md">'
+        "docs/termos.md</a> no repositório.</footer>"
+    )
+    corpo = converter(texto, locais={"privacidade.md": "../privacidade/"})
+    return pagina(
+        titulo,
+        "As condições de uso do SLAP Mobile.",
+        f'<main class="texto">{topo}{corpo}{rodape_termos}</main>',
         prefixo="../",
     )
 
@@ -1198,7 +1219,7 @@ def gravar_assetlinks(saida: Path) -> bool:
 def gerar(saida: Path) -> None:
     if saida.exists():
         shutil.rmtree(saida)
-    for pasta in ("privacidade", "manual", "entrar", "fontes", "imagens", "marca", "lojas"):
+    for pasta in ("privacidade", "termos", "manual", "entrar", "fontes", "imagens", "marca", "lojas"):
         (saida / pasta).mkdir(parents=True)
 
     for arquivo in FONTES:
@@ -1228,6 +1249,7 @@ def gerar(saida: Path) -> None:
 
     (saida / "index.html").write_text(pagina_inicial(logo), encoding="utf-8")
     (saida / "privacidade" / "index.html").write_text(pagina_politica(), encoding="utf-8")
+    (saida / "termos" / "index.html").write_text(pagina_termos(), encoding="utf-8")
     (saida / "manual" / "index.html").write_text(pagina_manual(), encoding="utf-8")
     (saida / "entrar" / "index.html").write_text(pagina_entrar(), encoding="utf-8")
 
