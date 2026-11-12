@@ -46,6 +46,12 @@ REPOSITORIO = "https://github.com/guilhermefeitosa66/slap-mobile"
 RELEASE = f"{REPOSITORIO}/releases/latest"
 SITE = "https://guilhermefeitosa66.github.io/slap-mobile/"
 PACOTE_ANDROID = "io.github.guilhermefeitosa66.slap_mobile"
+GOOGLE_PLAY = f"https://play.google.com/store/apps/details?id={PACOTE_ANDROID}"
+APP_STORE = "https://apps.apple.com/app/id6828446378"
+# Selos oficiais das lojas, os mesmos do OpenTuner. O do Google vem sem a
+# margem transparente do arquivo original, para ficar da altura do da Apple.
+PASTA_LOJAS = RAIZ / "docs" / "marca" / "lojas"
+SELOS = ("google-play-pt.png", "app-store-pt.svg")
 
 # docs/privacidade.md e o que ele cita por caminho relativo.
 FONTE_POLITICA = RAIZ / "docs" / "privacidade.md"
@@ -137,6 +143,11 @@ strong { font-weight: 600; }
 .botao-vazado { background: transparent; color: var(--teal); }
 .botao-vazado:hover { background: var(--teal-claro); }
 .botao-pequeno { min-height: 40px; padding: 0.4rem 1rem; }
+.lojas { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1.75rem; }
+.lojas a { display: block; border-radius: 10px; }
+.lojas img { display: block; width: auto; height: 52px; }
+.instalar .lojas { justify-content: center; margin: 1.5rem 0 0; }
+.texto .lojas { margin: 0.6rem 0 0.4rem; }
 
 header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 0.92);
   backdrop-filter: blur(8px); border-bottom: 1px solid var(--borda); }
@@ -194,7 +205,6 @@ header { position: sticky; top: 0; z-index: 10; background: rgba(247, 246, 243, 
 .abertura-grade { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 3rem;
   align-items: center; }
 .abertura h1 span { color: var(--teal); }
-.chamadas { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
 .nota { font-size: 0.9rem; color: var(--tinta-secundaria); margin-top: 1rem; }
 /* A captura precisa se destacar de um fundo quase branco, no tamanho da
    abertura e no da galeria. Três camadas: um contorno de 1 px que encosta na
@@ -772,10 +782,19 @@ def cabecalho(logo: str) -> str:
 <a href="manual/">Manual</a>
 <a href="#instalar">Instalar</a>
 <a class="discreto" href="{REPOSITORIO}">GitHub</a>
-<a class="botao botao-cheio botao-pequeno" href="{RELEASE}">Baixar o APK</a>
+<a class="botao botao-cheio botao-pequeno" href="#instalar">Baixar</a>
 </nav>
 </div>
 </header>"""
+
+
+def selos(prefixo: str = "") -> str:
+    return f"""<div class="lojas">
+<a href="{GOOGLE_PLAY}"><img src="{prefixo}lojas/google-play-pt.png"
+ alt="Disponível no Google Play" width="564" height="168"></a>
+<a href="{APP_STORE}"><img src="{prefixo}lojas/app-store-pt.svg"
+ alt="Baixar na App Store" width="120" height="40"></a>
+</div>"""
 
 
 def abertura() -> str:
@@ -787,11 +806,9 @@ def abertura() -> str:
 <p class="lede">Cada celular carrega o inventário inteiro, funciona sozinho e sincroniza
 direto com os outros pela rede Wi-Fi local. Leia os códigos de barras, ouça o resultado e
 exporte os relatórios prontos para o SUAP.</p>
-<div class="chamadas">
-<a class="botao botao-cheio" href="{RELEASE}">Baixar o APK</a>
-<a class="botao botao-vazado" href="{REPOSITORIO}">Ver o código no GitHub</a>
-</div>
-<p class="nota">Software livre · Apache-2.0 · Android 7.0 ou mais novo · sem conta, sem anúncios</p>
+{selos()}
+<p class="nota">Software livre · Apache-2.0 · Android 7.0 ou mais novo · iOS 15 ou mais novo ·
+sem conta, sem anúncios · <a href="{REPOSITORIO}">código no GitHub</a></p>
 </div>
 {captura("levantamento", "abertura", carregamento="eager")}
 </div>
@@ -932,13 +949,15 @@ def instalar() -> str:
 <div class="largura">
 <div class="centro">
 <span class="sobretitulo">Instalar</span>
-<h2>Um arquivo, nenhum cadastro</h2>
-<p class="lede">Enquanto o aplicativo não está na Play Store, ele é instalado pelo APK
-publicado no GitHub. Precisa de Android 7.0 ou mais novo.</p>
+<h2>Baixe na sua loja</h2>
+<p class="lede">Na Google Play para Android 7.0 ou mais novo, e na App Store para iPhone e
+iPad com iOS 15 ou mais novo. Sem cadastro e sem conta.</p>
+{selos()}
 </div>
 <div class="duas-colunas">
 <div class="cartao">
-<h3>No celular</h3>
+<h3>Sem loja, pelo APK</h3>
+<p>No Android, cada versão também sai no GitHub Releases, em um APK.</p>
 <ol>
 <li>Abra a <a href="{RELEASE}">versão mais recente</a> e baixe o arquivo
 <code>.apk</code>. É um só, e serve a qualquer celular Android.</li>
@@ -1103,7 +1122,8 @@ que funciona sem internet. Quem enviou o link vai aceitar sua entrada no aparelh
 dois celulares precisam estar na mesma rede Wi-Fi.</p>
 <h2>O aplicativo não abriu?</h2>
 <ol>
-<li>Instale o SLAP Mobile: <a class="botao botao-cheio botao-pequeno" href="{RELEASE}">Baixar o APK</a></li>
+<li>Instale o SLAP Mobile pela loja do seu celular:{selos("../")}
+Sem loja, há também o <a href="{RELEASE}">APK no GitHub</a>.</li>
 <li>Abra o aplicativo uma vez e informe seu nome.</li>
 <li>Toque no link de novo. Se o Android perguntar com o que abrir, escolha o SLAP Mobile.</li>
 </ol>
@@ -1178,7 +1198,7 @@ def gravar_assetlinks(saida: Path) -> bool:
 def gerar(saida: Path) -> None:
     if saida.exists():
         shutil.rmtree(saida)
-    for pasta in ("privacidade", "manual", "entrar", "fontes", "imagens", "marca"):
+    for pasta in ("privacidade", "manual", "entrar", "fontes", "imagens", "marca", "lojas"):
         (saida / pasta).mkdir(parents=True)
 
     for arquivo in FONTES:
@@ -1192,6 +1212,12 @@ def gerar(saida: Path) -> None:
             shutil.copy(origem, saida / "imagens" / f"{nome}.png")
         else:
             faltando.append(f"docs/imagens/{nome}.png")
+
+    for selo in SELOS:
+        if (PASTA_LOJAS / selo).exists():
+            shutil.copy(PASTA_LOJAS / selo, saida / "lojas" / selo)
+        else:
+            faltando.append(f"docs/marca/lojas/{selo}")
 
     logo = "icone.png"
     if (PASTA_MARCA / LOGO).exists():

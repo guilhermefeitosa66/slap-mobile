@@ -8,6 +8,12 @@
 </p>
 
 <p align="center">
+  <a href="https://play.google.com/store/apps/details?id=io.github.guilhermefeitosa66.slap_mobile"><img src="docs/marca/lojas/google-play-pt.png" alt="Disponível no Google Play" height="52"></a>
+  &nbsp;
+  <a href="https://apps.apple.com/app/id6828446378"><img src="docs/marca/lojas/app-store-pt.svg" alt="Baixar na App Store" height="52"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/guilhermefeitosa66/slap-mobile/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/guilhermefeitosa66/slap-mobile/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI"></a>
   &nbsp;
   <a href="https://guilhermefeitosa66.github.io/slap-mobile/"><img src="https://img.shields.io/badge/Site-slap--mobile-0F5C52?style=for-the-badge&logo=github" alt="Site do projeto"></a>
@@ -38,11 +44,17 @@ Os aparelhos da mesma rede trocam o que cada um levantou, direto entre eles.
 
 ## Instalar
 
-Baixe o APK da [versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest)
+O SLAP Mobile está na Google Play e na App Store, para Android 7.0 ou mais novo e iOS 15 ou mais
+novo:
+
+- **Google Play:** [SLAP Mobile na Google Play](https://play.google.com/store/apps/details?id=io.github.guilhermefeitosa66.slap_mobile).
+- **App Store:** [SLAP Mobile na App Store](https://apps.apple.com/app/id6828446378).
+
+No Android, também dá para instalar sem loja: baixe o APK da
+[versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest)
 — é um arquivo só, para qualquer celular Android —, autorize a instalação de fonte desconhecida e
-instale. Precisa de Android 7.0 ou mais novo. Para
-atualizar, instale por cima; **não desinstale**, porque desinstalar apaga o que ainda não foi
-sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md).
+instale. Para atualizar, instale por cima; **não desinstale**, porque desinstalar apaga o que ainda
+não foi sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md).
 
 ## Como usar
 
