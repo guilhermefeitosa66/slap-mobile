@@ -2,13 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'enderecos.dart';
+
 /// Versão deste aplicativo, a mesma de `pubspec.yaml`.
 ///
 /// Repetida aqui porque ler o `pubspec.yaml` em tempo de execução exigiria um
 /// plugin, com canal de plataforma, só para saber um número que já é conhecido
 /// na compilação. Um teste confere que as duas não divergem — é o que torna a
 /// repetição segura.
-const String versaoApp = '1.3.2';
+const String versaoApp = '1.3.3';
 
 /// Onde se pergunta qual é a última versão publicada.
 ///
@@ -19,8 +21,7 @@ const String enderecoUltimaVersao =
 
 /// Para onde o aviso leva: a página explica como instalar, o que o arquivo
 /// solto de uma release não faz.
-const String enderecoComoAtualizar =
-    'https://slap.libre-apps.org/';
+const String enderecoComoAtualizar = enderecoSite;
 
 /// Curto: isto roda na abertura, sem ninguém pedir. Uma consulta que demora
 /// não pode ser percebida por quem só quer começar a levantar.

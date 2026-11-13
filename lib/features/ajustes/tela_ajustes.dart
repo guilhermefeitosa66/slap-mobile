@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/componentes.dart';
 import '../../app/preferencias.dart';
 import '../../app/providers.dart';
 import '../../core/atualizacao.dart';
+import '../../core/enderecos.dart';
 import '../../core/formato.dart';
 import '../../data/repos/operacoes.dart';
 import 'copia_seguranca_ui.dart';
@@ -200,11 +202,38 @@ class TelaAjustes extends ConsumerWidget {
                   MaterialPageRoute<void>(builder: (_) => const TelaLicencas()),
                 ),
               ),
+              ListTile(
+                leading: const Icon(Icons.language),
+                title: const Text('Site do SLAP'),
+                subtitle: const Text('Manual, privacidade e termos de uso'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => _abrirNoNavegador(context, enderecoSite),
+              ),
+              ListTile(
+                leading: const Icon(Icons.volunteer_activism_outlined),
+                title: const Text('Libre Apps'),
+                subtitle: const Text('A fundação de apps livres do SLAP'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => _abrirNoNavegador(context, enderecoLibreApps),
+              ),
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+/// Abre um endereço no navegador; sem navegador, diz qual é o endereço.
+Future<void> _abrirNoNavegador(BuildContext context, String endereco) async {
+  final aberto = await launchUrl(
+    Uri.parse(endereco),
+    mode: LaunchMode.externalApplication,
+  );
+  if (!aberto && context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Abra $endereco no navegador.')));
   }
 }
 

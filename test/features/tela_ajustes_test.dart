@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:slap_mobile/core/atualizacao.dart';
+import 'package:slap_mobile/core/enderecos.dart';
 import 'package:slap_mobile/data/banco.dart';
 import 'package:slap_mobile/data/schema.dart';
 import 'package:slap_mobile/features/ajustes/tela_ajustes.dart';
@@ -29,6 +30,26 @@ void main() {
 
     expect(find.text('Versão do aplicativo'), findsOneWidget);
     expect(find.text(versaoApp), findsOneWidget);
+  });
+
+  testWidgets('o Sobre leva ao site do SLAP e à Libre Apps', (tester) async {
+    final banco = Banco.emMemoria();
+    addTearDown(banco.fechar);
+
+    await montar(tester, const TelaAjustes(), banco: banco);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Libre Apps'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Site do SLAP'), findsOneWidget);
+    expect(find.text('Libre Apps'), findsOneWidget);
+    expect(enderecoSite, 'https://slap.libre-apps.org/');
+    expect(enderecoLibreApps, 'https://libre-apps.org/');
   });
 
   testWidgets('licenças mostram primeiro a do aplicativo', (tester) async {
