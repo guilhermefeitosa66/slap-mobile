@@ -494,7 +494,7 @@ https://slap.libre-apps.org/entrar#v=2&id=<uuid>&n=<nome>&a=<ano>&d=<aparelho>
 ```
 
 Até a versão 1.3.2 o link apontava para `guilhermefeitosa66.github.io/slap-mobile/entrar`. O
-aplicativo ainda aceita esse endereço, e o GitHub Pages redireciona a página para o domínio novo.
+aplicativo ainda aceita esse endereço, e a página antiga no GitHub Pages mostra um aviso com o botão para abrir o convite no domínio novo.
 
 Um link encaminhado por engano, reencaminhado adiante ou deixado num grupo de mensagens não dá
 acesso a nada. A chave só é entregue depois que uma pessoa, no aparelho de origem, toca em
