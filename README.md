@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/guilhermefeitosa66/slap-mobile/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/guilhermefeitosa66/slap-mobile/ci.yml?branch=main&label=CI&style=for-the-badge" alt="CI"></a>
   &nbsp;
-  <a href="https://guilhermefeitosa66.github.io/slap-mobile/"><img src="https://img.shields.io/badge/Site-slap--mobile-0F5C52?style=for-the-badge&logo=github" alt="Site do projeto"></a>
+  <a href="https://slap.libre-apps.org/"><img src="https://img.shields.io/badge/Site-slap.libre--apps.org-0F5C52?style=for-the-badge" alt="Site do projeto"></a>
   &nbsp;
   <a href="https://github.com/guilhermefeitosa66/slap-mobile/releases/latest"><img src="https://img.shields.io/github/v/release/guilhermefeitosa66/slap-mobile?label=Baixar%20APK&style=for-the-badge&logo=android&logoColor=white&color=0F5C52" alt="Baixar o APK da versão mais recente"></a>
   &nbsp;
@@ -66,9 +66,9 @@ não foi sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md)
 6. Troque dados quando quiser: a troca é nos dois sentidos, e nada é apagado. Conflitos aparecem para alguém decidir.
 7. Exporte os três grupos em XLSX ou CSV.
 
-A versão ilustrada está no [site do projeto](https://guilhermefeitosa66.github.io/slap-mobile/#como-usar),
+A versão ilustrada está no [site do projeto](https://slap.libre-apps.org/#como-usar),
 e o passo a passo completo — cada tela, e o que fazer quando algo dá errado — no
-[manual](https://guilhermefeitosa66.github.io/slap-mobile/manual/)
+[manual](https://slap.libre-apps.org/manual/)
 ([docs/manual.md](docs/manual.md)).
 
 ## Desenvolvimento
@@ -82,7 +82,6 @@ e o passo a passo completo — cada tela, e o que fazer quando algo dá errado �
 | `make rodar` | roda em modo de desenvolvimento, com hot reload |
 | `make apk` | gera o APK de uso |
 | `make instalar` | gera o APK e instala por cima no aparelho, mantendo os dados |
-| `make site` | gera o site do GitHub Pages em `_site` |
 | `make testar` | formatação, análise e testes, como no CI |
 | `make limpar` | apaga o que os builds geraram |
 

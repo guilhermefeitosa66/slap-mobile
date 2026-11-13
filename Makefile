@@ -70,7 +70,7 @@ CAMERA_FRONTAL ?= $(if $(TRASEIRA),emulated)
 GPU ?= host -feature -Vulkan
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda dependencias verificar desatualizadas rodar apk instalar site \
+.PHONY: ajuda dependencias verificar desatualizadas rodar apk instalar \
 	testar limpar emuladores cameras emulador
 
 ajuda: ## Lista as tarefas
@@ -108,11 +108,6 @@ apk: ## Gera o APK de uso, que instala em qualquer Android 7.0+
 # de instalar e apaga os inventários.
 instalar: apk ## Gera o APK e instala por cima no aparelho, sem apagar dados
 	@tool/instalar_apk.sh "$(APK)" "$(DISPOSITIVO)"
-
-site: ## Gera o site do GitHub Pages em _site (requer o pacote markdown)
-	python3 tool/gerar_site.py _site
-	@echo
-	@echo "Site: _site/index.html"
 
 # `dart analyze` no lugar de `flutter analyze`: o segundo vigia o pub cache por
 # inotify e estoura o limite padrão do Linux. O CI sobe o limite e roda o

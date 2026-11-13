@@ -77,11 +77,13 @@ flutter test --run-skipped --tags capturas --update-goldens
 
 ## Site
 
-`tool/gerar_site.py` gera o site do GitHub Pages a partir do que está versionado: os textos da
-página inicial, `privacidade.md`, as capturas de `imagens/` e a logomarca de `marca/`. O workflow
-`Site` publica a cada alteração desses arquivos na `main`.
+O site, [slap.libre-apps.org](https://slap.libre-apps.org/), tem repositório próprio
+(`guilhermefeitosa66/site-slap-libre-apps-org`, privado), com o gerador, uma cópia dos textos
+(`manual.md`, `privacidade.md`, `termos.md`), das capturas de `imagens/`, da logomarca de `marca/`
+e das fontes, e o HTML publicado pela Vercel. Ao mudar um desses arquivos aqui, leve a mudança
+para lá e gere o site de novo.
 
-```bash
-pip install markdown
-make site                             # gera _site/; abra _site/index.html no navegador
-```
+O endereço antigo, `guilhermefeitosa66.github.io/slap-mobile/`, continua no GitHub Pages deste
+repositório, servido do branch `pages-redirect`: páginas que só redirecionam para o domínio novo,
+preservando o fragmento do convite (`/entrar#…`), que as versões publicadas do aplicativo ainda
+geram nesse endereço.

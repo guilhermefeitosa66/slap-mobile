@@ -504,7 +504,7 @@ esquema próprio continua existindo como reserva, para o caso de o Android não 
 verificar o App Link.
 
 **Por que os dados vão no fragmento.** O fragmento (`#`) nunca é enviado ao servidor. Mesmo que
-alguém abra o link no navegador, o GitHub Pages não vê nos registros dele o identificador do
+alguém abra o link no navegador, o servidor do site não vê nos registros dele o identificador do
 inventário nem o nome do campus. O go_router preserva o fragmento em `GoRouterState.uri`, e o
 Android entrega o endereço como `path?query#fragment` — rota inicial com o aplicativo fechado,
 `pushRouteInformation` com ele aberto (daí o `launchMode="singleTop"`). A leitura aceita os mesmos
@@ -551,7 +551,8 @@ link, guardo o celular, a pessoa abre a mensagem". O que não dá para contornar
 o processo em segundo plano; por isso a folha avisa, em uma linha, que os dois aparelhos precisam
 estar na mesma rede Wi-Fi e que o aplicativo deve ficar aberto até o outro entrar.
 
-**O que o site precisa servir** (ver `tool/gerar_site.py`): a página `/slap-mobile/entrar`, que
+**O que o site precisa servir** (no repositório do site; ver
+[desenvolvimento.md](desenvolvimento.md#site)): a página `/slap-mobile/entrar`, que
 explica o convite e oferece o APK a quem não tem o aplicativo, e o
 `/.well-known/assetlinks.json` com a impressão digital SHA-256 da chave de release, sem o qual o
 Android não verifica o App Link e oferece o seletor de aplicativos em vez de abrir direto.

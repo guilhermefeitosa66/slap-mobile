@@ -5,8 +5,8 @@ tiradas do que o código faz. A [política de privacidade](../privacidade.md) di
 linguagem de usuário; se uma mudar, a outra muda junto.
 
 URL da política, para os dois formulários:
-`https://guilhermefeitosa66.github.io/slap-mobile/privacidade/` (publicada pelo workflow
-`.github/workflows/pages.yml`).
+`https://slap.libre-apps.org/privacidade/` (publicada pelo repositório do site; ver
+[desenvolvimento.md](../desenvolvimento.md#site)).
 
 ## O que sai do aparelho, e o que conta
 

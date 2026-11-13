@@ -1,11 +1,11 @@
 # Capturas de tela
 
-As imagens do README, do site e do [manual](../manual.md) (`tool/gerar_site.py`). Diferente das capturas da loja em
+As imagens do README, do site e do [manual](../manual.md). Diferente das capturas da loja em
 [`../loja/capturas/`](../loja/capturas/), geradas por teste golden com dados fictícios, estas
 vêm do emulador com um inventário real — só os **nomes de servidores e a matrícula são
 fictícios**, porque a planilha do SUAP traz nome e matrícula de pessoas.
 
-Cada arquivo tem o nome que `CAPTURAS`, em `tool/gerar_site.py`, espera:
+Cada arquivo tem o nome que `CAPTURAS`, em `tool/reduzir_capturas.py`, espera:
 
 | Arquivo | Tela |
 |---|---|
@@ -19,6 +19,7 @@ Cada arquivo tem o nome que `CAPTURAS`, em `tool/gerar_site.py`, espera:
 | `camera.png` | leitura pela câmera |
 | `sincronizacao.png` | sincronização |
 | `itens.png` | todos os itens |
+| `filtros.png` | filtros da lista de itens |
 | `detalhe.png` | detalhe de um patrimônio |
 | `relatorios.png` | relatórios |
 
@@ -53,4 +54,5 @@ Cada arquivo tem o nome que `CAPTURAS`, em `tool/gerar_site.py`, espera:
    python3 tool/reduzir_capturas.py <pasta com as capturas>
    ```
 
-6. Confira o resultado gerando o site (`python3 tool/gerar_site.py _site`) e olhando o README.
+6. Confira o resultado no README. Para o site, copie as imagens para o repositório dele
+   (ver [desenvolvimento.md](../desenvolvimento.md#site)) e gere o site de novo.

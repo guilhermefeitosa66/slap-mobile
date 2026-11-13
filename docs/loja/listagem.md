@@ -93,7 +93,8 @@ Tudo é gerado a partir do código, com dados fictícios:
 
 ## Privacidade e permissões
 
-- **Política de privacidade:** `https://guilhermefeitosa66.github.io/slap-mobile/privacidade/`
+- **Política de privacidade:** `https://slap.libre-apps.org/privacidade/`
+- **Termos de uso:** `https://slap.libre-apps.org/termos/`
 - **Segurança dos dados:** respostas e justificativa em [seguranca-de-dados.md](seguranca-de-dados.md).
 
   > A issue #18 previa declarar que o aplicativo não coleta dados. **No Android isso não é
@@ -137,5 +138,5 @@ Passos no Play Console, que dependem da conta de desenvolvedor:
 - [ ] Questionário de classificação indicativa.
 - [ ] Público-alvo, anúncios e acesso ao app.
 - [ ] Formulário de segurança dos dados ([seguranca-de-dados.md](seguranca-de-dados.md)).
-- [ ] URL da política, depois de ativar o GitHub Pages (Settings → Pages → Source: GitHub Actions).
+- [ ] URL da política (`https://slap.libre-apps.org/privacidade/`).
 - [ ] Assinatura de apps do Google Play — a decisão está em [../assinatura.md](../assinatura.md).

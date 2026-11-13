@@ -3,19 +3,18 @@
 
 O emulador entrega PNGs de 1344 × 2992 (o Pixel de referência), pesados demais
 para uma página que mostra doze deles. Este script os reduz para 720 px de
-largura, mantendo a proporção, e grava em docs/imagens/ com o nome que
-tool/gerar_site.py espera.
+largura, mantendo a proporção, e grava em docs/imagens/ com os nomes de
+CAPTURAS, abaixo, que são os que o README, o manual e o site usam.
 
     python3 tool/reduzir_capturas.py <pasta com as capturas> [largura]
 
-Os arquivos de entrada se chamam <nome>.png, com <nome> em CAPTURAS de
-gerar_site.py (identidade, painel, levantamento…). O que não tiver esse nome
+Os arquivos de entrada se chamam <nome>.png, com <nome> em CAPTURAS
+(identidade, painel, levantamento…). O que não tiver esse nome
 é ignorado com aviso. O procedimento inteiro está em docs/imagens/README.md.
 
 Requer Pillow.
 """
 
-import ast
 import sys
 from pathlib import Path
 
@@ -25,18 +24,28 @@ RAIZ = Path(__file__).resolve().parent.parent
 DESTINO = RAIZ / "docs" / "imagens"
 LARGURA_PADRAO = 720
 
+# As capturas de docs/imagens/. A mesma lista, com o texto alternativo de cada
+# uma, está no gerador do site (repositório site-slap-libre-apps-org); um nome
+# novo aqui precisa entrar lá também.
+CAPTURAS = (
+    "identidade",
+    "inventarios",
+    "importacao",
+    "painel",
+    "compartilhar",
+    "configuracao",
+    "levantamento",
+    "camera",
+    "sincronizacao",
+    "itens",
+    "filtros",
+    "detalhe",
+    "relatorios",
+)
+
 
 def nomes_esperados() -> set[str]:
-    """Os nomes de CAPTURAS em gerar_site.py, lidos do próprio arquivo para não
-    manter duas listas. Lê o código-fonte em vez de importar o módulo, que
-    depende do pacote `markdown`, desnecessário aqui."""
-    arvore = ast.parse((RAIZ / "tool" / "gerar_site.py").read_text(encoding="utf-8"))
-    for no in arvore.body:
-        if isinstance(no, ast.Assign) and any(
-            isinstance(alvo, ast.Name) and alvo.id == "CAPTURAS" for alvo in no.targets
-        ):
-            return set(ast.literal_eval(no.value))
-    raise SystemExit("CAPTURAS não encontrado em tool/gerar_site.py")
+    return set(CAPTURAS)
 
 
 def reduzir(origem: Path, largura: int) -> None:
