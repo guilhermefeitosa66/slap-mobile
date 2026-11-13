@@ -192,6 +192,11 @@ class _TelaCameraState extends ConsumerState<TelaCamera> {
           // quadro da câmera ofusca quem está mirando a etiqueta.
           backgroundColor: PaletaClara.tinta,
           foregroundColor: Colors.white,
+          // O estilo do título no tema traz a cor da tinta, que no tema claro
+          // é a mesma deste fundo: sem isto o "Lidos" some.
+          titleTextStyle: Theme.of(
+            context,
+          ).appBarTheme.titleTextStyle?.copyWith(color: Colors.white),
           title: Text('Lidos: ${formatarInteiro(sucessos)}'),
           actions: [
             IconButton(
