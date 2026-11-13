@@ -79,6 +79,19 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https"
+                      android:host="slap.libre-apps.org"
+                      android:pathPrefix="/entrar"/>
+            </intent-filter>
+
+            <!-- Endereço antigo do site (GitHub Pages, até 2026-11): os
+                 convites gerados pelas versões anteriores continuam abrindo
+                 o aplicativo. Num filtro à parte para não cruzar host e
+                 caminho dos dois endereços. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
                       android:host="guilhermefeitosa66.github.io"
                       android:pathPrefix="/slap-mobile/entrar"/>
             </intent-filter>

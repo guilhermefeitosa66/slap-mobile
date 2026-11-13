@@ -111,12 +111,12 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
             ),
           ],
         ),
-        // Convite por link (#55), nos dois endereços que o Android entrega:
-        // `/slap-mobile/entrar` vem do App Link do site, `/entrar` do esquema
-        // próprio. Os dados do convite vão no fragmento do endereço, que o
-        // go_router preserva em `GoRouterState.uri`.
+        // Convite por link (#55). `/entrar` vem do App Link do site e do
+        // esquema próprio; `/slap-mobile/entrar`, dos convites do endereço
+        // antigo do site. Os dados do convite vão no fragmento do endereço,
+        // que o go_router preserva em `GoRouterState.uri`.
         GoRoute(
-          path: caminhoEntrar,
+          path: caminhoEntrarAntigo,
           builder: (_, estado) => TelaEntrarPorLink(endereco: estado.uri),
         ),
         GoRoute(

@@ -85,5 +85,5 @@ para lá e gere o site de novo.
 
 O endereço antigo, `guilhermefeitosa66.github.io/slap-mobile/`, continua no GitHub Pages deste
 repositório, servido do branch `pages-redirect`: páginas que só redirecionam para o domínio novo,
-preservando o fragmento do convite (`/entrar#…`), que as versões publicadas do aplicativo ainda
-geram nesse endereço.
+preservando o fragmento do convite (`/entrar#…`), que as versões até a 1.3.2 geram nesse
+endereço.

@@ -20,7 +20,7 @@ const String enderecoUltimaVersao =
 /// Para onde o aviso leva: a página explica como instalar, o que o arquivo
 /// solto de uma release não faz.
 const String enderecoComoAtualizar =
-    'https://guilhermefeitosa66.github.io/slap-mobile/';
+    'https://slap.libre-apps.org/';
 
 /// Curto: isto roda na abertura, sem ninguém pedir. Uma consulta que demora
 /// não pode ser percebida por quem só quer começar a levantar.

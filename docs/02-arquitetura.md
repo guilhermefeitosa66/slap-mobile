@@ -490,8 +490,11 @@ link — e é aí que a chave de sincronização deixa de poder viajar junto.
 **O link não leva a chave.** Ele identifica o inventário e o aparelho de origem, nada mais:
 
 ```
-https://guilhermefeitosa66.github.io/slap-mobile/entrar#v=2&id=<uuid>&n=<nome>&a=<ano>&d=<aparelho>
+https://slap.libre-apps.org/entrar#v=2&id=<uuid>&n=<nome>&a=<ano>&d=<aparelho>
 ```
+
+Até a versão 1.3.2 o link apontava para `guilhermefeitosa66.github.io/slap-mobile/entrar`. O
+aplicativo ainda aceita esse endereço, e o GitHub Pages redireciona a página para o domínio novo.
 
 Um link encaminhado por engano, reencaminhado adiante ou deixado num grupo de mensagens não dá
 acesso a nada. A chave só é entregue depois que uma pessoa, no aparelho de origem, toca em
@@ -552,7 +555,7 @@ o processo em segundo plano; por isso a folha avisa, em uma linha, que os dois a
 estar na mesma rede Wi-Fi e que o aplicativo deve ficar aberto até o outro entrar.
 
 **O que o site precisa servir** (no repositório do site; ver
-[desenvolvimento.md](desenvolvimento.md#site)): a página `/slap-mobile/entrar`, que
+[desenvolvimento.md](desenvolvimento.md#site)): a página `/entrar`, que
 explica o convite e oferece o APK a quem não tem o aplicativo, e o
 `/.well-known/assetlinks.json` com a impressão digital SHA-256 da chave de release, sem o qual o
 Android não verifica o App Link e oferece o seletor de aplicativos em vez de abrir direto.

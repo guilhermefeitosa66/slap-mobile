@@ -574,10 +574,17 @@ class ConviteInventario {
 // ------------------------------------------------- entrada por link (#55) ---
 
 /// Endereço do site do projeto, onde mora a página de reserva do link.
-const String hostSite = 'guilhermefeitosa66.github.io';
+const String hostSite = 'slap.libre-apps.org';
 
 /// Caminho do convite no site. É o `pathPrefix` do App Link no manifesto.
-const String caminhoEntrar = '/slap-mobile/entrar';
+const String caminhoEntrar = '/entrar';
+
+/// Endereço antigo do site, no GitHub Pages, até 2026-11. Convites gerados
+/// pelas versões anteriores apontam para ele e continuam valendo.
+const String hostSiteAntigo = 'guilhermefeitosa66.github.io';
+
+/// Caminho do convite no endereço antigo.
+const String caminhoEntrarAntigo = '/slap-mobile/entrar';
 
 /// Esquema próprio, reserva de quando o Android não verificou o App Link.
 const String esquemaProprio = 'slapmobile';
@@ -652,8 +659,9 @@ class ConviteLink {
   /// Lê um convite de qualquer um dos endereços possíveis.
   ///
   /// Aceita o endereço completo do site, o esquema próprio e a rota que o
-  /// go_router entrega ao aplicativo (`/slap-mobile/entrar#…` com o
-  /// aplicativo fechado, `/entrar#…` pelo esquema próprio). Devolve `null`
+  /// go_router entrega ao aplicativo (`/entrar#…`, ou
+  /// `/slap-mobile/entrar#…` nos convites do endereço antigo).
+  /// Os convites do endereço antigo do site também valem. Devolve `null`
   /// quando o endereço não é um convite — abrir um link qualquer no aplicativo
   /// é o caso comum, e não é erro.
   static ConviteLink? decodificar(String endereco) {
@@ -715,10 +723,13 @@ class ConviteLink {
       return uri.host == 'entrar' || caminho == rotaEntrar;
     }
     if (uri.scheme == 'https' || uri.scheme == 'http') {
-      return uri.host == hostSite && caminho == caminhoEntrar;
+      return (uri.host == hostSite && caminho == caminhoEntrar) ||
+          (uri.host == hostSiteAntigo && caminho == caminhoEntrarAntigo);
     }
     // Rota interna, sem esquema nem host.
-    return caminho == caminhoEntrar || caminho == rotaEntrar;
+    return caminho == caminhoEntrar ||
+        caminho == caminhoEntrarAntigo ||
+        caminho == rotaEntrar;
   }
 }
 

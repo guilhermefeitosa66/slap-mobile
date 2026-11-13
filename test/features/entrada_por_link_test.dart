@@ -68,12 +68,23 @@ void main() {
 
       for (final rota in [
         '$caminhoEntrar#$parametros',
-        '/entrar#$parametros',
+        '$caminhoEntrarAntigo#$parametros',
       ]) {
         final lido = ConviteLink.deUri(Uri.parse(rota));
         expect(lido, isNotNull, reason: rota);
         expect(lido!.inventarioId, convite.inventarioId, reason: rota);
       }
+    });
+
+    test('convite do endereço antigo do site continua valendo', () {
+      final convite = conviteDeExemplo();
+      final parametros = convite.codificar().split('#').last;
+      final lido = ConviteLink.decodificar(
+        'https://$hostSiteAntigo$caminhoEntrarAntigo/#$parametros',
+      );
+
+      expect(lido, isNotNull);
+      expect(lido!.inventarioId, convite.inventarioId);
     });
 
     test('aceita os parâmetros na query, se o fragmento se perder', () {
@@ -104,7 +115,10 @@ void main() {
       // Abrir um link qualquer no aplicativo é o caso comum, e não é erro.
       for (final endereco in [
         'https://ifpi.edu.br',
-        'https://$hostSite/slap-mobile/',
+        'https://$hostSite/',
+        'https://$hostSiteAntigo/slap-mobile/',
+        'https://$hostSite$caminhoEntrarAntigo#v=2&id=abc',
+        'https://$hostSiteAntigo$caminhoEntrar#v=2&id=abc',
         'https://outro.site$caminhoEntrar#v=2&id=abc',
         '$caminhoEntrar#v=2',
         '$caminhoEntrar#id=abc',
