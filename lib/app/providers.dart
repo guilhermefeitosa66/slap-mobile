@@ -11,6 +11,7 @@ import '../data/schema.dart';
 import '../domain/divergencia.dart';
 import '../features/sync/anuncio.dart';
 import '../features/sync/cliente.dart';
+import '../features/sync/descoberta.dart';
 import '../features/sync/servidor.dart';
 
 /// Ligação entre as telas e a camada de dados.
@@ -66,6 +67,20 @@ final verificadorAtualizacaoProvider = Provider<VerificadorAtualizacao>(
 
 final clienteSyncProvider = Provider<ClienteSync>(
   (ref) => ClienteSync(ref.watch(operacoesProvider)),
+);
+
+/// Cria a descoberta de aparelhos da tela de troca de dados.
+///
+/// Trocável nos testes e nas capturas de tela, que não têm mDNS nem multicast.
+typedef CriarDescoberta =
+    Descoberta Function({
+      required String dispositivoId,
+      required String? Function() usuarioNome,
+      required int porta,
+    });
+
+final criarDescobertaProvider = Provider<CriarDescoberta>(
+  (ref) => Descoberta.new,
 );
 
 final servidorSyncProvider = Provider<ServidorSync>((ref) {

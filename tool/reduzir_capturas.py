@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Reduz capturas de tela do emulador para o README e o site.
 
-O emulador entrega PNGs de 1344 × 2992 (o Pixel de referência), pesados demais
-para uma página que mostra doze deles. Este script os reduz para 720 px de
-largura, mantendo a proporção, e grava em docs/imagens/ com os nomes de
+As capturas saem de test/capturas/site_test.dart em build/capturas-site/.
+Este script as reduz para a largura pedida (720 px por padrão; o site usa
+1206, a original, porque emoldura e gera as próprias versões menores), com a
+paleta reduzida a 256 cores, e grava em docs/imagens/ com os nomes de
 CAPTURAS, abaixo, que são os que o README, o manual e o site usam.
 
     python3 tool/reduzir_capturas.py <pasta com as capturas> [largura]

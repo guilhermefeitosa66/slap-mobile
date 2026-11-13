@@ -1,9 +1,9 @@
 # Capturas de tela
 
-As imagens do README, do site e do [manual](../manual.md). Diferente das capturas da loja em
-[`../loja/capturas/`](../loja/capturas/), geradas por teste golden com dados fictícios, estas
-vêm do emulador com um inventário real — só os **nomes de servidores e a matrícula são
-fictícios**, porque a planilha do SUAP traz nome e matrícula de pessoas.
+As imagens do README, do site e do [manual](../manual.md). Como as da loja em
+[`../loja/capturas/`](../loja/capturas/), saem de um teste golden com dados de demonstração
+(`test/capturas/cenario.dart`, nomes fictícios), no tamanho do iPhone de 6,3 polegadas
+(1206 × 2622), com barra de status e indicador de início. O site as põe numa moldura de celular.
 
 Cada arquivo tem o nome que `CAPTURAS`, em `tool/reduzir_capturas.py`, espera:
 
@@ -25,34 +25,15 @@ Cada arquivo tem o nome que `CAPTURAS`, em `tool/reduzir_capturas.py`, espera:
 
 ## Como refazer
 
-1. **Planilha com nomes fictícios.** A partir da exportação real do SUAP, troque o nome da
-   pessoa na coluna `CARGA ATUAL` (a parte antes do parêntese) por um nome inventado, mantendo o
-   resto da célula; um nome fictício por nome real, para as sugestões de responsável continuarem
-   fazendo sentido. Não versione nem a planilha real nem a modificada.
-2. **Emulador em tema claro**, com a barra de status em modo de demonstração, para todas as
-   capturas terem o mesmo relógio e bateria cheia:
+```bash
+flutter test --run-skipped --tags capturas --update-goldens test/capturas/site_test.dart
+python3 tool/reduzir_capturas.py build/capturas-site 1206
+```
 
-   ```bash
-   adb shell settings put global sysui_demo_allowed 1
-   adb shell am broadcast -a com.android.systemui.demo -e command enter
-   adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1000
-   adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false
-   adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4
-   adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false
-   ```
+O teste grava em `build/capturas-site/`; o script reduz a paleta e grava aqui. Telas que dependem
+de câmera, rede ou seletor de arquivos usam dublês no próprio teste: a câmera mostra uma etiqueta
+desenhada, a troca de dados encontra dois colegas fictícios e a importação lê
+`docs/loja/planilha-demonstracao.xlsx`.
 
-   Ao terminar: `adb shell am broadcast -a com.android.systemui.demo -e command exit`.
-3. **Identidade fictícia** na primeira abertura (ou em Ajustes), por exemplo "Ana Souza",
-   matrícula "2091234".
-4. Importe a planilha num inventário novo, faça algumas leituras (registrada, já verificada, não
-   localizada; mude de sala uma vez para haver divergência) e percorra as telas da tabela.
-   Capture cada uma com `adb exec-out screencap -p > <nome>.png`, numa pasta fora do
-   repositório.
-5. Reduza e grave em `docs/imagens/`:
-
-   ```bash
-   python3 tool/reduzir_capturas.py <pasta com as capturas>
-   ```
-
-6. Confira o resultado no README. Para o site, copie as imagens para o repositório dele
-   (ver [desenvolvimento.md](../desenvolvimento.md#site)) e gere o site de novo.
+Para o site, copie as imagens para o repositório dele e rode `make capturas` e `make gerar` lá
+(ver [desenvolvimento.md](../desenvolvimento.md#site)).

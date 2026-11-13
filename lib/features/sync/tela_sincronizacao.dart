@@ -79,7 +79,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
         .where((e) => e.inventarioId == widget.inventarioId)
         .listen(_aoReceber);
 
-    final descoberta = Descoberta(
+    final descoberta = ref.read(criarDescobertaProvider)(
       dispositivoId: ref.read(bancoProvider).dispositivoId,
       usuarioNome: () => ref.read(identidadeProvider).nome,
       porta: porta,
