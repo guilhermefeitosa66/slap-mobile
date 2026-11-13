@@ -64,22 +64,14 @@ class ControladorAtualizacao extends Notifier<EstadoAtualizacao> {
     if (banco.lerConfig(Config.verificarAtualizacao) == '0') return;
 
     final verificador = ref.read(verificadorAtualizacaoProvider);
-    final publicada = await verificador.ultimaPublicada();
+    final consulta = await verificador.consultar();
     if (!ref.mounted) return;
 
     // Sem resposta, o estado não muda: nada na tela afirma coisa alguma, e o
     // aplicativo segue. Sem rede é o caso comum em campo.
-    if (publicada == null) return;
+    if (consulta == null) return;
 
-    state = EstadoAtualizacao(
-      nova: versaoEhMaisNova(publicada, versaoApp)
-          ? AtualizacaoDisponivel(
-              versao: versaoLegivel(publicada),
-              endereco: enderecoComoAtualizar,
-            )
-          : null,
-      conferido: true,
-    );
+    state = EstadoAtualizacao(nova: consulta.nova, conferido: true);
   }
 
   /// "Agora não": a faixa some até o aplicativo ser fechado e aberto de novo.

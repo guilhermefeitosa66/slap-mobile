@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:in_app_update/in_app_update.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
 import 'enderecos.dart';
 
 /// Versão deste aplicativo, a mesma de `pubspec.yaml`.
@@ -12,7 +15,8 @@ import 'enderecos.dart';
 /// repetição segura.
 const String versaoApp = '1.3.3';
 
-/// Onde se pergunta qual é a última versão publicada.
+/// Onde se pergunta qual é a última versão publicada, para o APK instalado
+/// fora das lojas (baixado do site ou do GitHub).
 ///
 /// O endpoint de `releases/latest` do GitHub exclui rascunhos e
 /// pré-lançamentos: o que ele devolve é uma versão de verdade.
@@ -27,12 +31,78 @@ const String enderecoComoAtualizar = enderecoSite;
 /// não pode ser percebida por quem só quer começar a levantar.
 const Duration tempoLimiteVerificacao = Duration(seconds: 8);
 
+/// De onde veio a instalação. Decide a quem perguntar pela versão nova: quem
+/// instalou pela loja atualiza pela loja, e quem instalou o APK baixado do
+/// site atualiza pelo site.
+enum OrigemInstalacao { googlePlay, appStore, foraDasLojas }
+
+/// Pacote Android, o mesmo da ficha da Play.
+const String pacoteAndroid = 'io.github.guilhermefeitosa66.slap_mobile';
+
+/// Bundle id do iOS, o mesmo do App Store Connect.
+const String bundleIos = 'io.github.guilhermefeitosa66.slapMobile';
+
+/// Ficha do aplicativo no app da Play Store.
+const String enderecoPlayMarket = 'market://details?id=$pacoteAndroid';
+
+/// Ficha do aplicativo na Play, no navegador: reserva de quando o app da Play
+/// não abre o endereço `market://`.
+const String enderecoPlay =
+    'https://play.google.com/store/apps/details?id=$pacoteAndroid';
+
+/// Página do aplicativo na App Store, quando a consulta não traz o endereço.
+const String enderecoAppStore = 'https://apps.apple.com/br/app/id6828446378';
+
+/// Consulta pública da Apple (iTunes Lookup) pela versão publicada na loja.
+const String enderecoLookupApple =
+    'https://itunes.apple.com/lookup?bundleId=$bundleIos&country=br';
+
 /// Uma versão publicada mais nova que a instalada.
 class AtualizacaoDisponivel {
-  final String versao;
+  /// O número da versão nova. Nulo quando a loja não diz qual é: a Play só
+  /// informa que há atualização.
+  final String? versao;
+
+  /// Para onde o aviso leva: a ficha da loja, ou a página do site que
+  /// explica como instalar o APK.
   final String endereco;
 
-  const AtualizacaoDisponivel({required this.versao, required this.endereco});
+  final OrigemInstalacao origem;
+
+  const AtualizacaoDisponivel({
+    required this.versao,
+    required this.endereco,
+    this.origem = OrigemInstalacao.foraDasLojas,
+  });
+}
+
+/// O resultado de uma consulta que respondeu: [nova] nula quer dizer "em dia".
+class ConsultaVersao {
+  final AtualizacaoDisponivel? nova;
+
+  const ConsultaVersao(this.nova);
+}
+
+/// A origem da instalação a partir do pacote instalador do Android.
+OrigemInstalacao origemPeloInstalador(String? instalador) =>
+    instalador == 'com.android.vending'
+    ? OrigemInstalacao.googlePlay
+    : OrigemInstalacao.foraDasLojas;
+
+/// A origem desta instalação. No iPhone só há a App Store (ou o TestFlight,
+/// que é dela); no Android, quem instalou diz.
+Future<OrigemInstalacao> origemDaInstalacao() async {
+  if (Platform.isIOS) return OrigemInstalacao.appStore;
+  if (!Platform.isAndroid) return OrigemInstalacao.foraDasLojas;
+  final info = await PackageInfo.fromPlatform();
+  return origemPeloInstalador(info.installerStore);
+}
+
+/// Pergunta à Play, pela API de atualizações no app, se há versão nova.
+/// Só responde para aplicativo instalado pela Play.
+Future<bool?> _consultarPlay() async {
+  final info = await InAppUpdate.checkForUpdate();
+  return info.updateAvailability == UpdateAvailability.updateAvailable;
 }
 
 /// Verdadeiro quando [candidata] é estritamente mais nova que [atual].
@@ -66,43 +136,127 @@ List<int> _numeros(String bruto) {
   return [for (final parte in achado.group(1)!.split('.')) int.parse(parte)];
 }
 
-/// Pergunta ao GitHub se há versão mais nova.
+/// Pergunta se há versão mais nova, a quem distribuiu esta instalação: a
+/// Google Play, a App Store ou, para o APK baixado do site, o GitHub.
 ///
-/// **Nunca lança.** Isto roda sozinho a cada abertura: sem rede, com a API
-/// fora do ar, com o limite de requisições estourado ou com o formato da
-/// resposta mudado, o resultado é "nada a avisar" e o aplicativo abre igual.
-/// O levantamento funciona sem internet por projeto, e uma verificação de
-/// versão não é motivo para contradizer isso.
+/// **Nunca lança.** Isto roda sozinho a cada abertura: sem rede, com a loja
+/// ou a API fora do ar, com o limite de requisições estourado ou com o formato
+/// da resposta mudado, o resultado é "nada a avisar" e o aplicativo abre
+/// igual. O levantamento funciona sem internet por projeto, e uma verificação
+/// de versão não é motivo para contradizer isso.
 class VerificadorAtualizacao {
   /// Como buscar o corpo de uma resposta. Trocável no teste, que não tem — e
   /// não deve ter — rede.
   final Future<String?> Function(Uri endereco) buscar;
 
-  VerificadorAtualizacao({Future<String?> Function(Uri)? buscar})
-    : buscar = buscar ?? _buscarPorHttp;
+  /// De onde veio a instalação. Por padrão, fora das lojas: é o que os testes
+  /// usam; o aplicativo usa [VerificadorAtualizacao.doAparelho].
+  final Future<OrigemInstalacao> Function() origem;
+
+  /// Se a Play tem atualização: verdadeiro, falso, ou nulo quando não deu
+  /// para saber.
+  final Future<bool?> Function() consultarPlay;
+
+  VerificadorAtualizacao({
+    Future<String?> Function(Uri)? buscar,
+    Future<OrigemInstalacao> Function()? origem,
+    Future<bool?> Function()? consultarPlay,
+  }) : buscar = buscar ?? _buscarPorHttp,
+       origem = origem ?? (() async => OrigemInstalacao.foraDasLojas),
+       consultarPlay = consultarPlay ?? (() async => null);
+
+  /// O verificador de verdade, que descobre a origem da instalação e fala
+  /// com a loja.
+  factory VerificadorAtualizacao.doAparelho() => VerificadorAtualizacao(
+    origem: origemDaInstalacao,
+    consultarPlay: _consultarPlay,
+  );
 
   /// A versão mais nova, se houver. Nulo quando não há, ou quando não deu
   /// para saber — que para quem está abrindo o aplicativo é a mesma coisa.
   Future<AtualizacaoDisponivel?> verificar({
     String versaoAtual = versaoApp,
-    String endereco = enderecoUltimaVersao,
-  }) async {
-    final publicada = await ultimaPublicada(endereco: endereco);
-    if (publicada == null) return null;
-    if (!versaoEhMaisNova(publicada, versaoAtual)) return null;
+  }) async => (await consultar(versaoAtual: versaoAtual))?.nova;
 
-    return AtualizacaoDisponivel(
-      versao: versaoLegivel(publicada),
-      endereco: enderecoComoAtualizar,
-    );
+  /// Consulta a origem da instalação. Nulo quando **não deu para saber**.
+  ///
+  /// Os dois casos que [verificar] junta — estar em dia e não ter conseguido
+  /// perguntar — são diferentes na tela: um permite dizer "atualizado", o
+  /// outro não permite dizer nada.
+  Future<ConsultaVersao?> consultar({String versaoAtual = versaoApp}) async {
+    try {
+      final de = await origem().timeout(tempoLimiteVerificacao);
+      switch (de) {
+        case OrigemInstalacao.googlePlay:
+          final ha = await consultarPlay().timeout(tempoLimiteVerificacao);
+          if (ha == null) return null;
+          return ConsultaVersao(
+            ha
+                ? AtualizacaoDisponivel(
+                    versao: null,
+                    endereco: enderecoPlay,
+                    origem: de,
+                  )
+                : null,
+          );
+        case OrigemInstalacao.appStore:
+          final publicada = await ultimaNaAppStore();
+          if (publicada == null) return null;
+          return ConsultaVersao(
+            versaoEhMaisNova(publicada.versao, versaoAtual)
+                ? AtualizacaoDisponivel(
+                    versao: versaoLegivel(publicada.versao),
+                    endereco: publicada.endereco,
+                    origem: de,
+                  )
+                : null,
+          );
+        case OrigemInstalacao.foraDasLojas:
+          final publicada = await ultimaPublicada();
+          if (publicada == null) return null;
+          return ConsultaVersao(
+            versaoEhMaisNova(publicada, versaoAtual)
+                ? AtualizacaoDisponivel(
+                    versao: versaoLegivel(publicada),
+                    endereco: enderecoComoAtualizar,
+                  )
+                : null,
+          );
+      }
+    } catch (_) {
+      // Qualquer falha é "não deu para saber". Ver o comentário da classe.
+      return null;
+    }
   }
 
-  /// A última versão publicada, como o GitHub a nomeia. Nulo quando **não deu
-  /// para saber**.
-  ///
-  /// Separado de [verificar] porque os dois casos que ele junta — estar em dia
-  /// e não ter conseguido perguntar — são diferentes na tela: um permite dizer
-  /// "atualizado", o outro não permite dizer nada.
+  /// A versão publicada na App Store e o endereço da página, pela consulta
+  /// pública da Apple. Nulo quando não deu para saber.
+  Future<({String versao, String endereco})?> ultimaNaAppStore() async {
+    try {
+      final corpo = await buscar(Uri.parse(enderecoLookupApple));
+      if (corpo == null) return null;
+
+      final json = jsonDecode(corpo);
+      if (json is! Map) return null;
+      final resultados = json['results'];
+      if (resultados is! List || resultados.isEmpty) return null;
+      final app = resultados.first;
+      if (app is! Map) return null;
+
+      final versao = app['version']?.toString();
+      if (versao == null || _numeros(versao).isEmpty) return null;
+      final pagina = app['trackViewUrl']?.toString();
+      return (
+        versao: versao,
+        endereco: pagina == null || pagina.isEmpty ? enderecoAppStore : pagina,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A última versão publicada no GitHub, como ele a nomeia. Nulo quando
+  /// **não deu para saber**.
   Future<String?> ultimaPublicada({
     String endereco = enderecoUltimaVersao,
   }) async {

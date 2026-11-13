@@ -57,10 +57,11 @@ final sonsProvider = Provider<Sons>((ref) {
   return sons;
 });
 
-/// Quem pergunta ao GitHub se há versão mais nova. Trocável nos testes, que
-/// não têm — e não devem ter — rede.
+/// Quem pergunta se há versão mais nova: a loja de onde veio a instalação ou,
+/// para o APK baixado do site, o GitHub. Trocável nos testes, que não têm — e
+/// não devem ter — rede.
 final verificadorAtualizacaoProvider = Provider<VerificadorAtualizacao>(
-  (ref) => VerificadorAtualizacao(),
+  (ref) => VerificadorAtualizacao.doAparelho(),
 );
 
 final clienteSyncProvider = Provider<ClienteSync>(

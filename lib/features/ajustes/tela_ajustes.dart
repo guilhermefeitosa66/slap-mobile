@@ -126,7 +126,8 @@ class TelaAjustes extends ConsumerWidget {
                 secondary: const Icon(Icons.system_update_alt),
                 title: const Text('Avisar de versão nova'),
                 subtitle: const Text(
-                  'Ao abrir, pergunta ao GitHub qual é a última versão. Não '
+                  'Ao abrir, pergunta à loja de onde veio o aplicativo (ou ao '
+                  'GitHub, no APK baixado do site) se há versão nova. Não '
                   'envia nada do inventário.',
                 ),
                 value: preferencias.verificarAtualizacao,

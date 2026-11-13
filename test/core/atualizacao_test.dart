@@ -132,4 +132,115 @@ void main() {
       expect(await travado.verificar(versaoAtual: '1.1.0'), isNull);
     });
   });
+
+  group('origem da instalação', () {
+    test('instalado pela Play, pergunta à Play', () {
+      expect(
+        origemPeloInstalador('com.android.vending'),
+        OrigemInstalacao.googlePlay,
+      );
+    });
+
+    test('APK instalado à mão ou por outra loja, pergunta ao GitHub', () {
+      for (final instalador in [
+        null,
+        '',
+        'com.google.android.packageinstaller',
+        'com.android.shell',
+      ]) {
+        expect(
+          origemPeloInstalador(instalador),
+          OrigemInstalacao.foraDasLojas,
+          reason: 'instalador: $instalador',
+        );
+      }
+    });
+  });
+
+  group('na Google Play', () {
+    VerificadorAtualizacao play(Future<bool?> Function() consultar) =>
+        VerificadorAtualizacao(
+          origem: () async => OrigemInstalacao.googlePlay,
+          consultarPlay: consultar,
+          buscar: (_) async => fail('na Play não se pergunta ao GitHub'),
+        );
+
+    test('com atualização, leva à ficha da Play', () async {
+      final r = await play(() async => true).verificar(versaoAtual: '1.1.0');
+
+      expect(r, isNotNull);
+      expect(r!.versao, isNull, reason: 'a Play não diz o número');
+      expect(r.origem, OrigemInstalacao.googlePlay);
+      expect(r.endereco, enderecoPlay);
+    });
+
+    test('sem atualização, está em dia', () async {
+      final c = await play(() async => false).consultar(versaoAtual: '1.1.0');
+
+      expect(c, isNotNull);
+      expect(c!.nova, isNull);
+    });
+
+    test('a Play sem resposta, ou com erro, não afirma nada', () async {
+      expect(await play(() async => null).consultar(), isNull);
+      expect(
+        await play(() => Future.error(Exception('fora da Play'))).consultar(),
+        isNull,
+      );
+    });
+  });
+
+  group('na App Store', () {
+    VerificadorAtualizacao appStore(String? corpo) => VerificadorAtualizacao(
+      origem: () async => OrigemInstalacao.appStore,
+      buscar: (endereco) async {
+        expect(endereco.toString(), enderecoLookupApple);
+        return corpo;
+      },
+    );
+
+    test('versão mais nova na loja leva à página dela', () async {
+      final r = await appStore(
+        '{"resultCount": 1, "results": [{"version": "1.4.0", '
+        '"trackViewUrl": "https://apps.apple.com/br/app/slap/id1"}]}',
+      ).verificar(versaoAtual: '1.3.3');
+
+      expect(r!.versao, '1.4.0');
+      expect(r.origem, OrigemInstalacao.appStore);
+      expect(r.endereco, 'https://apps.apple.com/br/app/slap/id1');
+    });
+
+    test('sem o endereço na resposta, usa o da página do app', () async {
+      final r = await appStore(
+        '{"results": [{"version": "9.0.0"}]}',
+      ).verificar(versaoAtual: '1.3.3');
+
+      expect(r!.endereco, enderecoAppStore);
+    });
+
+    test('mesma versão da loja está em dia', () async {
+      final c = await appStore(
+        '{"results": [{"version": "1.3.3"}]}',
+      ).consultar(versaoAtual: '1.3.3');
+
+      expect(c, isNotNull);
+      expect(c!.nova, isNull);
+    });
+
+    test('resposta vazia ou malformada não afirma nada', () async {
+      for (final corpo in [
+        null,
+        'não é json',
+        '{"resultCount": 0, "results": []}',
+        '{"results": [{"version": "sem número"}]}',
+        '{"results": "x"}',
+      ]) {
+        expect(
+          await appStore(corpo).consultar(versaoAtual: '1.3.3'),
+          isNull,
+          reason: 'corpo: $corpo',
+        );
+      }
+    });
+  });
 }

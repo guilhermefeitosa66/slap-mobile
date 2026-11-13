@@ -1,6 +1,6 @@
 # Política de privacidade do SLAP Mobile
 
-_Última atualização: 24 de setembro de 2026._
+_Última atualização: 13 de novembro de 2026._
 
 O SLAP Mobile é um aplicativo de inventário patrimonial, software livre
 ([código-fonte](https://github.com/guilhermefeitosa66/slap-mobile)). Esta página diz quais dados ele
@@ -17,8 +17,9 @@ guarda, para onde eles vão e por quê.
   - a biblioteca do Google que lê códigos de barras envia ao Google dados técnicos de
     funcionamento dela — nunca as imagens nem os códigos lidos. Ver
     [Leitura de códigos no Android](#leitura-de-códigos-no-android);
-  - ao abrir, o aplicativo pergunta ao GitHub qual é a última versão publicada, para avisar quando
-    a sua está desatualizada. Ver [Verificação de versão](#verificação-de-versão).
+  - ao abrir, o aplicativo pergunta à loja de onde ele veio (Google Play ou App Store), ou ao
+    GitHub no caso do APK baixado do site, se há versão mais nova, para avisar quando a sua está
+    desatualizada. Ver [Verificação de versão](#verificação-de-versão).
 
 ## O que o aplicativo guarda no aparelho
 
@@ -87,19 +88,32 @@ No iPhone, a leitura usa o recurso do próprio sistema, que não envia nada.
 
 ## Verificação de versão
 
-O aplicativo é instalado por arquivo APK, fora da loja: nada avisaria quem está com uma versão
-antiga, e uma versão antiga pode ter um defeito já corrigido. Por isso, **ao abrir**, ele consulta
+Uma versão antiga pode ter um defeito já corrigido. Por isso, **ao abrir**, o aplicativo pergunta se
+há versão mais nova a quem o distribuiu:
 
-```
-https://api.github.com/repos/guilhermefeitosa66/slap-mobile/releases/latest
-```
+- **Instalado pela Google Play:** pergunta à própria Play, pela API de atualizações no app do
+  Google (Play Core). Quem responde é o app da Play Store do aparelho, que já conversa com o Google
+  por conta própria; o SLAP só recebe "há atualização" ou "não há".
+- **Instalado pela App Store:** consulta a busca pública da Apple,
 
-e compara o número da última versão publicada com a instalada. Havendo versão mais nova, aparece
-uma faixa com um botão que leva à página de instalação.
+  ```
+  https://itunes.apple.com/lookup?bundleId=io.github.guilhermefeitosa66.slapMobile&country=br
+  ```
+
+  que devolve o número da versão publicada na loja.
+- **Instalado pelo arquivo APK baixado do site:** consulta o GitHub, onde as versões são
+  publicadas,
+
+  ```
+  https://api.github.com/repos/guilhermefeitosa66/slap-mobile/releases/latest
+  ```
+
+O aplicativo compara o número da versão publicada com o da instalada. Havendo versão mais nova,
+aparece uma faixa com um botão que leva à loja ou, no caso do APK, à página de instalação.
 
 **O que essa consulta envia:** nada além do próprio pedido HTTP. Nenhum dado do inventário,
-nenhum identificador do aparelho, nenhum nome. Como em qualquer acesso à internet, o GitHub
-registra o endereço IP de onde o pedido saiu e o tipo de aplicativo que pediu; é o mesmo que
+nenhum identificador do aparelho, nenhum nome. Como em qualquer acesso à internet, quem responde
+(Google, Apple ou GitHub) registra o endereço IP de onde o pedido saiu e o tipo de aplicativo que pediu; é o mesmo que
 aconteceria ao abrir a página do projeto no navegador. Quem mantém o SLAP Mobile não recebe nada
 dessa consulta nem tem acesso a esses registros.
 
@@ -107,7 +121,7 @@ dessa consulta nem tem acesso a esses registros.
 não faz essa consulta, e nenhuma outra sai dele por conta própria — resta só a sincronização, que
 é local e só acontece quando você manda.
 
-Se a consulta falhar — sem internet, com o GitHub fora do ar — o aplicativo abre normalmente e
+Se a consulta falhar — sem internet, com a loja ou o GitHub fora do ar — o aplicativo abre normalmente e
 não avisa nada. O levantamento não depende dela.
 
 ## Permissões

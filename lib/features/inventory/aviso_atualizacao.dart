@@ -21,12 +21,26 @@ import 'estado_atualizacao.dart';
 class AvisoAtualizacao extends ConsumerWidget {
   const AvisoAtualizacao({super.key});
 
+  /// Leva à atualização: a ficha na loja de onde veio a instalação, ou a
+  /// página do site que explica como instalar o APK. Na Play, tenta primeiro
+  /// o app da loja (`market://`) e, se não abrir, a ficha no navegador.
   Future<void> _abrir(BuildContext context, AtualizacaoDisponivel nova) async {
-    final aberto = await launchUrl(
-      Uri.parse(nova.endereco),
-      mode: LaunchMode.externalApplication,
-    );
-    if (!aberto && context.mounted) {
+    final enderecos = nova.origem == OrigemInstalacao.googlePlay
+        ? [enderecoPlayMarket, nova.endereco]
+        : [nova.endereco];
+    for (final endereco in enderecos) {
+      bool aberto;
+      try {
+        aberto = await launchUrl(
+          Uri.parse(endereco),
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (_) {
+        aberto = false;
+      }
+      if (aberto) return;
+    }
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Abra ${nova.endereco} no navegador.')),
       );
@@ -58,7 +72,9 @@ class AvisoAtualizacao extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Versão ${nova.versao} disponível',
+                      nova.versao == null
+                          ? 'Versão nova disponível'
+                          : 'Versão ${nova.versao} disponível',
                       style: tema.textTheme.titleSmall?.copyWith(
                         color: tom.texto,
                       ),
@@ -68,8 +84,11 @@ class AvisoAtualizacao extends ConsumerWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Você está na $versaoApp. Instalar por cima mantém os '
-                'inventários.',
+                nova.origem == OrigemInstalacao.foraDasLojas
+                    ? 'Você está na $versaoApp. Instalar por cima mantém os '
+                          'inventários.'
+                    : 'Você está na $versaoApp. Atualizar mantém os '
+                          'inventários.',
                 style: tema.textTheme.bodySmall?.copyWith(color: tom.texto),
               ),
               const SizedBox(height: 12),
@@ -81,10 +100,22 @@ class AvisoAtualizacao extends ConsumerWidget {
                 child: FilledButton.icon(
                   onPressed: () => _abrir(context, nova),
                   icon: const Icon(Icons.open_in_new, size: 18),
-                  // Diz o que a pessoa quer fazer, e não o que a tela faz. O
-                  // toque abre a página que explica como instalar — o arquivo
-                  // não baixa sozinho, e o ícone diz isso.
-                  label: const Text('Baixar nova versão'),
+                  // Diz o que a pessoa quer fazer, e não o que a tela faz. Quem
+                  // instalou pela loja atualiza pela loja; quem instalou o APK
+                  // vai à página que explica como instalar — o arquivo não
+                  // baixa sozinho, e o ícone diz isso. O rótulo para leitor de
+                  // tela diz para onde o toque leva.
+                  label: Text(
+                    nova.origem == OrigemInstalacao.foraDasLojas
+                        ? 'Baixar nova versão'
+                        : 'Atualizar',
+                    semanticsLabel: switch (nova.origem) {
+                      OrigemInstalacao.googlePlay => 'Atualizar na Play Store',
+                      OrigemInstalacao.appStore => 'Atualizar na App Store',
+                      OrigemInstalacao.foraDasLojas =>
+                        'Baixar nova versão no site',
+                    },
+                  ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(0, 48),
                     backgroundColor: tom.texto,

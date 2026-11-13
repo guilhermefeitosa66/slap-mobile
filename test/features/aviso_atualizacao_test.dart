@@ -150,4 +150,40 @@ void main() {
     expect(perguntou, isFalse, reason: 'nada sai do aparelho');
     expect(find.textContaining('disponível'), findsNothing);
   });
+
+  testWidgets('instalado pela Play, o botão é "Atualizar" e vai à loja', (
+    tester,
+  ) async {
+    await abrir(
+      tester,
+      VerificadorAtualizacao(
+        origem: () async => OrigemInstalacao.googlePlay,
+        consultarPlay: () async => true,
+      ),
+    );
+
+    expect(find.text('Versão nova disponível'), findsOneWidget);
+    expect(find.text('Atualizar'), findsOneWidget);
+    expect(find.bySemanticsLabel('Atualizar na Play Store'), findsOneWidget);
+    expect(find.text('Baixar nova versão'), findsNothing);
+    await expectLater(tester, meetsGuideline(textContrastGuideline));
+    await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+  });
+
+  testWidgets('instalado pela App Store, o botão é "Atualizar"', (
+    tester,
+  ) async {
+    await abrir(
+      tester,
+      VerificadorAtualizacao(
+        origem: () async => OrigemInstalacao.appStore,
+        buscar: (_) async => '{"results": [{"version": "9.9.9"}]}',
+      ),
+    );
+
+    expect(find.text('Versão 9.9.9 disponível'), findsOneWidget);
+    expect(find.text('Atualizar'), findsOneWidget);
+    expect(find.bySemanticsLabel('Atualizar na App Store'), findsOneWidget);
+  });
 }

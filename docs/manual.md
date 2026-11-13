@@ -433,7 +433,7 @@ troque dados com todos os aparelhos da comissão.
 | **Som a cada leitura** | Um som diferente para registrado, já verificado e não localizado. |
 | **Vibrar a cada leitura** | Útil em biblioteca e sala de aula, com o som desligado. |
 | **Tema** | Claro, escuro ou o que o celular estiver usando. |
-| **Avisar de versão nova** | Ao abrir, pergunta ao GitHub qual é a última versão publicada. Não envia nada do inventário; dá para desligar. |
+| **Avisar de versão nova** | Ao abrir, pergunta à loja de onde veio o aplicativo (ou ao GitHub, no APK baixado do site) se há versão nova. Não envia nada do inventário; dá para desligar. |
 | **Exportar cópia** / **Restaurar de uma cópia** | Veja abaixo. |
 | **Apagar tudo deste aparelho** | Tira todos os inventários daqui. Diz antes, em números, o que ainda não chegou a nenhum outro aparelho, e oferece a cópia de segurança. Seu nome, ajustes e a identidade do aparelho ficam. |
 | **Separar este aparelho de uma cópia** | Só num caso, descrito em [Perguntas e problemas comuns](#dois-aparelhos-estão-com-a-mesma-identidade). |
@@ -537,10 +537,12 @@ Vale relatar numa [issue](https://github.com/guilhermefeitosa66/slap-mobile/issu
 
 ### Apareceu um aviso de versão nova
 
-O aplicativo é instalado por arquivo, fora da loja, e nada mais avisaria que saiu uma versão
-corrigida. A faixa laranja aparece no alto da lista de inventários; tocando em **Baixar nova
-versão**, a página de instalação abre no navegador. Instalar por cima mantém os inventários —
-**não desinstale**.
+A faixa laranja aparece no alto da lista de inventários quando saiu uma versão nova:
+
+- **Instalado pela Google Play ou pela App Store:** tocando em **Atualizar**, a página do SLAP na
+  loja abre, e a atualização é feita por lá. Os inventários ficam.
+- **Instalado pelo arquivo APK baixado do site:** tocando em **Baixar nova versão**, a página de
+  instalação abre no navegador. Instalar por cima mantém os inventários — **não desinstale**.
 
 **Agora não** tira a faixa enquanto o aplicativo estiver aberto. Fechando e abrindo de novo, ela
 volta, até a versão ser instalada. Para não ver mais nenhum aviso, desligue em **Ajustes →
