@@ -212,6 +212,39 @@ void main() {
     );
   });
 
+  testWidgets('reimportar devolve só os EDs marcados, e mantém os outros', (
+    tester,
+  ) async {
+    final inventarios = RepositorioInventarios(
+      banco,
+      RepositorioOperacoes(banco),
+    );
+    // Removidos antes: um ED desta planilha e um que ela não traz.
+    inventarios.definirEdsExcluidos(inventario.id, ['44905218', '33903000']);
+
+    seletor.proximo = ArquivoDeTeste('bens.csv', planilha());
+    await abrirImportacao(tester);
+    await tester.tap(find.text('Escolher arquivo'));
+    await esperarAte(tester, find.text('Confira as colunas'));
+    await tester.tap(find.text('Continuar'));
+    await esperarAte(tester, find.text('Elementos de despesa'));
+
+    // O ED já removido começa desmarcado: reimportar não o devolve sozinho.
+    expect(find.text('9 entrarão no inventário'), findsOneWidget);
+    await tester.tap(find.text('ED 44905218'));
+    await tester.pump();
+    expect(find.text('12 entrarão no inventário'), findsOneWidget);
+
+    await tester.tap(find.text('Importar'));
+    await esperarAte(tester, find.text('abrir'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('1 elemento de despesa de volta ao inventário'),
+      findsOneWidget,
+    );
+    expect(inventarios.porId(inventario.id)!.edsExcluidos, ['33903000']);
+  });
+
   testWidgets('desistir no seletor volta sem erro', (tester) async {
     seletor.proximo = null;
     await abrirImportacao(tester);

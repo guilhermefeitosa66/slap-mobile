@@ -8,6 +8,7 @@ import '../features/ajustes/tela_ajustes.dart';
 import '../features/divergence/tela_itens.dart';
 import '../features/identity/tela_identidade.dart';
 import '../features/import/tela_importacao.dart';
+import '../features/inventory/tela_configuracoes_inventario.dart';
 import '../features/inventory/tela_dashboard.dart';
 import '../features/inventory/tela_inventarios.dart';
 import '../features/reports/tela_relatorios.dart';
@@ -72,6 +73,12 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
                 GoRoute(
                   path: 'importar',
                   builder: (_, estado) => TelaImportacao(
+                    inventarioId: estado.pathParameters['id']!,
+                  ),
+                ),
+                GoRoute(
+                  path: 'configuracoes',
+                  builder: (_, estado) => TelaConfiguracoesInventario(
                     inventarioId: estado.pathParameters['id']!,
                   ),
                 ),
