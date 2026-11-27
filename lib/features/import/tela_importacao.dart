@@ -42,6 +42,16 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
   PreviaImportacao? _previa;
   final _edsExcluidos = <String>{};
 
+  @override
+  void initState() {
+    super.initState();
+    // Reimportar parte dos EDs já fora do inventário: eles começam
+    // desmarcados, e marcá-los é o que os devolve. Começar com tudo marcado
+    // devolvia em silêncio tudo o que tinha sido tirado.
+    final inventario = ref.read(inventariosProvider).porId(widget.inventarioId);
+    _edsExcluidos.addAll(inventario?.edsExcluidos ?? const []);
+  }
+
   /// Atualiza a barra, se a tela ainda estiver montada.
   void _andando(Andamento? andamento) {
     if (mounted) setState(() => _andamento = andamento);
@@ -149,16 +159,24 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
         aoProgredir: _andando,
       );
 
-      ref
-          .read(inventariosProvider)
-          .definirEdsExcluidos(widget.inventarioId, _edsExcluidos.toList());
+      // Só os EDs desta planilha são decididos aqui. Um ED tirado do
+      // inventário que não está no arquivo continua fora.
+      final edsDaPlanilha = previa.contagemPorEd.keys.toSet();
+      final inventarios = ref.read(inventariosProvider);
+      final antes = {...?inventarios.porId(widget.inventarioId)?.edsExcluidos};
+      final depois = inventarios.alterarEdsExcluidos(
+        widget.inventarioId,
+        excluir: edsDaPlanilha.intersection(_edsExcluidos),
+        incluir: edsDaPlanilha.difference(_edsExcluidos),
+      );
+      final devolvidos = antes.difference(depois.toSet()).length;
       ref.read(revisaoProvider.notifier).mudou();
 
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(_resumo(resultado))));
+      ).showSnackBar(SnackBar(content: Text(_resumo(resultado, devolvidos))));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -176,7 +194,7 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
   /// O número principal é o dos que entraram no inventário — o mesmo que o
   /// passo anterior prometeu. Os deixados de fora aparecem à parte, para a
   /// conta fechar para quem somar.
-  String _resumo(ResultadoImportacao r) => [
+  String _resumo(ResultadoImportacao r, int edsDevolvidos) => [
     '${formatarInteiro(r.entraram)} '
         '${r.entraram == 1 ? 'item importado' : 'itens importados'}',
     if (r.ignoradosPorEd > 0)
@@ -184,6 +202,10 @@ class _TelaImportacaoState extends ConsumerState<TelaImportacao> {
           'de despesa',
     if (r.preservados > 0)
       '${formatarInteiro(r.preservados)} já existiam e foram preservados',
+    if (edsDevolvidos > 0)
+      edsDevolvidos == 1
+          ? '1 elemento de despesa de volta ao inventário'
+          : '$edsDevolvidos elementos de despesa de volta ao inventário',
   ].join(' · ');
 
   @override

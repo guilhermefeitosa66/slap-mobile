@@ -1,6 +1,6 @@
 # Política de privacidade do SLAP Mobile
 
-_Última atualização: 13 de novembro de 2026._
+_Última atualização: 27 de novembro de 2026._
 
 O SLAP Mobile é um aplicativo de inventário patrimonial, software livre
 ([código-fonte](https://github.com/guilhermefeitosa66/slap-mobile)). Esta página diz quais dados ele
@@ -71,6 +71,14 @@ diretamente na rede ainda consegue ver o nome e o identificador.
 pela janela de salvar ou compartilhar do sistema, para onde você escolher. A partir daí, seguem as
 regras de onde você os guardou.
 
+**O arquivo do inventário, na troca por arquivo.** Para a equipe que nunca está na mesma rede, o
+aplicativo gera um arquivo com o inventário inteiro: os dados da planilha do SUAP, o que foi
+levantado, o nome (e a matrícula, se informada) de quem registrou cada alteração e a chave do
+inventário. Ele sai pelo meio que **você** escolher (WhatsApp, e-mail, drive) e **não é cifrado**
+pelo aplicativo: a proteção é a do meio usado. Quem tiver o arquivo pode entrar no inventário sem
+passar pelo pedido de entrada, por isso o aplicativo pede, ao enviar, que ele vá só a quem
+participa.
+
 ### Leitura de códigos no Android
 
 No Android, a leitura de códigos de barras e de QR code usa o **ML Kit**, uma biblioteca do Google
@@ -135,7 +143,8 @@ não avisa nada. O levantamento não depende dela.
   e a verificação de versão.
 
 O aplicativo **não** pede localização, contatos, microfone, fotos nem acesso aos seus arquivos: a
-planilha e as cópias são abertas pela janela de arquivos do sistema, só o arquivo que você escolher.
+planilha e as cópias são abertas pela janela de arquivos do sistema, só o arquivo que você escolher,
+ou quando você abre um arquivo do SLAP com o aplicativo a partir de outro (o WhatsApp, por exemplo).
 
 ## Seus direitos
 

@@ -13,6 +13,7 @@ import '../features/sync/anuncio.dart';
 import '../features/sync/cliente.dart';
 import '../features/sync/descoberta.dart';
 import '../features/sync/servidor.dart';
+import '../features/sync/troca_por_arquivo.dart';
 
 /// Ligação entre as telas e a camada de dados.
 ///
@@ -145,7 +146,13 @@ class ControladorIdentidade extends Notifier<Identidade> {
       banco.gravarConfig(Config.usuarioMatricula, matricula.trim());
     }
 
-    state = Identidade(nome: nome.trim(), matricula: matricula?.trim());
+    // Matrícula em branco é ausência, como no banco: um "" aqui aparecia
+    // como "Nome · " na lista e "Nome ()" no registro até reabrir o app.
+    final semMatricula = matricula == null || matricula.trim().isEmpty;
+    state = Identidade(
+      nome: nome.trim(),
+      matricula: semMatricula ? null : matricula.trim(),
+    );
   }
 }
 
@@ -208,3 +215,8 @@ final conflitosPendentesProvider = Provider.family<int, String>((ref, id) {
   ref.watch(revisaoProvider);
   return ref.watch(conflitosProvider).contarPendentes(id);
 });
+
+/// Arquivos abertos de fora do aplicativo. Trocável nos testes.
+final arquivosRecebidosProvider = Provider<ArquivosRecebidos>(
+  (ref) => ArquivosRecebidos(),
+);

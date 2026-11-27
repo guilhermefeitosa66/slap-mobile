@@ -393,6 +393,12 @@ class _Acoes extends StatelessWidget {
           'Acrescentar itens do SUAP',
           'importar',
         ),
+      (
+        Icons.tune,
+        'Configurações',
+        'Elementos de despesa fora do inventário',
+        'configuracoes',
+      ),
     ];
 
     return CartaoAgrupado(

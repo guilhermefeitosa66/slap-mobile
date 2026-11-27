@@ -259,7 +259,7 @@ void main() {
           isA<CopiaInvalida>().having(
             (e) => e.mensagem,
             'mensagem',
-            contains('não é uma cópia'),
+            contains('não é do SLAP Mobile'),
           ),
         ),
       );

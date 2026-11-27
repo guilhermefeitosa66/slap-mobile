@@ -9,6 +9,7 @@ import 'package:slap_mobile/features/sync/anuncio.dart';
 import 'package:slap_mobile/features/sync/compartilhar_inventario.dart';
 import 'package:slap_mobile/features/sync/protocolo.dart';
 import 'package:slap_mobile/features/sync/servidor.dart';
+import 'package:slap_mobile/features/sync/troca_por_arquivo.dart';
 
 import '../apoio/rede_simulada.dart';
 
@@ -152,6 +153,16 @@ void main() {
       expect(find.textContaining('mesma rede Wi-Fi'), findsOneWidget);
       // O que o link não leva é o que torna seguro mandá-lo por mensagem.
       expect(find.textContaining('não contém a chave'), findsOneWidget);
+    });
+
+    testWidgets('oferece enviar por arquivo, avisando que ele dá acesso', (
+      tester,
+    ) async {
+      await abrirFolha(tester);
+
+      expect(find.text(rotuloEnviarPorArquivo), findsOneWidget);
+      expect(find.textContaining('nunca está na mesma rede'), findsOneWidget);
+      expect(find.textContaining('dá acesso a ele'), findsOneWidget);
     });
 
     testWidgets('enquanto a folha está aberta, o aparelho se anuncia', (

@@ -7,14 +7,18 @@ import '../../app/providers.dart';
 import '../../data/repos/inventarios.dart';
 import 'anuncio.dart';
 import 'protocolo.dart';
+import 'troca_por_arquivo.dart';
 
-/// Os dois jeitos de convidar alguém para um inventário.
+/// Os jeitos de convidar alguém para um inventário.
 enum OpcaoCompartilhar {
   /// QR code na tela, para quem está ao lado ler com a câmera.
   qr,
 
   /// Link pela folha de compartilhamento do sistema, para quem está longe.
   link,
+
+  /// O inventário inteiro num arquivo, para quem nunca está na mesma rede.
+  arquivo,
 }
 
 /// Rótulos das duas opções, os mesmos na folha e nos testes.
@@ -23,8 +27,8 @@ const rotuloLink = 'Enviar um link';
 
 /// A condição que explica quase toda falha de entrada em campo.
 const avisoRedeCompartilhar =
-    'Os dois aparelhos precisam estar na mesma rede Wi-Fi, e este aplicativo '
-    'precisa ficar aberto até o outro entrar.';
+    'Para o QR code e o link, os dois aparelhos precisam estar na mesma rede '
+    'Wi-Fi, e este aplicativo precisa ficar aberto até o outro entrar.';
 
 /// Abre a folha de compartilhamento do inventário.
 ///
@@ -48,6 +52,8 @@ Future<void> compartilharInventario(
       await mostrarQrDoInventario(context, inventario);
     case OpcaoCompartilhar.link:
       await enviarLinkDoInventario(ref, inventario);
+    case OpcaoCompartilhar.arquivo:
+      await enviarInventarioPorArquivo(context, ref, inventario);
   }
 }
 
@@ -161,6 +167,22 @@ class _FolhaCompartilharState extends ConsumerState<_FolhaCompartilhar> {
                 vertical: 6,
               ),
               onTap: () => Navigator.pop(context, OpcaoCompartilhar.link),
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file),
+              title: const Text(rotuloEnviarPorArquivo),
+              // Ao contrário do link, o arquivo leva a chave e não passa pelo
+              // pedido de entrada: o cuidado tem de estar dito aqui.
+              subtitle: const Text(
+                'Para quem nunca está na mesma rede. O arquivo leva o '
+                'inventário e o que já foi levantado, e dá acesso a ele: '
+                'mande só a quem vai participar.',
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 6,
+              ),
+              onTap: () => Navigator.pop(context, OpcaoCompartilhar.arquivo),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),

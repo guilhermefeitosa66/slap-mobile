@@ -171,6 +171,22 @@ const sqlDivergente =
     'OR (conservacao_original IS NOT NULL AND conservacao IS NOT NULL '
     'AND conservacao <> conservacao_original))';
 
+/// Um elemento de despesa do inventário e o que ele representa.
+class ResumoEd {
+  /// Código do ED; vazio para os itens sem elemento de despesa.
+  final String ed;
+  final int itens;
+  final int verificados;
+  final bool foraDoInventario;
+
+  const ResumoEd({
+    required this.ed,
+    required this.itens,
+    required this.verificados,
+    required this.foraDoInventario,
+  });
+}
+
 class RepositorioPatrimonios {
   /// De quantos em quantos itens a importação informa o progresso.
   static const passoProgresso = 250;
@@ -777,6 +793,31 @@ class RepositorioPatrimonios {
       [inventarioId],
     );
     return {for (final l in linhas) l['ed'] as String: l['n'] as int};
+  }
+
+  /// Elementos de despesa já gravados no inventário, com o que cada um tem:
+  /// quantos itens, quantos verificados e se está fora do inventário.
+  ///
+  /// Alimenta as configurações do inventário, onde se tira um ED depois da
+  /// importação. Os verificados contam também nos EDs fora do inventário: é
+  /// o levantamento que volta se o ED for devolvido.
+  List<ResumoEd> resumoPorEd(String inventarioId) {
+    final linhas = _db.select(
+      "SELECT COALESCE(ed, '') AS ed, COUNT(*) AS n, "
+      '  SUM(verificado) AS verificados, MAX(ignorado) AS fora '
+      'FROM patrimonios WHERE inventario_id = ? '
+      "GROUP BY COALESCE(ed, '') ORDER BY n DESC, ed",
+      [inventarioId],
+    );
+    return [
+      for (final l in linhas)
+        ResumoEd(
+          ed: l['ed'] as String,
+          itens: l['n'] as int,
+          verificados: (l['verificados'] as int?) ?? 0,
+          foraDoInventario: (l['fora'] as int?) == 1,
+        ),
+    ];
   }
 
   /// Progresso do inventário.

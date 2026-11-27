@@ -11,6 +11,13 @@ Se o celular for perdido ou formatado no meio de um inventário, o trabalho que 
 - **Restaurar** — *Ajustes → Restaurar de uma cópia*. Antes de aplicar, a tela mostra de quem é a
   cópia, de quando, e quais inventários ela traz (e quais já estão no aparelho).
 
+- **Troca por arquivo** — o mesmo arquivo, com um inventário só, é o que a equipe que nunca está
+  na mesma rede usa para entrar e trocar dados: *Compartilhar → Enviar por arquivo* e, na tela de
+  troca, *Enviar arquivo* e *Receber arquivo* (`lib/features/sync/troca_por_arquivo.dart`). Receber
+  é restaurar; o aplicativo também abre o arquivo vindo de fora ("Abrir com" no WhatsApp), pelo
+  canal `slap/recebidos` do `MainActivity` e do `AppDelegate`. A garantia de convergência está em
+  `test/data/troca_por_arquivo_test.dart`.
+
 Restaurar **não apaga nada**: o que a cópia tem e o aparelho não, entra; o resto fica como está.
 Restaurar a mesma cópia duas vezes não duplica nada. A restauração entra inteira ou não entra —
 é uma transação só.

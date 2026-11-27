@@ -3,7 +3,7 @@
 Este manual é para quem vai conduzir o inventário patrimonial: a comissão, o setor de
 patrimônio e quem estiver com o celular na mão percorrendo as salas. Ele segue a ordem em que
 as coisas acontecem, da planilha exportada do SUAP até os relatórios finais, e vale para a
-versão 1.3.3 do aplicativo.
+versão 1.4.0 do aplicativo.
 
 Cada seção abre com um vídeo curto que mostra o passo a passo, e o texto logo abaixo traz os
 detalhes. A busca, acima do índice, encontra qualquer palavra do manual.
@@ -19,7 +19,8 @@ correção no SUAP e o que não foi encontrado.
 
 O SLAP Mobile faz esse trabalho sem internet e sem servidor. Cada celular carrega o inventário
 inteiro e funciona sozinho. Quando dois aparelhos se encontram na mesma rede Wi-Fi, eles trocam
-o que cada um levantou.
+o que cada um levantou; quando a equipe nunca está junta, a troca é por arquivo, mandado pelo
+WhatsApp ou por e-mail.
 
 **O que você precisa ter:**
 
@@ -29,13 +30,16 @@ o que cada um levantou.
   arquivo APK do site) ou iPhone com iOS 15 ou mais novo (pela App Store). Os dois sistemas
   trocam dados entre si normalmente. A instalação pelo APK está em
   [instalacao.md](instalacao.md), inclusive como atualizar sem perder o que já foi levantado.
-- **Uma rede Wi-Fi em comum**, se mais de uma pessoa vai levantar. Só é necessária na hora de
-  entrar no inventário e na hora de trocar dados; o levantamento em si não usa rede.
+- **Uma rede Wi-Fi em comum ou um jeito de mandar arquivos**, se mais de uma pessoa vai levantar.
+  A rede só é usada na hora de entrar no inventário e de trocar dados, e o arquivo substitui a
+  rede quando as pessoas não se encontram. O levantamento em si não usa rede.
 - **Um leitor de código de barras** é opcional. O aplicativo lê pela câmera do celular e também
   aceita o número digitado.
 
 **Quem participa.** Uma pessoa importa a planilha e cria o inventário. As outras entram por um
-QR code ou por um link, e a partir daí cada aparelho tem a cópia inteira. Não existe aparelho
+QR code, por um link ou por um arquivo, e a partir daí cada aparelho tem a cópia inteira. Só uma
+pessoa importa: a mesma planilha importada em dois aparelhos vira dois inventários diferentes, que
+não trocam dados entre si. Não existe aparelho
 principal: qualquer um pode ficar sem bateria, sair da rede ou ser trocado sem interromper os
 demais, desde que o que ele levantou já tenha sido trocado com alguém.
 
@@ -60,15 +64,16 @@ que já foi registrado continua com o nome de quem registrou, que é o correto.
 <!-- video: importar | Criar o inventário e importar a planilha -->
 
 A lista de inventários é a primeira tela. Na primeira abertura, sem nenhum inventário, ela
-oferece dois caminhos no centro da tela; depois do primeiro, os mesmos dois ficam no botão
+oferece três caminhos no centro da tela; depois do primeiro, os mesmos três ficam no botão
 **Novo**, no canto inferior:
 
 ![Lista de inventários do aparelho](imagens/inventarios.png)
 
-- **Importar de arquivo**, para quem vai começar o inventário: cria o inventário com nome e ano
-  e importa a planilha do SUAP.
-- **Ler o QR code de outro aparelho**, para quem vai participar de um inventário que outra
-  pessoa já criou (veja [Montar a equipe](#montar-a-equipe-compartilhar-e-entrar)).
+- **Importar planilha do SUAP**, para quem vai começar o inventário: cria o inventário com nome
+  e ano e importa a planilha.
+- **Ler o QR code de outro aparelho** e **Receber arquivo**, para quem vai participar de um
+  inventário que outra pessoa já criou (veja
+  [Montar a equipe](#montar-a-equipe-compartilhar-e-entrar)).
 
 Um aparelho pode ter vários inventários ao mesmo tempo, cada um independente. O **nome** aparece
 em toda parte e vai no cabeçalho dos relatórios: use o que a comissão vai reconhecer, como
@@ -117,10 +122,22 @@ coluna que entrou errada ou porque o SUAP recebeu bens novos, **acrescenta e nun
 itens que já existem são preservados com todo o levantamento feito neles; só os que faltavam
 entram. É seguro reimportar no meio do inventário, com dias de trabalho já feitos.
 
-> **Na reimportação, desmarque de novo os elementos de despesa.** A lista do passo 3 volta com
-> tudo marcado, e tocar direto em **Importar** traz de volta o que tinha ficado de fora (a
-> biblioteca, por exemplo). O número "N entrarão no inventário" conta todos os itens da planilha,
-> inclusive os que já existiam e só são preservados.
+Na reimportação, a lista do passo 3 começa como o inventário está: o que tinha ficado de fora
+(a biblioteca, por exemplo) vem desmarcado e continua fora. Marcar um deles o traz de volta. O
+número "N entrarão no inventário" conta todos os itens da planilha marcados, inclusive os que já
+existiam e só são preservados.
+
+### Tirar um elemento de despesa depois
+
+Esqueceu de desmarcar o material bibliográfico e só percebeu com o levantamento andando? No
+painel, **Configurações** lista os elementos de despesa do inventário, cada um com quantos itens
+tem e quantos já foram verificados. Desligue o que não entra: o aplicativo pede confirmação,
+dizendo quantos itens saem, e mostra **Desfazer** logo depois.
+
+**Nada é apagado.** Os itens saem das contagens, dos pendentes e dos relatórios, mas continuam no
+aparelho com o que foi levantado neles. Ligar o elemento de novo os traz de volta como estavam. A
+mudança vale para todos os aparelhos na troca de dados seguinte. Com o inventário encerrado, a
+tela só mostra; reabra para alterar.
 
 **No menu do painel** (os três pontos) ficam ainda **Editar nome e ano** e **Duplicar para outro
 ano**, que cria um inventário novo com os mesmos patrimônios e os mesmos elementos de despesa
@@ -130,23 +147,34 @@ excluídos, com o levantamento começando do zero. O inventário original contin
 
 <!-- video: compartilhar | Montar a equipe: compartilhar e entrar -->
 
-Quem criou o inventário compartilha; os demais entram. Os dois aparelhos precisam estar na mesma
-rede Wi-Fi, e o aplicativo de quem compartilha precisa ficar aberto até o outro entrar.
+Quem criou o inventário compartilha; os demais entram. Pelo QR code ou pelo link, os dois
+aparelhos precisam estar na mesma rede Wi-Fi, e o aplicativo de quem compartilha precisa ficar
+aberto até o outro entrar. Pelo arquivo, não precisa de rede nenhuma.
 
 ![Compartilhar o inventário por QR code ou link](imagens/compartilhar.png)
 
-No painel do inventário, toque no ícone de compartilhar. Há duas opções:
+No painel do inventário, toque no ícone de compartilhar. Há três opções:
 
 - **Mostrar o QR code**, para quem está ao seu lado: a outra pessoa aponta a câmera.
 - **Enviar um link**, para quem está longe, pela folha de compartilhamento do celular (mensagem,
   e-mail, grupo). O link **não** contém a chave do inventário. No Android, tocar no link abre o
   aplicativo; no iPhone, ele abre a página do site, e o caminho é ler o QR code.
+- **Enviar por arquivo**, para quem nunca está na mesma rede que você. O arquivo leva o
+  inventário inteiro, com o que já foi levantado, e vai pela folha de compartilhamento: WhatsApp,
+  e-mail, Drive. O nome do arquivo diz de quem é e de quando.
 
-> O QR code contém a chave de acesso ao inventário. Mostre apenas a quem vai participar.
+> O QR code e o arquivo contêm a chave de acesso ao inventário. Mostre o código e mande o arquivo
+> apenas a quem vai participar: quem tiver o arquivo entra sem passar pelo pedido de entrada.
 
 **No aparelho que vai entrar:** **Novo → Ler o QR code de outro aparelho**, e aponte para o
 código na tela do outro celular. Num aparelho que ainda não tem inventário nenhum, a lista vazia
-já mostra **Ler o QR code de outro aparelho**, sem passar pelo **Novo**.
+já mostra **Ler o QR code de outro aparelho** e **Receber arquivo**, sem passar pelo **Novo**.
+
+**Recebendo o arquivo:** toque no arquivo na conversa do WhatsApp (ou no e-mail) e escolha abrir
+com o **SLAP Inventário**; ou salve o arquivo e use **Novo → Receber arquivo**. A tela mostra de quem é o
+arquivo, de quando, e o inventário que ele traz, marcado como **novo neste aparelho**. Toque em
+**Receber** e, depois, em **Abrir o inventário**. Não há pedido de entrada: quem tem o arquivo
+entra.
 
 **O pedido de entrada.** Ler o código não basta para entrar. O aparelho novo procura na rede quem
 tem aquele inventário e **pede entrada**; no aparelho de quem compartilhou aparece o aviso
@@ -323,6 +351,29 @@ com ele ("Recebidas 12, enviadas 8"); ao reabrir a tela, mostra o horário da ú
 hora do café, ao fim do dia. Enquanto o que você levantou está só no seu aparelho, ele se perde
 se o celular se perder. Depois da troca, está em dois lugares.
 
+### Sem rede em comum: trocar por arquivo
+
+Quando a equipe nunca está no campus ao mesmo tempo, a troca é por arquivo. Na tela de troca de
+dados, o cartão **Sem rede em comum?** tem dois botões:
+
+- **Enviar arquivo** gera um arquivo com tudo o que este aparelho sabe do inventário (o que você
+  levantou e o que já recebeu dos colegas) e abre a folha de compartilhamento: WhatsApp, e-mail,
+  Drive.
+- **Receber arquivo** abre o arquivo que um colega mandou. Também dá para tocar no arquivo na
+  conversa e abrir com o **SLAP Inventário**.
+
+Receber mostra antes de quem é o arquivo e de quando, com o inventário marcado como **já está
+neste aparelho: entra só o que falta**. Depois de **Receber**, a tela diz quantas alterações
+chegaram e se ficou algum conflito para conferir. **Nada é apagado**: o arquivo funciona como uma
+troca pela rede, num sentido só, e o mesmo item mudado nos dois aparelhos vira
+[conflito](#conflitos), como na rede.
+
+Um jeito simples de organizar: cada pessoa manda o seu arquivo para quem preside a comissão ao fim
+do dia; ela recebe todos, um de cada vez, e manda o arquivo dela, já com tudo junto, de volta para
+o grupo. Cada arquivo leva tudo o que aquele aparelho sabia, então a ordem em que chegam não
+importa, e receber o mesmo arquivo duas vezes não duplica nada. Arquivo e rede se misturam: quem
+se encontrar um dia troca pela rede, e o resto continua por arquivo.
+
 ### Conflitos
 
 Duas pessoas podem alterar o mesmo item sem que nenhuma soubesse da outra, cada uma no seu
@@ -412,9 +463,10 @@ permanece, e o que vier da cópia é acrescentado. Restaurar uma cópia antiga n
 feito depois dela.
 
 Vale exportar antes de reinstalar o aplicativo, quando um aparelho vai ser trocado ou devolvido e
-ao fim de um dia em que não foi possível trocar dados com ninguém. A cópia **não** substitui a
-troca entre aparelhos: ela protege contra a perda do celular, mas não junta o trabalho da
-comissão. Detalhes e o formato do arquivo estão em
+ao fim de um dia em que não foi possível trocar dados com ninguém. O arquivo é o mesmo da
+[troca por arquivo](#sem-rede-em-comum-trocar-por-arquivo): para juntar o trabalho da comissão,
+use **Enviar arquivo** e **Receber arquivo** na tela de troca de dados, que fazem isso por
+inventário. Detalhes e o formato do arquivo estão em
 [copia-de-seguranca.md](copia-de-seguranca.md).
 
 ### Versão nova do aplicativo
@@ -442,6 +494,8 @@ autorizar a instalação a partir do aplicativo que abriu o arquivo, normalmente
 Confira, nesta ordem: os dois estão no mesmo Wi-Fi; o aplicativo está aberto na tela de
 compartilhar ou de troca de dados; e a rede não isola os aparelhos entre si. O terceiro caso é
 comum em rede institucional: use o ponto de acesso de um dos celulares e conecte os demais a ele.
+Se não houver jeito de ficarem na mesma rede, entre e troque
+[por arquivo](#sem-rede-em-comum-trocar-por-arquivo).
 
 ### O código lido não é encontrado
 

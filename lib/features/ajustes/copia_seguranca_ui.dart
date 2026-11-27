@@ -72,7 +72,7 @@ Future<void> exportarCopia(
   Inventario? inventario,
 }) async {
   final mensageiro = ScaffoldMessenger.of(context);
-  final fechar = _mostrarAndamento(context, 'Preparando a cópia…');
+  final fechar = mostrarAndamento(context, 'Preparando a cópia…');
 
   final Uint8List bytes;
   try {
@@ -154,7 +154,7 @@ Future<void> restaurarCopia(BuildContext context, WidgetRef ref) async {
     );
     if (confirmou != true || !context.mounted) return;
 
-    final fechar = _mostrarAndamento(context, 'Restaurando…');
+    final fechar = mostrarAndamento(context, 'Restaurando…');
     try {
       final resultado = await aplicarCopia(banco, temporario.path);
       fechar();
@@ -245,7 +245,7 @@ class _ConfirmarRestauracao extends StatelessWidget {
 
 /// Diálogo de andamento sem botão. Devolve a função que o fecha, segura
 /// para chamar mais de uma vez.
-VoidCallback _mostrarAndamento(BuildContext context, String texto) {
+VoidCallback mostrarAndamento(BuildContext context, String texto) {
   final navegador = Navigator.of(context, rootNavigator: true);
   var aberto = true;
   showDialog<void>(

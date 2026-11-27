@@ -1129,10 +1129,12 @@ class RepositorioOperacoes {
     ]);
     if (lista.isEmpty) return;
 
+    // Sem ED é a chave vazia, como na prévia da importação; no banco o campo
+    // fica NULL, e `ed IN ('')` não o pegaria.
     final marcadores = List.filled(lista.length, '?').join(',');
     _db.execute(
       'UPDATE patrimonios SET ignorado = 1 '
-      'WHERE inventario_id = ? AND ed IN ($marcadores)',
+      "WHERE inventario_id = ? AND COALESCE(ed, '') IN ($marcadores)",
       [inventarioId, ...lista],
     );
   }

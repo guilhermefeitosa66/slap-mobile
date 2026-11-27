@@ -320,7 +320,9 @@ class CopiaDeSeguranca {
   /// Abre a cópia só para leitura, conferindo que é uma cópia deste
   /// aplicativo e de uma versão que ele entende.
   static Database _abrir(String arquivo) {
-    const naoE = 'Este arquivo não é uma cópia de segurança do SLAP.';
+    const naoE =
+        'Este arquivo não é do SLAP Mobile: nem um inventário enviado por '
+        'arquivo, nem uma cópia de segurança.';
 
     final Database copia;
     try {

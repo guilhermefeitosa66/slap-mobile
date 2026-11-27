@@ -10,7 +10,71 @@ import UIKit
     GeneratedPluginRegistrant.register(with: self)
     registrarCanalDaTela()
     registrarCanalDeArquivos()
+    registrarCanalDeRecebidos()
+    if let url = launchOptions?[.url] as? URL, url.isFileURL {
+      arquivoPendente = copiarRecebido(url)
+    }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// Arquivo de inventário aberto de fora ("Abrir com SLAP" no WhatsApp, no
+  /// Mail, no Arquivos). Copiado para a pasta temporária e entregue ao Dart:
+  /// pelo método `pendente` quando abriu o aplicativo, pelo `recebido` quando
+  /// o aplicativo já estava aberto.
+  private var arquivoPendente: String?
+  private var canalRecebidos: FlutterMethodChannel?
+
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    guard url.isFileURL else {
+      return super.application(app, open: url, options: options)
+    }
+    guard let caminho = copiarRecebido(url) else { return false }
+    if let canal = canalRecebidos {
+      canal.invokeMethod("recebido", arguments: caminho)
+    } else {
+      arquivoPendente = caminho
+    }
+    return true
+  }
+
+  private func registrarCanalDeRecebidos() {
+    guard let registrar = self.registrar(forPlugin: "SlapRecebidos") else { return }
+    let canal = FlutterMethodChannel(
+      name: "slap/recebidos",
+      binaryMessenger: registrar.messenger()
+    )
+    canal.setMethodCallHandler { [weak self] chamada, resultado in
+      switch chamada.method {
+      case "pendente":
+        resultado(self?.arquivoPendente)
+        self?.arquivoPendente = nil
+      default:
+        resultado(FlutterMethodNotImplemented)
+      }
+    }
+    canalRecebidos = canal
+  }
+
+  /// Copia o arquivo para a pasta temporária e apaga o original da caixa de
+  /// entrada do aplicativo, para onde o iOS o copiou.
+  private func copiarRecebido(_ url: URL) -> String? {
+    let acesso = url.startAccessingSecurityScopedResource()
+    defer { if acesso { url.stopAccessingSecurityScopedResource() } }
+    let destino = FileManager.default.temporaryDirectory
+      .appendingPathComponent("recebido-\(UUID().uuidString).db")
+    do {
+      try FileManager.default.copyItem(at: url, to: destino)
+      if url.path.contains("/Inbox/") {
+        try? FileManager.default.removeItem(at: url)
+      }
+      return destino.path
+    } catch {
+      return nil
+    }
   }
 
   /// Tira arquivos do backup do iCloud (canal `slap/arquivos`).

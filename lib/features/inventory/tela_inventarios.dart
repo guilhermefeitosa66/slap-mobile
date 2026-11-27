@@ -7,6 +7,7 @@ import '../../app/providers.dart';
 import '../../app/tema.dart';
 import '../../core/formato.dart';
 import '../sync/entrar_inventario.dart';
+import '../sync/troca_por_arquivo.dart';
 import 'acoes_inventario.dart';
 import 'aviso_atualizacao.dart';
 import 'estado_atualizacao.dart';
@@ -66,6 +67,7 @@ class TelaInventarios extends ConsumerWidget {
               child: inventarios.isEmpty
                   ? _Vazio(
                       aoLerQr: () => entrarEmInventario(context, ref),
+                      aoReceber: () => escolherArquivoParaReceber(context),
                       aoImportar: () => _criar(context, ref),
                     )
                   : ListView.builder(
@@ -123,6 +125,8 @@ class TelaInventarios extends ConsumerWidget {
     final origem = await showModalBottomSheet<OrigemInventario>(
       context: context,
       useSafeArea: true,
+      // Três opções com explicação não cabem na meia tela padrão.
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => const _FolhaNovo(),
     );
@@ -131,6 +135,8 @@ class TelaInventarios extends ConsumerWidget {
     switch (origem) {
       case OrigemInventario.lerQr:
         await entrarEmInventario(context, ref);
+      case OrigemInventario.arquivo:
+        await escolherArquivoParaReceber(context);
       case OrigemInventario.importar:
         await _criar(context, ref);
     }
@@ -254,13 +260,16 @@ enum OrigemInventario {
   /// Cópia de um inventário criado em outro aparelho, pela rede local.
   lerQr,
 
+  /// Arquivo que alguém mandou, sem rede em comum.
+  arquivo,
+
   /// Inventário novo, com a planilha do SUAP.
   importar,
 }
 
 /// Rótulos das duas origens, os mesmos na folha e no estado vazio.
 const rotuloLerQr = 'Ler o QR code de outro aparelho';
-const rotuloImportar = 'Importar de arquivo';
+const rotuloImportar = 'Importar planilha do SUAP';
 
 /// Folha aberta por "Novo". Devolve a origem escolhida, ou `null`.
 class _FolhaNovo extends StatelessWidget {
@@ -272,44 +281,59 @@ class _FolhaNovo extends StatelessWidget {
 
     return SafeArea(
       top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
-            child: Text('Novo inventário', style: tema.textTheme.titleLarge),
-          ),
-          ListTile(
-            leading: const Icon(Icons.qr_code_scanner),
-            title: const Text(rotuloLerQr),
-            // A condição da rede vai aqui, antes de abrir a câmera: é a
-            // causa mais comum de "não encontrou ninguém".
-            subtitle: const Text(
-              'Recebe uma cópia pela rede local. Os dois aparelhos precisam '
-              'estar na mesma rede Wi-Fi.',
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+              child: Text('Novo inventário', style: tema.textTheme.titleLarge),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 6,
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text(rotuloLerQr),
+              // A condição da rede vai aqui, antes de abrir a câmera: é a
+              // causa mais comum de "não encontrou ninguém".
+              subtitle: const Text(
+                'Recebe uma cópia pela rede local. Os dois aparelhos precisam '
+                'estar na mesma rede Wi-Fi.',
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 6,
+              ),
+              onTap: () => Navigator.pop(context, OrigemInventario.lerQr),
             ),
-            onTap: () => Navigator.pop(context, OrigemInventario.lerQr),
-          ),
-          ListTile(
-            leading: const Icon(Icons.upload_file_outlined),
-            title: const Text(rotuloImportar),
-            subtitle: const Text(
-              'Cria o inventário com nome e ano e importa a planilha do '
-              'SUAP ou do inventario.ifpi.edu.br.',
+            ListTile(
+              leading: const Icon(Icons.file_open_outlined),
+              title: const Text(rotuloReceberArquivo),
+              subtitle: const Text(
+                'Abre o arquivo de um inventário que alguém mandou por '
+                'WhatsApp ou e-mail. Não precisa de rede.',
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 6,
+              ),
+              onTap: () => Navigator.pop(context, OrigemInventario.arquivo),
             ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 6,
+            ListTile(
+              leading: const Icon(Icons.upload_file_outlined),
+              title: const Text(rotuloImportar),
+              subtitle: const Text(
+                'Cria o inventário com nome e ano e importa a planilha do '
+                'SUAP ou do inventario.ifpi.edu.br.',
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 6,
+              ),
+              onTap: () => Navigator.pop(context, OrigemInventario.importar),
             ),
-            onTap: () => Navigator.pop(context, OrigemInventario.importar),
-          ),
-          const SizedBox(height: 12),
-        ],
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
@@ -317,9 +341,14 @@ class _FolhaNovo extends StatelessWidget {
 
 class _Vazio extends StatelessWidget {
   final VoidCallback aoLerQr;
+  final VoidCallback aoReceber;
   final VoidCallback aoImportar;
 
-  const _Vazio({required this.aoLerQr, required this.aoImportar});
+  const _Vazio({
+    required this.aoLerQr,
+    required this.aoReceber,
+    required this.aoImportar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -345,8 +374,8 @@ class _Vazio extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Receba uma cópia de quem já criou o inventário, ou crie um e '
-              'importe a planilha do SUAP.',
+              'Receba o inventário de quem já o criou, pelo QR code ou por '
+              'arquivo, ou crie um e importe a planilha do SUAP.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -364,6 +393,12 @@ class _Vazio extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: aoReceber,
+              icon: const Icon(Icons.file_open_outlined),
+              label: const Text(rotuloReceberArquivo),
+            ),
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: aoImportar,
               icon: const Icon(Icons.upload_file_outlined),

@@ -127,6 +127,34 @@ class RepositorioInventarios {
     ops.reaplicarEdsExcluidos(inventarioId);
   }
 
+  /// Tira [excluir] do inventário e devolve [incluir], a partir da lista em
+  /// vigor. Devolve a lista resultante.
+  ///
+  /// Remover um ED depois de iniciada a coleta **não apaga nada**: os itens
+  /// ficam fora das contagens, dos pendentes e dos relatórios, mas continuam
+  /// no aparelho com o levantamento feito neles. Devolver o ED os traz de
+  /// volta como estavam. É a mesma operação que a importação grava, por isso
+  /// vale em todos os aparelhos na próxima troca de dados, inclusive nos que
+  /// ainda estão numa versão anterior do aplicativo.
+  ///
+  /// A lista vai inteira no log, e o campo converge por last-writer-wins: só
+  /// se grava quando ela de fato muda, para não sobrepor sem motivo uma
+  /// alteração feita em outro aparelho.
+  List<String> alterarEdsExcluidos(
+    String inventarioId, {
+    Iterable<String> excluir = const [],
+    Iterable<String> incluir = const [],
+  }) {
+    final atual = porId(inventarioId)?.edsExcluidos ?? const <String>[];
+    final nova = {...atual, ...excluir}..removeAll(incluir);
+    final ordenada = nova.toList()..sort();
+
+    if (ordenada.length != atual.length || !atual.toSet().containsAll(nova)) {
+      definirEdsExcluidos(inventarioId, ordenada);
+    }
+    return ordenada;
+  }
+
   void renomear(String inventarioId, String nome) {
     _registrar(inventarioId, {'nome': nome.trim()});
   }
