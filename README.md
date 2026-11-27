@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://play.google.com/store/apps/details?id=io.github.guilhermefeitosa66.slap_mobile"><img src="docs/marca/lojas/google-play-pt.png" alt="Disponível no Google Play" height="52"></a>
   &nbsp;
-  <a href="https://apps.apple.com/app/id6828446378"><img src="docs/marca/lojas/app-store-pt.svg" alt="Baixar na App Store" height="52"></a>
+  <a href="https://apps.apple.com/br/app/id6828446378"><img src="docs/marca/lojas/app-store-pt.svg" alt="Baixar na App Store" height="52"></a>
 </p>
 
 <p align="center">
@@ -48,7 +48,7 @@ O SLAP Mobile está na Google Play e na App Store, para Android 7.0 ou mais novo
 novo:
 
 - **Google Play:** [SLAP Mobile na Google Play](https://play.google.com/store/apps/details?id=io.github.guilhermefeitosa66.slap_mobile).
-- **App Store:** [SLAP Mobile na App Store](https://apps.apple.com/app/id6828446378).
+- **App Store:** [SLAP Mobile na App Store](https://apps.apple.com/br/app/id6828446378).
 
 No Android, também dá para instalar sem loja: baixe o APK da
 [versão mais recente](https://github.com/guilhermefeitosa66/slap-mobile/releases/latest)
@@ -67,8 +67,8 @@ não foi sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md)
 7. Exporte os três grupos em XLSX ou CSV.
 
 A versão ilustrada está no [site do projeto](https://slap.libre-apps.org/#como-usar),
-e o passo a passo completo — cada tela, e o que fazer quando algo dá errado — no
-[manual](https://slap.libre-apps.org/manual/)
+e o passo a passo completo — cada tela, um vídeo curto por seção, e o que fazer quando algo dá
+errado — no [manual](https://slap.libre-apps.org/manual/)
 ([docs/manual.md](docs/manual.md)).
 
 ## Desenvolvimento
