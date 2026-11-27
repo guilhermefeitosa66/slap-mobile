@@ -3,7 +3,7 @@
 Este manual é para quem vai conduzir o inventário patrimonial: a comissão, o setor de
 patrimônio e quem estiver com o celular na mão percorrendo as salas. Ele segue a ordem em que
 as coisas acontecem, da planilha exportada do SUAP até os relatórios finais, e vale para a
-versão 1.3.3 do aplicativo.
+versão 1.4.0 do aplicativo.
 
 Cada seção abre com um vídeo curto que mostra o passo a passo, e o texto logo abaixo traz os
 detalhes. A busca, acima do índice, encontra qualquer palavra do manual.
@@ -171,7 +171,7 @@ código na tela do outro celular. Num aparelho que ainda não tem inventário ne
 já mostra **Ler o QR code de outro aparelho** e **Receber arquivo**, sem passar pelo **Novo**.
 
 **Recebendo o arquivo:** toque no arquivo na conversa do WhatsApp (ou no e-mail) e escolha abrir
-com o **SLAP**; ou salve o arquivo e use **Novo → Receber arquivo**. A tela mostra de quem é o
+com o **SLAP Inventário**; ou salve o arquivo e use **Novo → Receber arquivo**. A tela mostra de quem é o
 arquivo, de quando, e o inventário que ele traz, marcado como **novo neste aparelho**. Toque em
 **Receber** e, depois, em **Abrir o inventário**. Não há pedido de entrada: quem tem o arquivo
 entra.
@@ -360,7 +360,7 @@ dados, o cartão **Sem rede em comum?** tem dois botões:
   levantou e o que já recebeu dos colegas) e abre a folha de compartilhamento: WhatsApp, e-mail,
   Drive.
 - **Receber arquivo** abre o arquivo que um colega mandou. Também dá para tocar no arquivo na
-  conversa e abrir com o **SLAP**.
+  conversa e abrir com o **SLAP Inventário**.
 
 Receber mostra antes de quem é o arquivo e de quando, com o inventário marcado como **já está
 neste aparelho: entra só o que falta**. Depois de **Receber**, a tela diz quantas alterações
