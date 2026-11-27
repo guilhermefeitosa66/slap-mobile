@@ -15,6 +15,7 @@ import 'compartilhar_inventario.dart';
 import 'descoberta.dart';
 import 'resumo_troca.dart';
 import 'servidor.dart';
+import 'troca_por_arquivo.dart';
 
 /// Sincronização com os outros aparelhos do inventário.
 class TelaSincronizacao extends ConsumerStatefulWidget {
@@ -172,7 +173,7 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
         final tempo = descreverTempo(cronometro.elapsed);
         _resultados[par.dispositivoId] = resultado.houveTroca
             ? 'Recebidas ${resultado.recebidas}, enviadas ${resultado.enviadas}'
-                  '${resultado.conflitos > 0 ? ' · ${resultado.conflitos} conflitos' : ''}'
+                  '${resultado.conflitos > 0 ? ' · ${resultado.conflitos} ${resultado.conflitos == 1 ? 'conflito' : 'conflitos'}' : ''}'
                   ' · $tempo'
             : 'Já estava tudo sincronizado · $tempo';
       });
@@ -424,6 +425,8 @@ class _TelaSincronizacaoState extends ConsumerState<TelaSincronizacao> {
                   diferenca: relogio.diferenca,
                 ),
             ],
+          const SizedBox(height: 16),
+          if (inventario != null) CartaoTrocaPorArquivo(inventario: inventario),
         ],
       ),
       floatingActionButton: _pares.isEmpty

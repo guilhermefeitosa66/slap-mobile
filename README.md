@@ -4,7 +4,7 @@
 
 <p align="center">
   Inventário patrimonial sem internet e sem servidor: cada celular carrega o inventário
-  inteiro, funciona sozinho e sincroniza com os outros pela rede Wi-Fi local.
+  inteiro, funciona sozinho e troca dados com os outros pela rede Wi-Fi local ou por arquivo.
 </p>
 
 <p align="center">
@@ -28,7 +28,8 @@
 Substitui o SLAP, o sistema web de inventário do Instituto Federal do Piauí, que sem rede não
 funciona. Aqui o celular é o inventário: importa a planilha do SUAP, lê os códigos de barras com
 retorno sonoro para cada resultado e separa os patrimônios em três grupos, prontos para o SUAP.
-Os aparelhos da mesma rede trocam o que cada um levantou, direto entre eles.
+Os aparelhos da mesma rede trocam o que cada um levantou, direto entre eles; a equipe que nunca
+se encontra troca por arquivo, pelo WhatsApp ou e-mail.
 
 ## Capturas
 
@@ -59,11 +60,11 @@ não foi sincronizado. Passo a passo em [docs/instalacao.md](docs/instalacao.md)
 ## Como usar
 
 1. Informe seu nome e matrícula. Ficam no aparelho e acompanham cada verificação.
-2. Toque em **Novo**, importe a planilha exportada do SUAP e confira as colunas.
-3. Chame os colegas por **Compartilhar**: QR code ou link. Eles entram por **Novo → Ler o QR code**, na mesma rede Wi-Fi.
+2. Toque em **Novo → Importar planilha do SUAP** e confira as colunas.
+3. Chame os colegas por **Compartilhar**: QR code ou link, na mesma rede Wi-Fi, ou **Enviar por arquivo**, sem rede nenhuma. Eles entram por **Novo → Ler o QR code** ou **Novo → Receber arquivo**.
 4. Diga em que sala está e quem é o responsável; a configuração vale para as próximas leituras.
 5. Leia os códigos pela câmera, por um leitor externo ou digitando o tombo. Verde, laranja e vermelho têm som e vibração próprios.
-6. Troque dados quando quiser: a troca é nos dois sentidos, e nada é apagado. Conflitos aparecem para alguém decidir.
+6. Troque dados quando quiser, pela rede ou por arquivo: nada é apagado. Conflitos aparecem para alguém decidir.
 7. Exporte os três grupos em XLSX ou CSV.
 
 A versão ilustrada está no [site do projeto](https://slap.libre-apps.org/#como-usar),

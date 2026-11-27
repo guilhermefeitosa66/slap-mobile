@@ -104,6 +104,31 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="slapmobile" android:host="entrar"/>
             </intent-filter>
+
+            <!-- Arquivo de inventário (.slapcopia) mandado por outra pessoa,
+                 para a equipe que nunca está na mesma rede. O WhatsApp e o
+                 e-mail entregam um content:// sem extensão e com o tipo que
+                 conhecem, quase sempre application/octet-stream: por isso o
+                 filtro é pelo tipo, e o aplicativo confere o conteúdo antes de
+                 aceitar. O MainActivity copia o arquivo e o entrega ao Dart. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:mimeType="application/octet-stream"/>
+                <data android:mimeType="application/x-slapcopia"/>
+                <data android:mimeType="application/vnd.sqlite3"/>
+                <data android:mimeType="application/x-sqlite3"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/octet-stream"/>
+                <data android:mimeType="application/x-slapcopia"/>
+                <data android:mimeType="application/vnd.sqlite3"/>
+                <data android:mimeType="application/x-sqlite3"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

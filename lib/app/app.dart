@@ -18,6 +18,7 @@ import '../features/sync/ouvinte_pedidos.dart';
 import '../features/sync/protocolo.dart';
 import '../features/sync/tela_conflitos.dart';
 import '../features/sync/tela_sincronizacao.dart';
+import '../features/sync/troca_por_arquivo.dart';
 import '../data/banco.dart';
 import '../data/repos/inventarios.dart';
 import '../data/schema.dart';
@@ -37,6 +38,7 @@ class AplicativoSlap extends ConsumerStatefulWidget {
 
 class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
   late final GoRouter _rotas;
+  StreamSubscription<String>? _arquivos;
 
   @override
   void initState() {
@@ -130,6 +132,13 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
           path: rotaEntrar,
           builder: (_, estado) => TelaEntrarPorLink(endereco: estado.uri),
         ),
+        // Arquivo de inventário mandado por outra pessoa (WhatsApp, e-mail),
+        // aberto de fora do aplicativo ou escolhido no seletor.
+        GoRoute(
+          path: rotaReceber,
+          builder: (_, estado) =>
+              TelaReceberArquivo(caminho: estado.extra as String?),
+        ),
         GoRoute(path: '/ajustes', builder: (_, _) => const TelaAjustes()),
         GoRoute(
           path: '/identidade',
@@ -139,6 +148,29 @@ class _AplicativoSlapState extends ConsumerState<AplicativoSlap> {
         ),
       ],
     );
+    _ouvirArquivos();
+  }
+
+  /// Ouve os arquivos abertos de fora ("Abrir com" o SLAP) e leva cada um
+  /// à tela de recebimento. Chamado no fim do `initState`.
+  void _ouvirArquivos() {
+    final recebidos = ref.read(arquivosRecebidosProvider);
+    _arquivos = recebidos.chegadas.listen(
+      (caminho) => _rotas.push(rotaReceber, extra: caminho),
+    );
+    unawaited(
+      recebidos.pendente().then((caminho) {
+        if (caminho != null && mounted) {
+          _rotas.push(rotaReceber, extra: caminho);
+        }
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    _arquivos?.cancel();
+    super.dispose();
   }
 
   static Classificacao? _classificacaoDe(String? nome) {

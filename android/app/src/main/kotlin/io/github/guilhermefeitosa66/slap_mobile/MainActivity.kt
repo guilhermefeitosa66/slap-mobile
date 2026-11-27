@@ -1,8 +1,13 @@
 package io.github.guilhermefeitosa66.slap_mobile
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
+import android.os.Bundle
 import android.view.WindowManager
+import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,8 +22,52 @@ class MainActivity : FlutterActivity() {
      */
     private var travaMulticast: WifiManager.MulticastLock? = null
 
+    /**
+     * Arquivo de inventário aberto de fora ("Abrir com" no WhatsApp, no
+     * gerenciador de arquivos). Copiado para a pasta temporária e entregue ao
+     * Dart: pelo método `pendente` quando abriu o aplicativo, pelo `recebido`
+     * quando o aplicativo já estava aberto.
+     */
+    private var arquivoPendente: String? = null
+    private var canalRecebidos: MethodChannel? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        // Antes do super: o Flutter lê o `intent.data` como rota inicial, e
+        // um content:// do WhatsApp viraria uma rota que não existe.
+        if (savedInstanceState == null) arquivoPendente = receberArquivo(intent)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        val caminho = receberArquivo(intent)
+        if (caminho == null) {
+            super.onNewIntent(intent)
+            return
+        }
+        setIntent(intent)
+        val canal = canalRecebidos
+        if (canal == null) arquivoPendente = caminho
+        else canal.invokeMethod("recebido", caminho)
+    }
+
+    override fun getInitialRoute(): String? =
+        if (ehArquivo(intent)) "/" else super.getInitialRoute()
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        canalRecebidos = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CANAL_RECEBIDOS)
+            .also { canal ->
+                canal.setMethodCallHandler { chamada, resultado ->
+                    when (chamada.method) {
+                        "pendente" -> {
+                            resultado.success(arquivoPendente)
+                            arquivoPendente = null
+                        }
+                        else -> resultado.notImplemented()
+                    }
+                }
+            }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CANAL_REDE)
             .setMethodCallHandler { chamada, resultado ->
@@ -89,6 +138,40 @@ class MainActivity : FlutterActivity() {
         travaMulticast = null
     }
 
+    /** O arquivo que veio no intent, ou `null` se o intent não traz arquivo. */
+    private fun uriDoArquivo(intent: Intent?): Uri? {
+        intent ?: return null
+        val uri: Uri? = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND ->
+                if (Build.VERSION.SDK_INT >= 33) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+                }
+            else -> null
+        }
+        // Os links de convite (https, slapmobile) seguem pelo caminho do Flutter.
+        return uri?.takeIf { it.scheme == "content" || it.scheme == "file" }
+    }
+
+    private fun ehArquivo(intent: Intent?) = uriDoArquivo(intent) != null
+
+    /** Copia o arquivo do intent para a pasta temporária e devolve o caminho. */
+    private fun receberArquivo(intent: Intent?): String? {
+        val uri = uriDoArquivo(intent) ?: return null
+        return try {
+            val destino = File(cacheDir, "recebido-${System.nanoTime()}.db")
+            contentResolver.openInputStream(uri)?.use { entrada ->
+                destino.outputStream().use { saida -> entrada.copyTo(saida) }
+            } ?: return null
+            destino.absolutePath
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     override fun onDestroy() {
         // Trava esquecida consome bateria mesmo com o aplicativo fechado.
         liberarMulticast()
@@ -98,5 +181,6 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val CANAL_REDE = "slap/rede"
         const val CANAL_TELA = "slap/tela"
+        const val CANAL_RECEBIDOS = "slap/recebidos"
     }
 }
