@@ -13,7 +13,7 @@ import 'enderecos.dart';
 /// plugin, com canal de plataforma, só para saber um número que já é conhecido
 /// na compilação. Um teste confere que as duas não divergem — é o que torna a
 /// repetição segura.
-const String versaoApp = '1.3.3';
+const String versaoApp = '1.4.0';
 
 /// Onde se pergunta qual é a última versão publicada, para o APK instalado
 /// fora das lojas (baixado do site ou do GitHub).
